@@ -5,7 +5,7 @@ import {
   SOURCE_CLASS_DEFAULTS,
   canonicalSourceClass,
   type SourceClass,
-} from '@aether/shared/traffic-source';
+} from '@olympuslabs/aether-shared/traffic-source';
 import { sourceClassLabel, humanizeRegistryValue } from '@aether-app/lib/traffic-source';
 
 type Row = Record<string, unknown>;

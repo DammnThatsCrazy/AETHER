@@ -8,7 +8,7 @@ import {
   type DataExchangeDirection,
   type ExportSpecContract,
   type ReportSpecContract,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 /**
  * Data Exchange Plane — tenant-facing typed client.

@@ -45,9 +45,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:8354cb8a948fe2d1e7d0c38accfd4b1f3ef81b6cf3b1afdc4ac8b02a0692d5f7"
-  "apps/kyber-web/src/": "sha256:4c1a612756b5ca88a2a92ea22e7fd8c578f90ce74aa778e9d092f9e4714d9e06"
-  "packages/ui/core/src/": "sha256:02a14d802d773a5b7e255fa0d1b0e1c661d5fa106b3892e5370f3ecf339a5805"
+  "apps/aether-web/src/": "sha256:24484093ad981e64e2b6b6239a95a9e7ac204434f3039f12cb774000d879461f"
+  "apps/kyber-web/src/": "sha256:5e9cd64433118dece9555f7876a7b32b5369a61619accee30926ac77c7aa11c9"
+  "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -913,9 +913,9 @@ Both REST clients (`apps/aether-web/src/lib/api/rest/client.ts`,
 `parseProblemDetails` from `@aether/ui` (`packages/ui/core/src/problem-details.ts`),
 which normalizes the canonical RFC-7807-compatible body and both legacy error
 shapes into one structure. The canonical `ProblemDetails` **type** stays in
-`@aether/shared` (`packages/shared/problem-details.ts`) and is imported type-only;
+`@olympuslabs/aether-shared` (`packages/shared/problem-details.ts`) and is imported type-only;
 the runtime parser lives in `@aether/ui` because that ESM library is bundled from
-source by the app builds, whereas `@aether/shared` compiles to CommonJS and only
+source by the app builds, whereas `@olympuslabs/aether-shared` compiles to CommonJS and only
 its types are resolvable by the app rollup builds. `RestClientError` therefore
 carries a stable machine `code`, a `retryable` flag, the full parsed `problem`,
 and the server-echoed correlation ID. Clients send `X-Correlation-ID` on every request; the backend
@@ -1471,6 +1471,6 @@ terminal `available`/`committed` artifacts that resolves the signed download
 URL.
 Typed value tuples (`dataArtifactStatuses`, `dataExchangeDirections`,
 `dataExchangeClassifications`) and the `ExportSpecContract` /
-`ReportSpecContract` shapes come from `@aether/shared`
+`ReportSpecContract` shapes come from `@olympuslabs/aether-shared`
 (`packages/shared/data-exchange.ts`), the M0 parity twin of the backend
 contracts.

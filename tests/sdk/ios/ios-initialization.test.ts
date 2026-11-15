@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { EventEnvelope, HeartbeatPayload } from '@aether/proof-contracts';
 import { heartbeatFixture, trackEventFixture } from '@aether/proof-fixtures';
 
-// The @aether/react-native SDK is tested via contract shapes since
+// The @olympuslabs/aether-react-native SDK is tested via contract shapes since
 // the native module isn't available in the JS test environment.
 // heartbeatFixture is a HeartbeatPayload — validate it as such, not as EventEnvelope.
 
@@ -54,7 +54,7 @@ describe('FPS-057: iOS SDK Initialization', () => {
     const envelope = trackEventFixture as unknown as EventEnvelope;
     expect(envelope.tenant_id).toBe('aether-proof-tenant');
     expect(envelope.platform_id).toBe('web');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.event_type).toBe('page');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
   });

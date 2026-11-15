@@ -16,12 +16,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Bumping SDK version to $VERSION..."
 
-for PKG in . packages/shared packages/sdk/web packages/sdk/react-native; do
+for PKG in . packages/shared packages/sdk/web packages/sdk/server packages/sdk/react-native; do
   npm pkg set version="$VERSION" --prefix "$ROOT/$PKG"
   echo "  ✓ $PKG/package.json"
 done
-npm pkg set "dependencies.@aether/shared=^${VERSION}" --prefix "$ROOT/packages/sdk/react-native"
-npm pkg set "dependencies.@aether/shared=^${VERSION}" --prefix "$ROOT/packages/sdk/web"
+npm pkg set "dependencies.@olympuslabs/aether-shared=^${VERSION}" --prefix "$ROOT/packages/sdk/react-native"
+npm pkg set "dependencies.@olympuslabs/aether-shared=^${VERSION}" --prefix "$ROOT/packages/sdk/web"
+npm pkg set "dependencies.@olympuslabs/aether-shared=^${VERSION}" --prefix "$ROOT/packages/sdk/server"
 
 sed -i "s/^sdkVersion=.*/sdkVersion=${VERSION}/" "$ROOT/packages/sdk/android/gradle.properties"
 sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version         = \"${VERSION}\"/" "$ROOT/packages/sdk/ios/AetherSDK.podspec"

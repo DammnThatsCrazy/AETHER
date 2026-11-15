@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
-import type { FilterExpression } from '@aether/shared/graph-contract';
+import type { FilterExpression } from '@olympuslabs/aether-shared/graph-contract';
 import { FilterBuilder } from './filter-builder';
 import { filterFieldsForSurface } from '../registry';
 

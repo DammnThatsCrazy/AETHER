@@ -8,7 +8,7 @@ import {
 import type {
   ExplorationContextV1,
   ExplorationResultEnvelope,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 
 export interface GeoExplorationRow {
   readonly country: string;

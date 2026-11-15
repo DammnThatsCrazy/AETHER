@@ -100,7 +100,7 @@ These are measurements, each tied to a ledger row.
   config that includes 93 TypeScript files under `tests/`, and no workflow,
   Makefile target, package script or suite registers it. Run by hand on
   2026-10-09 it executed 74 files (580 tests) green, 10 files failed to resolve
-  `@aether/web`, and 9 were skipped. This is a verification gap before it is
+  `@olympuslabs/aether-web`, and 9 were skipped. This is a verification gap before it is
   dead weight. Status: #741 registered them as the PR-lane suite
   `functionality-proof-ts` (84 files / 666 tests green, 9 skipped by
   `describe.skip`); the next step is to map each file's invariant to a proof

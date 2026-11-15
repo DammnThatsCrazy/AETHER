@@ -21,16 +21,16 @@ Related tickets: FPS-013 (Android SDK smoke), FPS-022 (dev-senior device checkli
 Add the Aether Android SDK to your app module's `build.gradle`:
 
 ```gradle
-implementation 'com.aether:sdk-android:0.1.0-alpha.0'
+implementation 'com.olympuslabsml:aether-android:0.1.0-alpha.0'
 ```
 
 The exact version is determined by the release artifact. For a proof run, use the version that matches the release candidate you are verifying.
 
-Make sure your project's repositories include the repository that hosts the Aether Android SDK. If the SDK is published to a private repository, add that repository to your dependency resolution strategy.
+The SDK is published to Maven Central, which Android projects include by default (`mavenCentral()` in `settings.gradle`). The Kotlin package is `com.aether.sdk`.
 
 ## Add your key
 
-You need a tenant ID and an API key for the environment you are targeting. For a proof run, use the proof tenant credentials from the staging environment. For local development, use your local tenant credentials. API keys are provisioned per tenant. See [Tenant Setup](/docs/developer/tenant-setup.md).
+You need the SDK key Aether issued for this app or site in the environment you are targeting (onboarding issues one per SDK; browser SDKs get a site-bound publishable `pk_` key). The key identifies the tenant, so there is no separate tenant ID. For a proof run, use the proof tenant credentials from the staging environment. For local development, use your local tenant credentials. API keys are provisioned per tenant. See [Tenant Setup](/docs/developer/tenant-setup.md).
 
 Do not commit API keys to the repository. Read them from the environment, your app's secret store, or the build configuration that supplies secrets at build time.
 
@@ -40,22 +40,26 @@ Initialize the SDK early in your app's lifecycle, typically in `onCreate` of you
 
 ```kotlin
 import com.aether.sdk.Aether
+import com.aether.sdk.AetherConfig
 
-val aether = Aether.initialize(
-    context = applicationContext,
-    tenantId = "aether-proof-tenant",
-    apiKey = BuildConfig.AETHER_API_KEY,
-    appId = "my-android-app"
-)
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Aether.initialize(this, AetherConfig(apiKey = BuildConfig.AETHER_API_KEY))
+
+        // Events are gated by consent. Grant the purposes your consent UI collected.
+        Aether.grantConsent(listOf("analytics"))
+    }
+}
 ```
 
-Initialization configures the SDK with your tenant, app, and site metadata. The SDK does not start emitting until you call the tracking methods, but it does validate the configuration and prepare the batch queue.
+`AetherConfig(apiKey = ...)` takes the key Aether issued for this app; the tenant is derived from the key on the server, so there is no tenant ID to pass. The ingestion endpoint defaults to `https://api.aether.network` (override with `endpoint = ...`). `initialize` needs the `Application` instance because the SDK observes the process lifecycle. Events are sent once you call the tracking methods below.
 
 If initialization fails, the SDK surfaces a clear error. A failure to initialize is a reportable failure in the proof spine, with reason `INITIALIZATION_FAILED` and likely owning subsystem Android SDK.
 
 ## Emit a heartbeat
 
-Every Aether SDK emits periodic heartbeat events to confirm liveness and session continuity. The Android SDK emits the first heartbeat on initialization and subsequent heartbeats at the configured interval.
+Every Aether SDK emits periodic heartbeats to confirm liveness. The Android SDK sends the first heartbeat when `initialize` runs and then every 60 seconds. With `privacy.gdprMode` enabled, heartbeats start only once `analytics` consent is granted.
 
 The heartbeat includes session state, SDK version, and contract version. See [SDK Heartbeat](/docs/sdks/heartbeat.md) for the full heartbeat contract.
 
@@ -63,14 +67,13 @@ In a proof run, the heartbeat is verified by the proof Android app's heartbeat c
 
 ## Track an activity
 
-The canonical screen view entry point is `observe(type, properties)` with a canonical screen view type.
+Use `screenView(screenName, properties)`. For other canonical event types, use `Aether.observe(type, properties)`.
 
 ```kotlin
 import com.aether.sdk.Aether
 
-Aether.observe("screen_view", mapOf(
-    "screen_name" to "Home",
-    "screen_class" to "HomeActivity::class.java.name"
+Aether.screenView("Home", mapOf(
+    "screen_class" to HomeActivity::class.java.name
 ))
 ```
 
@@ -84,10 +87,12 @@ Attach an identity hint so the graph can associate events with a known user.
 
 ```kotlin
 import com.aether.sdk.Aether
+import com.aether.sdk.IdentityData
 
-Aether.identify("user_123", mapOf(
-    "email" to "user@example.com",
-    "name" to "Example User"
+Aether.hydrateIdentity(IdentityData(
+    userId = "user_123",
+    email = "user@example.com",
+    traits = mapOf("name" to "Example User")
 ))
 ```
 
@@ -126,9 +131,9 @@ The verification path for a proof run is described in [Mobile Device Testing](/d
 
 | Symptom | Likely cause | Fix |
 |---|---|---|---|
-| SDK does not initialize | Missing or invalid tenant ID or API key | Check the API key and tenant ID. Confirm the SDK is initialized early in the app lifecycle. |
-| No heartbeat in the Aether UI | SDK did not emit a heartbeat, or the event did not reach ingestion | Check the SDK's health surface where applicable. Confirm the SDK is initialized. |
-| Activity not in the Aether UI | Event type is non-canonical, or the event did not reach ingestion | Confirm the event type is canonical. Check the ingestion surface. |
+| SDK does not initialize | Missing or invalid API key | Check the API key issued for this app. Confirm `Aether.initialize` runs in `Application.onCreate`. |
+| No heartbeat in the Aether UI | SDK did not emit a heartbeat, or the event did not reach ingestion | Confirm the SDK is initialized. In GDPR mode, confirm `analytics` consent was granted. |
+| Activity not in the Aether UI | Consent not granted, or the event did not reach ingestion | Confirm `analytics` consent is granted. Call `Aether.flush()` and check the ingestion surface. |
 | Identity not associated | Identity hint not sent, or identity resolution not configured | Confirm the identify call fired. Check the tenant's identity merge rules. |
 | Queued events lost after process restart | Durable queue not persisting or restoring correctly | Review the durable queue implementation. Check the queue file and atomic replacement. |
 | `queue_depth` growing | Network issue or endpoint down | Check the API key and endpoint URL. Check the SDK's offline spool. |

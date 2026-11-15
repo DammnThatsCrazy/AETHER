@@ -1,4 +1,4 @@
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 import type { CreateComparisonDefinitionRequest } from './comparison-api';
 
 export const mountedComparisonModes = ['entity_vs_entity', 'entity_vs_history'] as const;

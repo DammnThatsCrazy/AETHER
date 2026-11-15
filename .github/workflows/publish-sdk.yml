@@ -2,19 +2,25 @@ name: Publish SDK
 
 # Triggered manually with an explicit version string.
 # Publishes:
-#   - @aether/shared          → npm
-#   - @aether/web             → npm
-#   - @aether/react-native    → npm
-#   - AetherSDK               → CocoaPods trunk
-#   - aether-react-native     → CocoaPods trunk
-#   - com.aether:sdk-android  → GitHub Packages (Maven)
+#   - @olympuslabs/aether-shared          → npm (prereleases on their channel dist-tag, e.g. `alpha`)
+#   - @olympuslabs/aether-web             → npm
+#   - @olympuslabs/aether-server          → npm
+#   - @olympuslabs/aether-react-native    → npm (its podspec/gradle ship inside the npm package)
+#   - AetherSDK                           → DammnThatsCrazy/aether-ios mirror (Swift Package Manager)
+#                                           and CocoaPods trunk (sourced from the mirror)
+#   - com.olympuslabsml:aether-android    → Maven Central (Sonatype Central Portal)
 # Then creates a GitHub Release (tag already pushed by the `tag` job).
 #
-# Required secrets:
-#   NPM_TOKEN              — npm automation token (Settings → Developer tokens)
-#   COCOAPODS_TRUNK_TOKEN  — from: pod trunk register sdk@aether.io 'Aether'
-#                            then: cat ~/.netrc | grep trunk
-#   GITHUB_TOKEN           — automatic (used for GitHub Packages + release)
+# Required secrets (a dry run needs none of them):
+#   NPM_TOKEN                        — npm automation token with publish rights on the @olympuslabs org
+#   AETHER_IOS_MIRROR_DEPLOY_KEY     — private half of a write-enabled deploy key on DammnThatsCrazy/aether-ios
+#   COCOAPODS_TRUNK_TOKEN            — from: pod trunk register <email> 'Olympus Labs'
+#                                      then: grep -A2 trunk ~/.netrc
+#   MAVEN_CENTRAL_USERNAME           — Central Portal user token (username half)
+#   MAVEN_CENTRAL_PASSWORD           — Central Portal user token (password half)
+#   MAVEN_SIGNING_KEY                — ASCII-armored GPG private key (public key published to a keyserver)
+#   MAVEN_SIGNING_KEY_PASSWORD       — passphrase for MAVEN_SIGNING_KEY
+#   GITHUB_TOKEN                     — automatic (tag push + release page)
 
 on:
   workflow_dispatch:
@@ -81,6 +87,7 @@ jobs:
             package.json
             packages/shared/package.json
             packages/sdk/web/package.json
+            packages/sdk/server/package.json
             packages/shared/sdk-version.ts
             packages/sdk/react-native/package.json
             packages/sdk/react-native/aether-react-native.podspec
@@ -123,6 +130,7 @@ jobs:
                   packages/shared/package.json \
                   packages/shared/sdk-version.ts \
                   packages/sdk/web/package.json \
+                  packages/sdk/server/package.json \
                   packages/sdk/react-native/package.json \
                   packages/sdk/react-native/aether-react-native.podspec \
                   packages/sdk/android/gradle.properties \
@@ -162,13 +170,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Build @aether/shared
+      - name: Build @olympuslabs/aether-shared
         run: npm run build --workspace=packages/shared
 
-      - name: Build @aether/web
+      - name: Build @olympuslabs/aether-web
         run: npm run build --workspace=packages/sdk/web
 
-      - name: Build @aether/react-native
+      - name: Build @olympuslabs/aether-server
+        run: npm run build --workspace=packages/sdk/server
+
+      - name: Build @olympuslabs/aether-react-native
         run: npm run build --workspace=packages/sdk/react-native
 
       - name: Validate SDK release alignment
@@ -179,12 +190,23 @@ jobs:
           set -euo pipefail
           npm pack --workspace=packages/shared --dry-run
           npm pack --workspace=packages/sdk/web --dry-run
+          npm pack --workspace=packages/sdk/server --dry-run
           npm pack --workspace=packages/sdk/react-native --dry-run
           test -f packages/sdk/web/dist/aether.esm.js
+          test -f packages/sdk/server/dist/index.js
           test -f packages/sdk/web/dist/aether.cjs.js
           test -f packages/sdk/react-native/dist/index.js
 
-      - name: Publish @aether/shared
+      - name: Verify npm credentials
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NODE_AUTH_TOKEN" ]] || { echo "::error::secret NPM_TOKEN is not set"; exit 1; }
+          echo "Publishing as: $(npm whoami)"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @olympuslabs/aether-shared
         if: ${{ !inputs.dry_run }}
         run: |
           TAG_FLAG=""
@@ -197,7 +219,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @aether/web
+      - name: Publish @olympuslabs/aether-web
         if: ${{ !inputs.dry_run }}
         run: |
           TAG_FLAG=""
@@ -210,7 +232,20 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @aether/react-native
+      - name: Publish @olympuslabs/aether-server
+        if: ${{ !inputs.dry_run }}
+        run: |
+          TAG_FLAG=""
+          if [[ "$VERSION" == *-* ]]; then
+            CHANNEL="${VERSION#*-}"
+            CHANNEL="${CHANNEL%%.*}"
+            TAG_FLAG="--tag $CHANNEL"
+          fi
+          npm publish --workspace=packages/sdk/server --access public $TAG_FLAG
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @olympuslabs/aether-react-native
         if: ${{ !inputs.dry_run }}
         run: |
           TAG_FLAG=""
@@ -229,6 +264,7 @@ jobs:
           echo "DRY RUN — would publish:"
           npm pack --workspace=packages/shared --dry-run
           npm pack --workspace=packages/sdk/web --dry-run
+          npm pack --workspace=packages/sdk/server --dry-run
           npm pack --workspace=packages/sdk/react-native --dry-run
 
   # ── CDN ──────────────────────────────────────────────────────────────────
@@ -266,10 +302,10 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Build @aether/shared
+      - name: Build @olympuslabs/aether-shared
         run: npm run build --workspace=packages/shared
 
-      - name: Build @aether/web
+      - name: Build @olympuslabs/aether-web
         run: npm run build --workspace=packages/sdk/web
 
       - name: Verify web SDK package artifacts
@@ -356,14 +392,85 @@ jobs:
             --distribution-id "${{ secrets.AETHER_SDK_CLOUDFRONT_DISTRIBUTION_ID }}" \
             --paths "/v1.js" "/sdk/manifests/web/latest.json"
 
+  # ── iOS mirror (Swift Package Manager) ───────────────────────────────────
+  # SPM requires Package.swift at a repository root and bare semver tags, so
+  # packages/sdk/ios is released into the public DammnThatsCrazy/aether-ios
+  # mirror: one commit per release, tagged with the bare version. A dry run
+  # stages the same tree and resolves the package without pushing.
+  publish-ios-mirror:
+    name: Publish iOS mirror (SPM)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    needs: [validate, tag]
+    if: ${{ always() && needs.validate.result == 'success' && (needs.tag.result == 'success' || inputs.dry_run) }}
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      MIRROR: git@github.com:DammnThatsCrazy/aether-ios.git
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The release tag carries the version bump; a dry run has no tag.
+          ref: ${{ inputs.dry_run && github.ref || needs.validate.outputs.tag }}
+
+      - name: Download bumped files
+        if: ${{ inputs.dry_run }}
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - name: Stage mirror tree
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mirror-src"
+          cp -R packages/sdk/ios/. "$RUNNER_TEMP/mirror-src/"
+          test -f "$RUNNER_TEMP/mirror-src/Package.swift"
+          test -f "$RUNNER_TEMP/mirror-src/LICENSE"
+          test -f "$RUNNER_TEMP/mirror-src/Sources/AetherSDK/PrivacyInfo.xcprivacy"
+
+      - name: Resolve staged package
+        working-directory: ${{ runner.temp }}/mirror-src
+        run: swift package describe
+
+      - name: Push release commit and tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          DEPLOY_KEY: ${{ secrets.AETHER_IOS_MIRROR_DEPLOY_KEY }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEPLOY_KEY" ]] || { echo "::error::secret AETHER_IOS_MIRROR_DEPLOY_KEY is not set"; exit 1; }
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/aether_ios_mirror
+          chmod 600 ~/.ssh/aether_ios_mirror
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aether_ios_mirror -o IdentitiesOnly=yes"
+
+          git clone "$MIRROR" "$RUNNER_TEMP/mirror"
+          cd "$RUNNER_TEMP/mirror"
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::Mirror tag $VERSION already exists"; exit 1
+          fi
+          git checkout -B main
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R "$RUNNER_TEMP/mirror-src/." .
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "AetherSDK $VERSION" -m "Released from DammnThatsCrazy/AETHER@${SOURCE_SHA} (packages/sdk/ios)."
+          git tag "$VERSION" -m "AetherSDK $VERSION"
+          git push origin main "$VERSION"
+
   # ── CocoaPods ────────────────────────────────────────────────────────────
-  # Depends on `tag` so the sdk/v{version} tag exists when pod trunk push
-  # fetches and validates the podspec source URL.
+  # The AetherSDK podspec sources from the iOS mirror at the bare version tag,
+  # so this runs after publish-ios-mirror. The React Native podspec is linted
+  # only: it is consumed from node_modules by RN autolinking, not from trunk.
   publish-cocoapods:
     name: Publish to CocoaPods
     runs-on: macos-latest
     timeout-minutes: 60
-    needs: [validate, tag]
+    needs: [validate, publish-ios-mirror]
+    if: ${{ always() && needs.publish-ios-mirror.result == 'success' }}
     env:
       VERSION: ${{ needs.validate.outputs.version }}
 
@@ -378,7 +485,8 @@ jobs:
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
 
-      # --quick validates podspec format only; source URL/tag checked by trunk push below.
+      # --quick validates podspec format only; trunk push below fetches the
+      # mirror tag and runs the full validation.
       - name: Validate AetherSDK podspec (format)
         run: pod spec lint packages/sdk/ios/AetherSDK.podspec --allow-warnings --quick
 
@@ -387,24 +495,20 @@ jobs:
 
       - name: Push AetherSDK to trunk
         if: ${{ !inputs.dry_run }}
-        run: pod trunk push packages/sdk/ios/AetherSDK.podspec --allow-warnings
-        env:
-          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
-
-      - name: Push aether-react-native to trunk
-        if: ${{ !inputs.dry_run }}
-        run: pod trunk push packages/sdk/react-native/aether-react-native.podspec --allow-warnings
+        run: |
+          set -euo pipefail
+          [[ -n "$COCOAPODS_TRUNK_TOKEN" ]] || { echo "::error::secret COCOAPODS_TRUNK_TOKEN is not set"; exit 1; }
+          pod trunk push packages/sdk/ios/AetherSDK.podspec --allow-warnings
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
 
   # ── Android / Maven ───────────────────────────────────────────────────────
   publish-android:
-    name: Publish to GitHub Packages (Maven)
+    name: Publish to Maven Central
     runs-on: ubuntu-latest
     timeout-minutes: 40
     needs: validate
     permissions:
-      packages: write
       contents: read
     env:
       VERSION: ${{ needs.validate.outputs.version }}
@@ -439,13 +543,40 @@ jobs:
         working-directory: packages/sdk/android
         run: test -n "$(find build/outputs/aar -name '*release*.aar' -print -quit)"
 
-      - name: Publish to GitHub Packages
+      - name: Verify POM coordinates and license
+        working-directory: packages/sdk/android
+        run: |
+          set -euo pipefail
+          pom="$HOME/.m2/repository/com/olympuslabsml/aether-android/${VERSION}/aether-android-${VERSION}.pom"
+          test -f "$pom" || { echo "::error::expected $pom"; exit 1; }
+          grep -q 'Apache License, Version 2.0' "$pom"
+          test -f "$HOME/.m2/repository/com/olympuslabsml/aether-android/${VERSION}/aether-android-${VERSION}-sources.jar"
+
+      - name: Require Maven Central secrets
+        if: ${{ !inputs.dry_run }}
+        env:
+          U: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          P: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          K: ${{ secrets.MAVEN_SIGNING_KEY }}
+          KP: ${{ secrets.MAVEN_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [[ -n "$U" ]]  || { echo "::error::secret MAVEN_CENTRAL_USERNAME is not set"; missing=1; }
+          [[ -n "$P" ]]  || { echo "::error::secret MAVEN_CENTRAL_PASSWORD is not set"; missing=1; }
+          [[ -n "$K" ]]  || { echo "::error::secret MAVEN_SIGNING_KEY is not set"; missing=1; }
+          [[ -n "$KP" ]] || { echo "::error::secret MAVEN_SIGNING_KEY_PASSWORD is not set"; missing=1; }
+          exit "$missing"
+
+      - name: Publish and release to Maven Central
         if: ${{ !inputs.dry_run }}
         working-directory: packages/sdk/android
-        run: gradle publishReleasePublicationToGitHubPackagesRepository
+        run: gradle publishAndReleaseToMavenCentral --no-configuration-cache
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_KEY_PASSWORD }}
 
   # ── GitHub Release ────────────────────────────────────────────────────────
   # Tag is already pushed by the `tag` job; this only creates the release page.
@@ -455,7 +586,7 @@ jobs:
     timeout-minutes: 15
     # publish-cdn is a hard dependency: the release notes below advertise CDN
     # URLs, so shipping them without the assets would publish dead links.
-    needs: [validate, tag, publish-npm, publish-cdn, publish-cocoapods, publish-android]
+    needs: [validate, tag, publish-npm, publish-cdn, publish-ios-mirror, publish-cocoapods, publish-android]
     if: ${{ !inputs.dry_run }}
     permissions:
       contents: write
@@ -509,17 +640,24 @@ jobs:
               '',
               '**Install**',
               '```',
-              `npm install @aether/web@${version} @aether/react-native@${version}`,
+              `npm install @olympuslabs/aether-web@${version}          # browser + React`,
+              `npm install @olympuslabs/aether-server@${version}       # Node.js`,
+              `npm install @olympuslabs/aether-react-native@${version} # React Native`,
+              '```',
+              '',
+              '**Swift Package Manager**',
+              '```swift',
+              `.package(url: "https://github.com/DammnThatsCrazy/aether-ios.git", exact: "${version}")`,
               '```',
               '',
               '**CocoaPods**',
               '```',
-              `pod 'AetherSDK', '~> ${major}.0'`,
+              `pod 'AetherSDK', '${version}'`,
               '```',
               '',
-              '**Maven (GitHub Packages)**',
+              '**Gradle (Maven Central)**',
               '```kotlin',
-              `implementation("com.aether:sdk-android:${version}")`,
+              `implementation("com.olympuslabsml:aether-android:${version}")`,
               '```',
             ].join('\n');
             await github.rest.repos.createRelease({

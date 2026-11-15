@@ -88,7 +88,7 @@ class MarketPriceObservation(BaseModel):
     """Append-only market price observation (one immutable fact).
 
     Named MarketPriceObservation because the derivatives domain already owns
-    ``PriceObservation`` in TS (both are barrel-exported from @aether/shared);
+    ``PriceObservation`` in TS (both are barrel-exported from @olympuslabs/aether-shared);
     this is the financial-normalization trunk observation.
     """
 

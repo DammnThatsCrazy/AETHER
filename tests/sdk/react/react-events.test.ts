@@ -23,8 +23,8 @@ const { mockSdk } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@aether/react-native', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@aether/react-native')>();
+vi.mock('@olympuslabs/aether-react-native', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@olympuslabs/aether-react-native')>();
   return {
     ...actual,
     useAether: () => ({ sdk: mockSdk, isInitialized: true, config: { apiKey: 'ak_test_placeholder_example_key_00000' }, identity: null }),
@@ -32,7 +32,7 @@ vi.mock('@aether/react-native', async (importOriginal) => {
 });
 
 // Import after mock — vi.mock is hoisted, so this import receives the mocked module
-import { useAether } from '@aether/react-native';
+import { useAether } from '@olympuslabs/aether-react-native';
 
 describe('FPS-055: React Events', () => {
   beforeEach(() => {

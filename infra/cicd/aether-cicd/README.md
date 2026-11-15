@@ -207,7 +207,7 @@ The SDK release system (`stages/sdk/sdk_release.py`) manages the full lifecycle 
 || Web          | `@aether/sdk`               | npm + CDN (cdn.aether.network)    | esbuild      |
 || iOS          | `AetherSDK`                 | CocoaPods + Swift Package Manager | xcodebuild   |
 || Android      | `com.aether:aether-android` | Maven Central                     | gradle       |
-|| React Native | `@aether/react-native`      | npm                               | metro        |
+|| React Native | `@olympuslabs/aether-react-native`      | npm                               | metro        |
 
 ---
 

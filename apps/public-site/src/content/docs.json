@@ -1280,7 +1280,7 @@
     {
      "t": "code",
      "lang": "bash",
-     "x": "npm install @aether/web"
+     "x": "npm install @olympuslabs/aether-web"
     },
     {
      "t": "h",
@@ -1289,7 +1289,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import { AetherSDK } from '@aether/web';\n\n// Run after your consent banner records the analytics purpose.\nconst aether = AetherSDK.init({\n  tenantId: 'your-tenant-id',\n  appId: 'your-app-id',\n});\n\naether.track('page_view', { path: window.location.pathname });"
+     "x": "import { AetherSDK } from '@olympuslabs/aether-web';\n\n// Run after your consent banner records the analytics purpose.\nconst aether = AetherSDK.init({\n  tenantId: 'your-tenant-id',\n  appId: 'your-app-id',\n});\n\naether.track('page_view', { path: window.location.pathname });"
     },
     {
      "t": "callout",
@@ -1377,14 +1377,14 @@
     {
      "t": "code",
      "lang": "kotlin",
-     "x": "// Gradle: io.aether:sdk-android\n// Entry: packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt"
+     "x": "// Gradle: com.olympuslabsml:aether-android\n// Entry: packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt"
     },
     {
      "t": "steps",
      "items": [
       {
        "title": "Add the dependency",
-       "x": "`io.aether:sdk-android`"
+       "x": "`com.olympuslabsml:aether-android`"
       },
       {
        "title": "Initialize after consent",
@@ -1405,7 +1405,7 @@
     {
      "t": "code",
      "lang": "bash",
-     "x": "npm install @aether/react-native"
+     "x": "npm install @olympuslabs/aether-react-native"
     },
     {
      "t": "p",
@@ -1459,7 +1459,7 @@
      "rows": [
       [
        "Web",
-       "`@aether/web`",
+       "`@olympuslabs/aether-web`",
        "`packages/sdk/web/src/index.ts`"
       ],
       [
@@ -1469,12 +1469,12 @@
       ],
       [
        "Android",
-       "`io.aether:sdk-android`",
+       "`com.olympuslabsml:aether-android`",
        "`Aether.kt`"
       ],
       [
        "React Native",
-       "`@aether/react-native`",
+       "`@olympuslabs/aether-react-native`",
        "`index.tsx`"
       ]
      ]
@@ -1595,7 +1595,7 @@
      "items": [
       [
        "Package",
-       "`@aether/web`"
+       "`@olympuslabs/aether-web`"
       ],
       [
        "Status",
@@ -1614,7 +1614,7 @@
     {
      "t": "code",
      "lang": "bash",
-     "x": "npm install @aether/web"
+     "x": "npm install @olympuslabs/aether-web"
     },
     {
      "t": "h",
@@ -1623,7 +1623,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import { AetherSDK } from '@aether/web';\n\nconst aether = AetherSDK.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });"
+     "x": "import { AetherSDK } from '@olympuslabs/aether-web';\n\nconst aether = AetherSDK.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });"
     },
     {
      "t": "h",
@@ -1747,7 +1747,7 @@
     {
      "t": "code",
      "lang": "swift",
-     "x": "// Swift Package Manager\n.package(url: \"https://github.com/…/AetherSDK\", from: \"0.1.0\")"
+     "x": "// Swift Package Manager\n.package(url: \"https://github.com/DammnThatsCrazy/aether-ios.git\", exact: \"0.1.0-alpha.0\")"
     },
     {
      "t": "h",
@@ -1857,7 +1857,7 @@
      "items": [
       [
        "Package",
-       "`io.aether:sdk-android`"
+       "`com.olympuslabsml:aether-android`"
       ],
       [
        "Status",
@@ -1876,7 +1876,7 @@
     {
      "t": "code",
      "lang": "kotlin",
-     "x": "implementation(\"io.aether:sdk-android:0.1.0\")"
+     "x": "implementation(\"com.olympuslabsml:aether-android:0.1.0-alpha.0\")"
     },
     {
      "t": "h",
@@ -1986,7 +1986,7 @@
      "items": [
       [
        "Package",
-       "`@aether/react-native`"
+       "`@olympuslabs/aether-react-native`"
       ],
       [
        "Status",
@@ -2005,7 +2005,7 @@
     {
      "t": "code",
      "lang": "bash",
-     "x": "npm install @aether/react-native"
+     "x": "npm install @olympuslabs/aether-react-native"
     },
     {
      "t": "h",
@@ -2014,7 +2014,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import Aether from '@aether/react-native';\n\nAether.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\nAether.consent.grant(['analytics']);\nAether.screen('Home');"
+     "x": "import Aether from '@olympuslabs/aether-react-native';\n\nAether.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\nAether.consent.grant(['analytics']);\nAether.screen('Home');"
     },
     {
      "t": "h",

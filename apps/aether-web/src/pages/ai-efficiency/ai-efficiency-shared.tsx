@@ -1,5 +1,5 @@
 import { Badge, formatCount, formatInstant, type LocaleContext, type TimeContext } from '@aether/ui';
-import type { AIEfficiencyDetector, AIInvocationStatus, CostBasis } from '@aether/shared';
+import type { AIEfficiencyDetector, AIInvocationStatus, CostBasis } from '@olympuslabs/aether-shared';
 
 export const GOVERNED_PROPOSALS_COPY =
   'Proposals only — Aether never changes models, prompts, or routing automatically.';

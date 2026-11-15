@@ -23,10 +23,10 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@aether/shared": "*"
+    "@olympuslabs/aether-shared": "*"
   },
   "devDependencies": {
-    "@aether/shared": "*",
+    "@olympuslabs/aether-shared": "*",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   }

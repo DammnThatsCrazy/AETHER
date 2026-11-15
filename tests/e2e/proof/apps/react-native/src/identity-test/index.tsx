@@ -1,7 +1,7 @@
 /**
  * FPS — React Native SDK Identity Late Binding Test
  */
-import { AetherRN } from '@aether/react-native';
+import { AetherRN } from '@olympuslabs/aether-react-native';
 
 export function runIdentityTests() {
   const sdk = new AetherRN({ apiKey: 'ak_test_key' });

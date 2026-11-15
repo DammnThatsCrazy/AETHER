@@ -21,7 +21,7 @@ A complete ecommerce flow that exercises every step of the Aether commerce event
 
 ## First-value journey (ecommerce path)
 
-1. **Install** — `@aether/web` loaded via Vite+React app shell.
+1. **Install** — `@olympuslabs/aether-web` loaded via Vite+React app shell.
 2. **Init** — `initSDK()` connects to the Aether ingestion endpoint.
 3. **Consent** — `toggleConsent('granted')` grants analytics + commerce purposes.
 4. **Product viewed** — `trackProductViewed('SKU-001', …)` fires `product_viewed`.
@@ -60,4 +60,4 @@ The on-page DebugPanel shows the SDK state, consent state, queue size, and last 
 
 - `packages/sdk/examples/web-next/` — the same SDK stack used for a simpler first-value journey.
 - `packages/sdk/examples/web-script-tag/` — the one-tag snippet path.
-- `packages/sdk/examples/server-node/` — server-side commerce observation via `@aether/server`.
+- `packages/sdk/examples/server-node/` — server-side commerce observation via `@olympuslabs/aether-server`.

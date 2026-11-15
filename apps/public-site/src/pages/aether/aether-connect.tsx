@@ -303,8 +303,8 @@ type ConnectOption = [id: string, glyph: string, question: string, answer: strin
 
 const OPTIONS: ConnectOption[] = [
   ['saas', '⚙', 'Existing SaaS platform?', 'Connector', '#8fb0cc', 'Authorize the provider and Aether handles historical sync, live updates, and normalization. Read-only scopes, chosen per connector.', '// in Aether → Data → Connect\nconnect("shopify")\n  scopes: customers, orders, refunds\n  mode:   historical sync + live', 'Docs.dc.html?page=connector-catalog', 'See every connector'],
-  ['web', '◉', 'Website?', 'Web SDK', '#9fbad6', 'Install the SDK after your consent banner records the analytics purpose.', "import { AetherSDK } from '@aether/web';\n\nconst aether = AetherSDK.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });", 'Docs.dc.html?page=quickstart-web', 'Web quickstart'],
-  ['mobile', '□', 'Mobile application?', 'iOS, Android, or React Native SDK', '#9fbad6', 'Native SDKs for iOS and Android, plus React Native — the same canonical events on every platform.', "import Aether from '@aether/react-native';\n\nAether.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\nAether.consent.grant(['analytics']);\nAether.screen('Home');", 'Docs.dc.html?page=quickstart-react-native', 'Mobile quickstarts'],
+  ['web', '◉', 'Website?', 'Web SDK', '#9fbad6', 'Install the SDK after your consent banner records the analytics purpose.', "import { AetherSDK } from '@olympuslabs/aether-web';\n\nconst aether = AetherSDK.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });", 'Docs.dc.html?page=quickstart-web', 'Web quickstart'],
+  ['mobile', '□', 'Mobile application?', 'iOS, Android, or React Native SDK', '#9fbad6', 'Native SDKs for iOS and Android, plus React Native — the same canonical events on every platform.', "import Aether from '@olympuslabs/aether-react-native';\n\nAether.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\nAether.consent.grant(['analytics']);\nAether.screen('Home');", 'Docs.dc.html?page=quickstart-react-native', 'Mobile quickstarts'],
   ['backend', '⌘', 'Backend?', 'Server API', '#9cc4a9', 'Send canonical observations from your servers. Batched, signed, and idempotent.', 'POST /v1/batch\nAuthorization: Bearer <write key>\n\n{ "events": [ { "type": "order_completed", ... } ] }', 'Docs.dc.html?page=quickstart-backend', 'Backend quickstart'],
   ['file', '⇪', 'Historical file?', 'Import', '#dcb683', 'CSV, JSON, or JSONL up to 32 MB. Map fields, dry-run, validate, commit — and roll back if needed.', 'import  customers.csv\n→ map     email, name, created_at\n→ dry run 12,408 rows · 3 warnings\n→ commit', 'Docs.dc.html?page=imports', 'Import historical data'],
   ['webhook', '↯', 'External service sending live events?', 'Webhook', '#c9b088', 'Any system that can push can connect with a signed webhook.', 'POST https://ingest.aether…/hooks/<id>\nX-Aether-Signature: sha256=…', 'Docs.dc.html?page=ingestion-api', 'Webhook reference'],
@@ -401,10 +401,10 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
     cur: { a: cur[3], body: cur[5], code: cur[6], href: cur[7], cta: cur[8] },
     connectors: CONNECT_CONNECTORS.map(([name, kind, f]) => ({ name, kind, logo: '../assets/brand/' + f + '.svg' })),
     sdks: [
-      ['Web', '@aether/web', 'quickstart-web'],
+      ['Web', '@olympuslabs/aether-web', 'quickstart-web'],
       ['iOS', 'AetherSDK (Swift SPM)', 'quickstart-ios'],
-      ['Android', 'io.aether:sdk-android', 'quickstart-android'],
-      ['React Native', '@aether/react-native', 'quickstart-react-native'],
+      ['Android', 'com.olympuslabsml:aether-android', 'quickstart-android'],
+      ['React Native', '@olympuslabs/aether-react-native', 'quickstart-react-native'],
     ].map(([name, pkg, p]) => ({ name, pkg, href: 'Docs.dc.html?page=' + p })),
     formats: ([
       ['CSV', 1], ['JSON', 1], ['JSONL', 1], ['TSV', 0], ['Excel (.xlsx)', 0], ['Parquet', 0],

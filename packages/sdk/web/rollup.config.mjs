@@ -21,13 +21,13 @@ export default [
         format: 'cjs',
         exports: 'named',
         sourcemap: true,
-        banner: `/* @aether/web v${SDK_VERSION} */`,
+        banner: `/* @olympuslabs/aether-web v${SDK_VERSION} */`,
       },
       {
         file: 'dist/aether.esm.js',
         format: 'esm',
         sourcemap: true,
-        banner: `/* @aether/web v${SDK_VERSION} */`,
+        banner: `/* @olympuslabs/aether-web v${SDK_VERSION} */`,
       },
       {
         file: 'dist/aether.umd.js',
@@ -35,13 +35,13 @@ export default [
         name: 'Aether',
         exports: 'named',
         sourcemap: true,
-        banner: `/* @aether/web v${SDK_VERSION} */`,
+        banner: `/* @olympuslabs/aether-web v${SDK_VERSION} */`,
         plugins: [terser()],
       },
     ],
     plugins: sharedPlugins(),
   },
-  // Health subpath — SDKHealthAgent standalone bundle for @aether/web/health
+  // Health subpath — SDKHealthAgent standalone bundle for @olympuslabs/aether-web/health
   {
     input: 'src/health/index.ts',
     output: [
@@ -49,21 +49,21 @@ export default [
         file: 'dist/health/index.js',
         format: 'esm',
         sourcemap: true,
-        banner: `/* @aether/web/health v${SDK_VERSION} */`,
+        banner: `/* @olympuslabs/aether-web/health v${SDK_VERSION} */`,
       },
     ],
     plugins: sharedPlugins(),
   },
-  // React browser wrapper — @aether/web/react
+  // React browser wrapper — @olympuslabs/aether-web/react
   {
     input: 'src/react.tsx',
-    external: ['react', 'react/jsx-runtime', '@aether/web'],
+    external: ['react', 'react/jsx-runtime', '@olympuslabs/aether-web'],
     output: [
       {
         file: 'dist/react.js',
         format: 'esm',
         sourcemap: true,
-        banner: `/* @aether/web/react v${SDK_VERSION} */`,
+        banner: `/* @olympuslabs/aether-web/react v${SDK_VERSION} */`,
       },
     ],
     plugins: sharedPlugins(),

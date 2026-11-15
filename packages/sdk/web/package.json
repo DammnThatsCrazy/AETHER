@@ -1,5 +1,5 @@
 {
-  "name": "@aether/web",
+  "name": "@olympuslabs/aether-web",
   "version": "0.1.0-alpha.0",
   "description": "Aether SDK for Web — Behavioral analytics with thin-client architecture",
   "main": "./dist/aether.cjs.js",
@@ -29,7 +29,9 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "rollup -c rollup.config.mjs && rollup -c rollup.loader.mjs && tsc --emitDeclarationOnly",
@@ -40,9 +42,9 @@
     "lint": "tsc --noEmit"
   },
   "sideEffects": false,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
-    "@aether/shared": "^0.1.0-alpha.0"
+    "@olympuslabs/aether-shared": "^0.1.0-alpha.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.0"
@@ -54,5 +56,11 @@
     "react": {
       "optional": true
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DammnThatsCrazy/AETHER.git",
+    "directory": "packages/sdk/web"
+  },
+  "homepage": "https://github.com/DammnThatsCrazy/AETHER/tree/main/packages/sdk/web"
 }

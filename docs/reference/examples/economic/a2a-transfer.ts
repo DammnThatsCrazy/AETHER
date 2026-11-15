@@ -13,7 +13,7 @@ import {
   validateEconomicPayload,
   validateRelationshipExtensions,
   type EconomicActionLike,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 const auth = validateAuthorization({
   source: 'human',

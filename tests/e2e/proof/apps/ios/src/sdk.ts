@@ -1,12 +1,12 @@
 // =============================================================================
 // Aether SDK — React Native Proof Harness Integration
-// Wraps @aether/react-native (bridge.ts / Aether default export) and falls
+// Wraps @olympuslabs/aether-react-native (bridge.ts / Aether default export) and falls
 // back to direct POST /v1/batch for signals the native SDK does not surface
 // to JS (heartbeat, identity). Every event-sending function constructs the
 // canonical envelope per docs/reference/api/ingestion.md.
 // =============================================================================
 
-import Aether, { type AetherRNConfig } from '@aether/react-native';
+import Aether, { type AetherRNConfig } from '@olympuslabs/aether-react-native';
 import type { SDKState, EventDeliveryStatus } from './types';
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ function buildEnvelope(
     anonymousId: state.anonymousId ?? '',
     context: {
       library: {
-        name: '@aether/react-native',
+        name: '@olympuslabs/aether-react-native',
         version: SDK_VERSION,
       },
       surface: 'ios',
@@ -272,7 +272,7 @@ async function postBatch(
 /**
  * Initialize the Aether RN SDK.
  *
- * Calls Aether.init() from @aether/react-native with a canonical RN config,
+ * Calls Aether.init() from @olympuslabs/aether-react-native with a canonical RN config,
  * then records SDK-local state (session, anonymous id, consent default).
  */
 export function initSDK(

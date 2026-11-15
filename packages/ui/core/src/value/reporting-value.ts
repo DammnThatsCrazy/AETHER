@@ -22,10 +22,10 @@
 //     guessed from an uncanonicalized id).
 //
 // NOTE ON TYPES: like `./format.ts`, this module mirrors the canonical types it
-// consumes so the display core stays self-contained (the @aether/shared value
+// consumes so the display core stays self-contained (the @olympuslabs/aether-shared value
 // contract is not reliably reachable from @aether/ui at typecheck time). The
 // canonical metadata RESOLVER lives in ./reporting-asset-meta.ts and imports
-// `@aether/shared/financial-assets` directly; this file accepts resolved
+// `@olympuslabs/aether-shared/financial-assets` directly; this file accepts resolved
 // `AssetDisplayMeta` so its logic is pure and testable without that import.
 // =============================================================================
 
@@ -51,7 +51,7 @@ export function isDecimalString(value: unknown): value is string {
 /**
  * Structural mirror of the canonical asset metadata a reporting asset needs for
  * display. Populated by `resolveReportingAssetMeta` (./reporting-asset-meta.ts)
- * from `@aether/shared/financial-assets` registry data; tests may supply it
+ * from `@olympuslabs/aether-shared/financial-assets` registry data; tests may supply it
  * directly.
  */
 export interface AssetDisplayMeta {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolveCanonicalAssetDisplayMeta } from './reporting-asset-meta';
 
-// Resolver tests run against the CANONICAL `@aether/shared/financial-assets`
+// Resolver tests run against the CANONICAL `@olympuslabs/aether-shared/financial-assets`
 // registry data (FIAT_REFERENCE_SEED + isNamespacedAssetId). They require the
-// @aether/shared built module, which the local partial install does not provide;
+// @olympuslabs/aether-shared built module, which the local partial install does not provide;
 // they run in the full CI install.
 
 describe('resolveCanonicalAssetDisplayMeta', () => {

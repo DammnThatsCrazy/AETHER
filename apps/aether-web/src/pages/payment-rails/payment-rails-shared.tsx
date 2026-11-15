@@ -4,7 +4,7 @@ import type {
   FundingSessionStatus,
   PaymentRailProvider,
   ReconciliationState,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 export const OBSERVABILITY_COPY =
   'Aether observes payment rails — it does not execute or settle payments, or custody funds.';

@@ -39,7 +39,7 @@ curl -H "Authorization: Bearer $API_KEY" \
 ## SDK Query (Server)
 
 ```typescript
-import { AetherServer } from '@aether/server';
+import { AetherServer } from '@olympuslabs/aether-server';
 
 const client = new AetherServer({ apiKey: 'your-api-key' });
 const entity = await client.entities.get('entity-id');

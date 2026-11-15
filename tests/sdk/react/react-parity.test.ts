@@ -17,7 +17,7 @@ describe('FPS-056: React Parity', () => {
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('page');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('0.1.0-alpha.0');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
     expect(envelope.identity.user_id).toBe('user_001');
@@ -56,7 +56,7 @@ describe('FPS-056: React Parity', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'sdk.heartbeat',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       session: { session_id: heartbeatFixture.sessionId },
       identity: { anonymous_id: 'anon_001' },
       timestamp: new Date(heartbeatFixture.timestamp).toISOString(),

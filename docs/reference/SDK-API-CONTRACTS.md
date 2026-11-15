@@ -13,7 +13,7 @@ estimated_read_minutes: 3
 # SDK API Contracts
 
 The SDKs and backend share a single source of truth: `packages/shared`
-(`@aether/shared`). All SDKs (Web/RN/iOS/Android) and the backend use the same
+(`@olympuslabs/aether-shared`). All SDKs (Web/RN/iOS/Android) and the backend use the same
 event, consent, identity, wallet, and commerce contracts so payloads round-trip.
 
 ## Ingestion contract
@@ -133,7 +133,7 @@ purposes are registry-derived from `packages/shared/contracts/event-registry.jso
 `GET /v1/config/sdk/manifest`. The retired `/v1/sdk/health` route and any
 `?apiKey=` query-string form must not be used.
 
-**Server SDK.** `@aether/server` is release-supported and version-aligned with
+**Server SDK.** `@olympuslabs/aether-server` is release-supported and version-aligned with
 the monorepo. It sends the same canonical `{ batch, sentAt, consents }` envelope
 with the write key in the `Authorization` header, with retry/backoff and safe
 shutdown flush.
@@ -181,7 +181,7 @@ validating unchanged.
 | `dataQuality` | `DataQualityRecord` | Client-declared completeness/freshness/sourceTrust signals. |
 | `sequence` | `SequenceContext` | Monotonic per-session event and per-install session counters for gap/reorder detection. |
 
-The envelope types are exported from the `@aether/shared` barrel. Because every
+The envelope types are exported from the `@olympuslabs/aether-shared` barrel. Because every
 field is optional, the backend treats them as hints layered on top of its own
 server-authoritative enrichment, consent, and classification.
 

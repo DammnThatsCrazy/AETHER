@@ -1,14 +1,14 @@
 // =============================================================================
 // Client-side parser for the canonical Problem-Details error contract.
 //
-// The `ProblemDetails` TYPE is canonical in `@aether/shared` (mirrors the
+// The `ProblemDetails` TYPE is canonical in `@olympuslabs/aether-shared` (mirrors the
 // backend `shared/common/common.py`). The runtime parser lives here because
 // `@aether/ui` is the ESM, source-consumed frontend library both apps bundle;
-// `@aether/shared` compiles to CommonJS and its runtime values are not
+// `@olympuslabs/aether-shared` compiles to CommonJS and its runtime values are not
 // resolvable by the app rollup builds (only its types are).
 // =============================================================================
 
-import type { ProblemDetails } from '@aether/shared';
+import type { ProblemDetails } from '@olympuslabs/aether-shared';
 
 export type { ProblemDetails };
 

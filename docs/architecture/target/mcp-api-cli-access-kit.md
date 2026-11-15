@@ -266,7 +266,7 @@ Access Kit returns the frame unmodified and never promotes a slot state.
   whichever credential the selected command needs through the host's environment
   or secret injection mechanism. The bridge does not save either credential.
 - `AETHER_API_URL` selects the API origin and defaults to
-  `https://api.aether.io`. The client requires HTTPS, allowing HTTP only for
+  `https://api.aether.network`. The client requires HTTPS, allowing HTTP only for
   `localhost`, `127.0.0.1`, or `::1`. The value cannot include credentials,
   paths, query strings, or fragments.
 - Key issuance, tenant membership, role/scopes, revocation, request correlation,

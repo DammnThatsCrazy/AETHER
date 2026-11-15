@@ -22,9 +22,9 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@kyber', replacement: path.resolve(__dirname, 'src') },
-      { find: '@aether/web', replacement: path.resolve(__dirname, '../../packages/sdk/web/src/index.ts') },
-      { find: /^@aether\/shared\/(.+)$/, replacement: path.resolve(__dirname, '../../packages/shared') + '/$1.ts' },
-      { find: /^@aether\/shared$/, replacement: path.resolve(__dirname, '../../packages/shared/index.ts') },
+      { find: '@olympuslabs/aether-web', replacement: path.resolve(__dirname, '../../packages/sdk/web/src/index.ts') },
+      { find: /^@olympuslabs\/aether-shared\/(.+)$/, replacement: path.resolve(__dirname, '../../packages/shared') + '/$1.ts' },
+      { find: /^@olympuslabs\/aether-shared$/, replacement: path.resolve(__dirname, '../../packages/shared/index.ts') },
     ],
   },
   server: {
@@ -43,7 +43,7 @@ export default defineConfig({
   build: {
     sourcemap: true,
     commonjsOptions: {
-      // @aether/shared ships CJS-only. Extend the default node_modules include
+      // @olympuslabs/aether-shared ships CJS-only. Extend the default node_modules include
       // to also cover the workspace package so Rollup resolves named exports
       // (e.g. the canonical traffic-source vocabulary) instead of failing the
       // build. Mirrors apps/aether-web/vite.config.ts.

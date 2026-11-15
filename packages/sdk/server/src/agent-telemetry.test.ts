@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EVENT_FAMILY } from '@aether/shared';
-import type { AgentDeploymentContext } from '@aether/shared';
+import { EVENT_FAMILY } from '@olympuslabs/aether-shared';
+import type { AgentDeploymentContext } from '@olympuslabs/aether-shared';
 import { AgentTelemetryClient, attestAgentEvent, validateAgentDeploymentContext } from './agent-telemetry';
 import { sendBatch } from './transport';
 

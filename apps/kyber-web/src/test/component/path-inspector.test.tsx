@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import type { RelationshipPath, PathExplanation } from '@aether/shared/operational-intelligence';
+import type { RelationshipPath, PathExplanation } from '@olympuslabs/aether-shared/operational-intelligence';
 import { PathInspector } from '@kyber/components/graph/path-inspector';
 
 const SCORE_BREAKDOWN = {

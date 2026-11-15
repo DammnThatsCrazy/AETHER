@@ -444,7 +444,7 @@ describe('FPS-110: Fixture Load', () => {
     expect(provenanceFixture.properties.origin).toBe('web_sdk');
     expect(provenanceFixture.properties.lineage).toEqual(['web_sdk', 'ingestion_pipeline', 'graph_db']);
     expect(provenanceFixture.properties.verified_at).toBe('2024-09-11T12:05:00.000Z');
-    expect(provenanceFixture.properties.origin_metadata.sdk_name).toBe('@aether/web');
+    expect(provenanceFixture.properties.origin_metadata.sdk_name).toBe('@olympuslabs/aether-web');
     expect(provenanceFixture.properties.origin_metadata.sdk_version).toBe('0.1.0-alpha.0');
     expect(provenanceFixture.properties.transformations).toBeInstanceOf(Array);
     expect(provenanceFixture.properties.transformations.length).toBe(3);

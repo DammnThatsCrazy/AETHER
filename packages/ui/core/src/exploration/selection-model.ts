@@ -3,7 +3,7 @@ import type {
   GraphSelectionState,
   GraphSnapshotRef,
   GraphScope,
-} from '@aether/shared/graph-context-contract';
+} from '@olympuslabs/aether-shared/graph-context-contract';
 
 /**
  * The host-authoritative scope for selection state.

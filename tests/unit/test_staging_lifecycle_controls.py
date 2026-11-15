@@ -2186,23 +2186,23 @@ def test_rehearsal_isolation_peer_plan_grants_identity_resolution():
 def test_rehearsal_playwright_steps_run_only_their_spec():
     # `pnpm run e2e -- --reporter=line <spec>` forwarded a literal `--`;
     # Playwright then ran all 32 tests against the live UI. The fixture run
-    # also needs @aether/shared built for Vite to resolve it.
+    # also needs @olympuslabs/aether-shared built for Vite to resolve it.
     steps = {s.get("name"): s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")}
     deps = next(s for s in steps.values() if s.get("id") == "identity_ui_dependencies")["run"]
-    # Run 43365158651: Vite then failed on @aether/web, and the reporter on
+    # Run 43365158651: Vite then failed on @olympuslabs/aether-web, and the reporter on
     # @aether/proof-runner. Every workspace package they import is built.
     # Run 43380069776: the CI pnpm ignored `<pkg>...` for these "*" workspace
     # links. Every package is installed by name, and each build layer must
     # come after the layers its workspace dependencies live in.
-    install, _, builds = deps.partition("pnpm --filter '@aether/shared' run build")
-    assert builds, "the @aether/shared build no longer runs first"
-    layers = [["@aether/shared"]] + [
+    install, _, builds = deps.partition("pnpm --filter '@olympuslabs/aether-shared' run build")
+    assert builds, "the @olympuslabs/aether-shared build no longer runs first"
+    layers = [["@olympuslabs/aether-shared"]] + [
         re.findall(r"--filter '([^']+)'", line)
         for line in builds.splitlines() if "run build" in line
     ]
     position = {name: index for index, layer in enumerate(layers) for name in layer}
     manifests = {
-        "@aether/web": "packages/sdk/web",
+        "@olympuslabs/aether-web": "packages/sdk/web",
         "@aether/proof-contracts": "tests/e2e/proof/packages/contracts",
         "@aether/proof-fixtures": "tests/e2e/proof/packages/fixtures",
         "@aether/proof-runner": "tests/e2e/proof/packages/runner",

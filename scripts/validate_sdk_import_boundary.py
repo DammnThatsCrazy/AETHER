@@ -2,7 +2,7 @@
 """SDK import-boundary gate (SDK thinness).
 
 The Aether client SDKs are thin: they talk to the canonical backend over the
-network (api.aether.io / ingest.aether.so) and must NEVER import backend
+network (api.aether.network) and must NEVER import backend
 implementation code. The internal trees — the deployed Python monolith
 (``services/api``) and the two legacy TypeScript
 duplicates (``docs/archive/legacy-architecture/data-ingestion-layer/``, ``docs/archive/legacy-architecture/data-lake-architecture/``) — are not
@@ -76,8 +76,8 @@ _STATIC_ROOT_MARKERS = (
 # Allowed non-relative specifiers for SDK client surfaces (shared + sibling SDK
 # packages). Everything relative (``./``, ``../``) stays inside the package and
 # is allowed by design.
-_ALLOWED_BARE = ("@aether/shared", "@aether/web", "@aether/react-native",
-                 "@aether/mobile-core", "@aether/mobile-ui", "@aether/server")
+_ALLOWED_BARE = ("@olympuslabs/aether-shared", "@olympuslabs/aether-web", "@olympuslabs/aether-react-native",
+                 "@aether/mobile-core", "@aether/mobile-ui", "@olympuslabs/aether-server")
 
 # language file extension -> (import-specifier extractor, target normalizer)
 _TS_SUFFIXES = (".ts", ".tsx")
@@ -254,13 +254,13 @@ def main() -> int:
     for entry in sorted(actual - allowlist):
         errors.append(
             "NEW SDK import of a legacy/backend internal target — SDKs must stay "
-            f"thin (talk to api.aether.io / ingest.aether.so): {entry}"
+            f"thin (talk to api.aether.network): {entry}"
         )
     for entry in sorted(allowlist - actual):
         errors.append(f"allowlist entry no longer references an internal target — REMOVE it (shrink-only): {entry}")
 
     # WS-C row 28 / SDK thinness: the interpretation-bearing mirror modules must
-    # NOT be star-exported from the @aether/shared public barrel. Their canonical
+    # NOT be star-exported from the @olympuslabs/aether-shared public barrel. Their canonical
     # homes are the backend Python modules (commerce_bridge.py /
     # economic360_contracts.py); a star-export here re-ships SDK-side backend
     # intelligence to every SDK consumer. Consumers import only the passive

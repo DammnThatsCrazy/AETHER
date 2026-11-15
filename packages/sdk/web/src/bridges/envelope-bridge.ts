@@ -18,7 +18,7 @@ import {
   CANONICAL_EVENT_TO_SDK_SIGNAL,
   type AetherEvent,
   type BridgeResult,
-} from '@aether/shared/commerce-bridge';
+} from '@olympuslabs/aether-shared/commerce-bridge';
 
 /**
  * Bridge a canonical envelope event into the commerce vocabulary.

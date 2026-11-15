@@ -3,7 +3,7 @@
  *
  * The backend is authoritative, but a mobile client must fail loudly on a payload
  * that does not match the contract (a stale build talking to a newer server, or the
- * reverse). These guards validate the enum-bearing fields against the `@aether/shared`
+ * reverse). These guards validate the enum-bearing fields against the `@olympuslabs/aether-shared`
  * const vocabularies — the same arrays the parity tests pin — so a runtime check can
  * never drift from the compile-time contract.
  */
@@ -13,7 +13,7 @@ import {
   syncChangeTypes,
   type MobileInstallation,
   type SyncEvent,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;

@@ -2,11 +2,11 @@
  * @vitest-environment jsdom
  */
 /** @description FPS-050 — Web SDK Initialization test.
- * Tests the real @aether/web SDK: SDK_VERSION constant, AetherSDK class exports,
+ * Tests the real @olympuslabs/aether-web SDK: SDK_VERSION constant, AetherSDK class exports,
  * and event envelope shape from fixtures. */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import aether, { AetherSDK } from '@aether/web';
-import { SDK_VERSION } from '@aether/shared/sdk-version';
+import aether, { AetherSDK } from '@olympuslabs/aether-web';
+import { SDK_VERSION } from '@olympuslabs/aether-shared/sdk-version';
 import { EventEnvelope } from '@aether/proof-contracts';
 import { trackEventFixture, identifyEventFixture } from '@aether/proof-fixtures';
 
@@ -209,7 +209,7 @@ describe('FPS-050: Web SDK Initialization', () => {
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('page');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('0.1.0-alpha.0');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
     expect(envelope.identity.user_id).toBe('user_001');

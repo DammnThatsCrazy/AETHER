@@ -151,7 +151,7 @@ hard-`False`.
 ### Example — Discord bot
 
 ```ts
-import { AgentTelemetryClient } from '@aether/server';
+import { AgentTelemetryClient } from '@olympuslabs/aether-server';
 
 const telemetry = new AgentTelemetryClient({
   writeKey: process.env.AETHER_WRITE_KEY!,

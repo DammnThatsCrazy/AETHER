@@ -278,7 +278,7 @@ SDK_RELEASE_TARGETS = [
         "Gradle build, Firebase Test Lab",
     ),
     SDKReleaseTarget(
-        "react_native", "@aether/react-native",
+        "react_native", "@olympuslabs/aether-react-native",
         "npm", "metro",
         "Coordinated native dependency updates",
     ),

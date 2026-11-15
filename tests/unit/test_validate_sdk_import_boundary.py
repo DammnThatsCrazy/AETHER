@@ -35,15 +35,15 @@ def test_target_is_internal_detects_legacy_scoped_and_root_names() -> None:
     assert gate._target_is_internal("@aether/ingestion/outbox", forbidden)
     assert gate._target_is_internal("aether-backend", forbidden)
     assert gate._target_is_internal("aether-datalake-backend", forbidden)
-    assert not gate._target_is_internal("@aether/shared", forbidden)
+    assert not gate._target_is_internal("@olympuslabs/aether-shared", forbidden)
     assert not gate._target_is_internal("react", forbidden)
     assert not gate._target_is_internal("node:path", forbidden)
 
 
 def test_allowed_sibling_sdk_specifiers_are_permitted() -> None:
-    for spec in ("@aether/shared", "@aether/shared/consent", "@aether/web",
-                 "@aether/react-native", "@aether/mobile-core", "@aether/mobile-ui",
-                 "@aether/server"):
+    for spec in ("@olympuslabs/aether-shared", "@olympuslabs/aether-shared/consent", "@olympuslabs/aether-web",
+                 "@olympuslabs/aether-react-native", "@aether/mobile-core", "@aether/mobile-ui",
+                 "@olympuslabs/aether-server"):
         assert gate._is_allowed_bare(spec), spec
     assert gate._is_relative("./base-tracker")
     assert gate._is_relative("../../../shared/events")
@@ -53,7 +53,7 @@ def test_ts_scan_flags_internal_import_and_ignores_relative(tmp_path) -> None:
     source = tmp_path / "sdk.ts"
     source.write_text(
         'import { tracker } from "./base-tracker";\n'
-        'import type { T } from "@aether/shared";\n'
+        'import type { T } from "@olympuslabs/aether-shared";\n'
         'const x = require("aether-backend");\n'
         'void import("@aether/logger").catch(() => {});\n',
         encoding="utf-8",
@@ -62,15 +62,15 @@ def test_ts_scan_flags_internal_import_and_ignores_relative(tmp_path) -> None:
     kinds = [o.split(": ", 1)[1] for o in offenders]
     assert any("aether-backend" in k for k in kinds)
     assert any("@aether/logger" in k for k in kinds)
-    # The relative and allowed @aether/shared imports must not be offenders.
+    # The relative and allowed @olympuslabs/aether-shared imports must not be offenders.
     assert not any("base-tracker" in k for k in kinds)
-    assert not any("@aether/shared" in k for k in kinds)
+    assert not any("@olympuslabs/aether-shared" in k for k in kinds)
 
 
 def test_package_deps_scan_flags_internal_dependency(tmp_path) -> None:
     pkg = tmp_path / "package.json"
     pkg.write_text(
-        json.dumps({"name": "@aether/web", "dependencies": {"@aether/ingestion": "^1.0.0"}}),
+        json.dumps({"name": "@olympuslabs/aether-web", "dependencies": {"@aether/ingestion": "^1.0.0"}}),
         encoding="utf-8",
     )
     offenders = gate._scan_package_deps(str(pkg), {"@aether/ingestion"})

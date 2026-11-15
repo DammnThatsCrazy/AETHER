@@ -39,7 +39,7 @@ export * from './economic';
 // aggregation; canonical home is the backend
 // (services/api/value/economic/economic360_contracts.py).
 // Consumers that still need the passive UnifiedEconomicBreakdown contract type
-// import it via the explicit subpath '@aether/shared/economic-metrics'
+// import it via the explicit subpath '@olympuslabs/aether-shared/economic-metrics'
 // (packages/shared/profile360-contract.ts), NOT from this public barrel. Do NOT
 // re-add it to the SDK public surface.
 export * from './contextual';
@@ -183,7 +183,7 @@ export * from './social-provider-capability-vocabulary';
 // canonical event mapping) whose canonical home is the backend
 // (services/api/shared/integration_contracts/commerce_bridge.py).
 // The web SDK imports only the source-observable signal types + schema version it
-// needs via the explicit subpath '@aether/shared/commerce-bridge'
+// needs via the explicit subpath '@olympuslabs/aether-shared/commerce-bridge'
 // (packages/sdk/web/src/modules/commerce-detection.ts), NOT from this public barrel.
 // Do NOT re-add it to the SDK public surface.
 

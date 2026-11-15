@@ -16,7 +16,7 @@ function input(overrides: Partial<InstallSignalInput> = {}): InstallSignalInput 
     loaderVersion: '0.1.0-alpha.0',
     sdkKey: 'pk_live_abc',
     siteId: 'site_1',
-    endpoint: 'https://api.aether.io',
+    endpoint: 'https://api.aether.network',
     now: () => FIXED,
     randomId: () => 'marker-1',
     ...overrides,
@@ -100,7 +100,7 @@ describe('install signal', () => {
 
       expect(ok).toBe(true);
       const [url, body, headers] = calls[0];
-      expect(url).toBe('https://api.aether.io/v1/batch');
+      expect(url).toBe('https://api.aether.network/v1/batch');
       expect(headers.Authorization).toBe('Bearer pk_live_abc');
       expect(headers['X-Aether-SDK']).toBe('web');
       expect(headers['X-Aether-Site']).toBe('site_1');
@@ -136,11 +136,11 @@ describe('install signal', () => {
   describe('createBeaconTransport', () => {
     it('uses fetch with keepalive so the signal survives page unload', () => {
       const fetchImpl = vi.fn(async () => ({}) as Response);
-      createBeaconTransport(fetchImpl as never)('https://api.aether.io/v1/batch', '{}', {
+      createBeaconTransport(fetchImpl as never)('https://api.aether.network/v1/batch', '{}', {
         Authorization: 'Bearer k',
       });
 
-      expect(fetchImpl).toHaveBeenCalledWith('https://api.aether.io/v1/batch', {
+      expect(fetchImpl).toHaveBeenCalledWith('https://api.aether.network/v1/batch', {
         method: 'POST',
         headers: { Authorization: 'Bearer k' },
         body: '{}',
@@ -158,7 +158,7 @@ describe('install signal', () => {
     it('does not reject when the request fails', async () => {
       const fetchImpl = vi.fn(() => Promise.reject(new Error('offline')));
       expect(() =>
-        createBeaconTransport(fetchImpl as never)('https://api.aether.io/v1/batch', '{}', {}),
+        createBeaconTransport(fetchImpl as never)('https://api.aether.network/v1/batch', '{}', {}),
       ).not.toThrow();
       await Promise.resolve();
     });
@@ -168,13 +168,13 @@ describe('install signal', () => {
         throw new Error('blocked by extension');
       });
       expect(() =>
-        createBeaconTransport(fetchImpl as never)('https://api.aether.io/v1/batch', '{}', {}),
+        createBeaconTransport(fetchImpl as never)('https://api.aether.network/v1/batch', '{}', {}),
       ).not.toThrow();
     });
 
     it('is inert where fetch does not exist', () => {
       expect(() =>
-        createBeaconTransport(undefined)('https://api.aether.io/v1/batch', '{}', {}),
+        createBeaconTransport(undefined)('https://api.aether.network/v1/batch', '{}', {}),
       ).not.toThrow();
     });
 

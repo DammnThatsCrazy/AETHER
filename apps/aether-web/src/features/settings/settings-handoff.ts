@@ -12,7 +12,7 @@
  * locally hand-maintained list:
  *
  *  - ``family`` → the canonical connector/ad-platform family ids exported from
- *    ``@aether/shared`` (the same catalog the R1 records and the public
+ *    ``@olympuslabs/aether-shared`` (the same catalog the R1 records and the public
  *    directory are derived from).
  *  - ``experience`` → ``EXPERIENCE_CATEGORY_ORDER`` (this feature's grouping
  *    order, mirroring the server's experience vocabulary).
@@ -22,7 +22,7 @@
  * acts on garbage, and ``buildSettingsRedirectFromHandoff`` re-validates before
  * emitting so a redirect target never carries an off-vocabulary value.
  */
-import { AD_PLATFORM_FAMILIES, CONNECTOR_FAMILIES } from "@aether/shared";
+import { AD_PLATFORM_FAMILIES, CONNECTOR_FAMILIES } from "@olympuslabs/aether-shared";
 import { EXPERIENCE_CATEGORY_ORDER } from "./experience-categories";
 
 export type HandoffIntent = "connect" | "manage";

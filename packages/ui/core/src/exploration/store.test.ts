@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { ExplorationContextV1, ExplorationResultEnvelope } from '@aether/shared/exploration-contract';
-import type { ExplorationTrailEntry, GraphObjectRef, GraphScope } from '@aether/shared/graph-context-contract';
+import type { ExplorationContextV1, ExplorationResultEnvelope } from '@olympuslabs/aether-shared/exploration-contract';
+import type { ExplorationTrailEntry, GraphObjectRef, GraphScope } from '@olympuslabs/aether-shared/graph-context-contract';
 import { createExplorationStore, createGraphExplorationStore, explorationActions, graphExplorationActions } from './store';
 
 function ctx(): ExplorationContextV1 {

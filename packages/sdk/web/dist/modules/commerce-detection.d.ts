@@ -1,4 +1,4 @@
-import { type SDKCommerceSignal } from '@aether/shared/commerce-bridge';
+import { type SDKCommerceSignal } from '@olympuslabs/aether-shared/commerce-bridge';
 export interface CommerceDetectionCallbacks {
     /** Called once per raw SDK-plane observation. */
     onSignal: (signal: SDKCommerceSignal) => void;

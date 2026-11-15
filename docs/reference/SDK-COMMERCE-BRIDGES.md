@@ -11,9 +11,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/bridges/": "sha256:47160b084e5269f5460a203f9ede3852ea8740aebf10c760c0ef9acde33dae2d"
-  "packages/sdk/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
-  "packages/shared/commerce-bridge.ts": "sha256:60e4ac490718505e43a1091dc0574bdc84fa4a0318c6ed95f49963e2f3c9ae46"
+  "packages/sdk/web/src/bridges/": "sha256:996e9ff60ab127b89510ffc673c8d73f49632a215d9cc3941aa42b814df806d0"
+  "packages/sdk/web/src/modules/commerce-detection.ts": "sha256:5ff9650ba44c4367f261135c427b5507a38e9968f70326423294e8228aad4bbf"
+  "packages/shared/commerce-bridge.ts": "sha256:38568dafa38ae675f606455cf3b230c797eb02cfae2febee02a09926c02419a6"
   "packages/shared/commerce.ts": "sha256:a2e6ae5be860985cd8265972f12c38da18d4475bbece666ca4ea332877c40bb3"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "services/api/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
@@ -34,14 +34,14 @@ convergence remains OUT of scope — the dotted `commerce.*` types stay in the
 runtime domain until a dedicated convergence program.
 
 **SDK-thinness boundary (WS-C row 28):** `packages/shared/commerce-bridge.ts` is
-a legacy SDK-side mirror and is **not** part of the `@aether/shared` public
+a legacy SDK-side mirror and is **not** part of the `@olympuslabs/aether-shared` public
 barrel (it was star-exported from `packages/shared/index.ts` before the
 three-lane integration and is now deliberately delisted). The canonical home is
 the backend Python
 (`shared/integration_contracts/commerce_bridge.py`, money
 `shared/commerce_contracts/money.py`). The web SDK consumes only the
 source-observable signal types + schema version via the explicit subpath
-`@aether/shared/commerce-bridge`
+`@olympuslabs/aether-shared/commerce-bridge`
 (`packages/sdk/web/src/modules/commerce-detection.ts`); no new interpreter logic is
 added on the SDK side, and the module must not be re-added to the SDK public
 surface.

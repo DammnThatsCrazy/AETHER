@@ -32,12 +32,12 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:82343e60e7de0cc13aa9518cc06872f43e232c69f9e212aa6b7288ba313953f8"
-  "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
+  "services/api/ingestion/": "sha256:940e01ce2e35358fac3e5f10e4f766671beb3e43e0bfb91aeca3e32811bedc1f"
   "services/api/intelligence/": "sha256:7b689715910c35e34c4e75e853dcfd9dba0851ec5788f4f15bfff4809b3097d1"
   "services/api/journeys/": "sha256:9f708044881acbe762dc87102b50fa527af280e879dbe0cda1ec196f78e7c2e6"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
-  "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
+  "services/api/value/": "sha256:0d0d0f6725363c849628c40905857fd06fbe65fd499a56956b7779a9033b2210"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification

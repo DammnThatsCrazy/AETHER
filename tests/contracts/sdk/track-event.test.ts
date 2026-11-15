@@ -56,7 +56,7 @@ describe('FPS-021: SDK Track Event', () => {
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('page');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('0.1.0-alpha.0');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
     expect(envelope.identity.user_id).toBe('user_001');
@@ -72,7 +72,7 @@ describe('FPS-021: SDK Track Event', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'a1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -88,11 +88,11 @@ describe('FPS-021: SDK Track Event', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'a1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('1.0.0');
   });
 
@@ -103,7 +103,7 @@ describe('FPS-021: SDK Track Event', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -117,7 +117,7 @@ describe('FPS-021: SDK Track Event', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1', user_id: 'user_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -131,7 +131,7 @@ describe('FPS-021: SDK Track Event', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
       session: { session_id: 'sess_1' },
@@ -149,14 +149,14 @@ describe('FPS-021: SDK Track Event', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
       source: {
         platform: 'web',
         data_type: 'event',
         platform_id: 'webapp',
-        sdk: '@aether/web',
+        sdk: '@olympuslabs/aether-web',
         environment: 'staging',
       },
     };

@@ -16,7 +16,7 @@ import {
   EDGE_LAYER_MAP,
   classifyEdgeType,
   countEdgesByLayer,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 describe('GRAPH_LAYERS constant', () => {
   it('has exactly four layers', () => {

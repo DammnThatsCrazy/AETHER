@@ -30,7 +30,7 @@ def test_tenant_scoped_handoff_stitching():
         "id": "evt1", "type": "journey_started", "timestamp": "2026-06-04T00:00:00Z",
         "sessionId": "s1", "anonymousId": "anon1", "userId": "u1",
         "properties": {"journeyType": "checkout"},
-        "context": {"library": {"name": "@aether/web", "version": "1"}, "device": {"type": "desktop"}},
+        "context": {"library": {"name": "@olympuslabs/aether-web", "version": "1"}, "device": {"type": "desktop"}},
     }
     second = {
         "id": "evt2", "type": "journey_resumed", "timestamp": "2026-06-04T00:20:00Z",

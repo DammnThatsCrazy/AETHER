@@ -24,8 +24,8 @@ import type {
 // ---------------------------------------------------------------------------
 describe('canonical envelope context v1', () => {
   it('a minimal EventContext (library only) still satisfies the type', () => {
-    const ctx: EventContext = { library: { name: '@aether/web', version: '0.1.0-alpha.0' } };
-    expect(ctx.library.name).toBe('@aether/web');
+    const ctx: EventContext = { library: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' } };
+    expect(ctx.library.name).toBe('@olympuslabs/aether-web');
     // All envelope fields are optional — absent by default.
     expect(ctx.surface).toBeUndefined();
     expect(ctx.schemaVersion).toBeUndefined();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 import { breadcrumbsFromContext, surfaceSupportsSavedViews } from './chrome-model';
 
 function ctx(overrides: Partial<ExplorationContextV1> = {}): ExplorationContextV1 {

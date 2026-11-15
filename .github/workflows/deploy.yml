@@ -458,16 +458,16 @@ jobs:
             *) echo "::error::unsupported deployment_lane ${DEPLOYMENT_LANE}"; exit 1 ;;
           esac
           npm ci
-          # The frontends import @aether/shared from the local workspace.
+          # The frontends import @olympuslabs/aether-shared from the local workspace.
           # npm ci installs dependencies but does not build that workspace,
           # so compile it before the per-app TypeScript/Vite builds.
-          npm run build --workspace @aether/shared
-          # The frontends also import @aether/web, whose package exports point
+          npm run build --workspace @olympuslabs/aether-shared
+          # The frontends also import @olympuslabs/aether-web, whose package exports point
           # at its Rollup output under packages/sdk/web/dist. Build it after the
           # shared contracts and fail early if the published entrypoints are
           # missing instead of letting Vite report a misleading package-entry
           # resolution error.
-          npm run build --workspace @aether/web
+          npm run build --workspace @olympuslabs/aether-web
           test -f packages/sdk/web/dist/aether.esm.js
           test -f packages/sdk/web/dist/aether.cjs.js
           test -f packages/sdk/web/dist/health/index.js

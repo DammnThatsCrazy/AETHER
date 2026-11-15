@@ -18,11 +18,12 @@ but not required** — connectors and signed webhooks provide a no-SDK path
 
 | SDK | Package | Install | Guide |
 | --- | --- | --- | --- |
-| Web | `@aether/web` | npm / CDN | [Web SDK](SDK-WEB.md) |
-| React Native | `@aether/react-native` | npm | [React Native SDK](SDK-REACT-NATIVE.md) |
+| Web | `@olympuslabs/aether-web` | npm / CDN | [Web SDK](SDK-WEB.md) |
+| Server (Node.js) | `@olympuslabs/aether-server` | npm | [Server SDK](developer/install-the-sdk.md#server-sdk-nodejs) |
+| React Native | `@olympuslabs/aether-react-native` | npm | [React Native SDK](SDK-REACT-NATIVE.md) |
 | iOS | `AetherSDK` | CocoaPods / SPM | [iOS SDK](SDK-IOS.md) |
-| Android | `com.aether:sdk-android` | Maven (GitHub Packages) | [Android SDK](SDK-ANDROID.md) |
-| Shared contracts | `@aether/shared` | npm | — |
+| Android | `com.olympuslabsml:aether-android` | Maven Central | [Android SDK](SDK-ANDROID.md) |
+| Shared contracts | `@olympuslabs/aether-shared` | npm | — |
 
 ## Capabilities
 
@@ -43,10 +44,10 @@ See the [SDK Release Checklist](SDK-RELEASE-CHECKLIST.md) and per-SDK changelogs
 
 ## React Browser Wrapper (Web SDK)
 
-Install: `npm install @aether/web react`
+Install: `npm install @olympuslabs/aether-web react`
 
 ```tsx
-import { AetherProvider, useAether, useConsentState } from '@aether/web/react';
+import { AetherProvider, useAether, useConsentState } from '@olympuslabs/aether-web/react';
 
 function App() {
   return (

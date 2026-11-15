@@ -9,14 +9,14 @@
 //   - unknown / stale / unpriced values NEVER render as "$0.00"
 //
 // NOTE ON TYPES: the canonical types (AetherValue, USDValuation, NativeValue …)
-// live in `@aether/shared` (`packages/shared/value.ts`). That package publishes
+// live in `@olympuslabs/aether-shared` (`packages/shared/value.ts`). That package publishes
 // its *built* d.ts from `dist/`, and the value contract is not yet present in
 // the built output, so it is not reachable from `@aether/ui` at typecheck time.
 // The minimal structural mirrors below are intentionally a subset of that
 // contract (native.amount/currency + valuation.usd_value/freshness/confidence/
 // warning + display) so this module stays self-contained. If/when
-// `@aether/shared` ships the value d.ts, these can be swapped for
-// `import type { AetherValue } from '@aether/shared'`.
+// `@olympuslabs/aether-shared` ships the value d.ts, these can be swapped for
+// `import type { AetherValue } from '@olympuslabs/aether-shared'`.
 // =============================================================================
 
 /** Mirror of `ValueFreshness` in the canonical contract. */

@@ -6,7 +6,7 @@ import {
   ExplorationProvider,
   type ExplorationClient,
 } from '@aether/ui/exploration';
-import type { ExplorationResultEnvelope } from '@aether/shared/exploration-contract';
+import type { ExplorationResultEnvelope } from '@olympuslabs/aether-shared/exploration-contract';
 import { ProjectionSurfacePanel, ProjectionSurfaceSummary } from '@kyber/features/projection-360';
 import type { ProjectionSurfaceSummary as ProjectionSurfaceSummaryModel } from '@kyber/features/projection-360/projection-360-types';
 

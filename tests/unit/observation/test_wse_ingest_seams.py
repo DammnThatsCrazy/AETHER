@@ -189,7 +189,7 @@ def test_spine_default_flags_off_is_exactly_today_no_sdk_tier_no_telemetry():
             _canonical(env.batch, event_id="evt-unknown", event_type="page_view"),
             _canonical(
                 env.batch, event_id="evt-lib",
-                library={"name": "@aether/web", "version": "0.1.0-alpha.0"},
+                library={"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"},
             ),
         ], producer)
 
@@ -302,11 +302,11 @@ def test_spine_compat_shadow_attaches_advisory_sdk_tier_label():
         resp = _ingest(env, [
             _canonical(
                 env.batch, event_id="evt-lib",
-                library={"name": "@aether/web", "version": "0.1.0-alpha.0"},
+                library={"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"},
             ),
             _canonical(
                 env.batch, event_id="evt-old6",
-                library={"name": "@aether/web", "version": "6.2.0"},
+                library={"name": "@olympuslabs/aether-web", "version": "6.2.0"},
             ),
             _canonical(env.batch, event_id="evt-nolib"),
         ], producer)
@@ -317,7 +317,7 @@ def test_spine_compat_shadow_attaches_advisory_sdk_tier_label():
         assert adv["consulted"] is True
         assert adv["mode"] == "shadow"
         assert adv["tier"] == "supported"
-        assert adv["source"] == {"name": "@aether/web", "version": "0.1.0-alpha.0"}
+        assert adv["source"] == {"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"}
         assert "batch_ingestion" in adv["capabilities"]
 
         # 6.x is also supported in the 0.x version scheme (>= 0.1.0).
@@ -340,11 +340,11 @@ def test_spine_compat_enforce_rejects_blocked_bands_only_after_block_date():
         resp = _ingest(env, [
             _canonical(
                 env.batch, event_id="evt-unsup",
-                library={"name": "@aether/web", "version": "0.0.9"},
+                library={"name": "@olympuslabs/aether-web", "version": "0.0.9"},
             ),
             _canonical(
                 env.batch, event_id="evt-ok",
-                library={"name": "@aether/web", "version": "0.1.0-alpha.0"},
+                library={"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"},
             ),
         ], producer)
 
@@ -368,7 +368,7 @@ def test_spine_compat_enforce_before_block_date_is_advisory_only():
         resp = _ingest(env, [
             _canonical(
                 env.batch, event_id="evt-unsup",
-                library={"name": "@aether/web", "version": "0.0.9"},
+                library={"name": "@olympuslabs/aether-web", "version": "0.0.9"},
             ),
         ], producer)
         # Fail-closed by date, never by band alone: unsupported is still accepted before block date.
@@ -391,7 +391,7 @@ def test_spine_compat_enforce_never_blocks_missing_library():
             _canonical(env.batch, event_id="evt-nolib"),
             _canonical(
                 env.batch, event_id="evt-unclass",
-                library={"name": "@aether/web", "version": "latest"},
+                library={"name": "@olympuslabs/aether-web", "version": "latest"},
             ),
         ], producer)
         assert resp.accepted == 2

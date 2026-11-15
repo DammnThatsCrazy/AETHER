@@ -1,4 +1,4 @@
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 
 export const NOESIS_EXPLORATION_CONTEXT_FILTER = 'exploration_context_v1';
 

@@ -1670,11 +1670,11 @@ jobs:
           set -euo pipefail
           pnpm install --frozen-lockfile \
             --filter '@aether/aether...' --filter '@aether/proof-reporting...' \
-            --filter '@aether/shared' --filter '@aether/web' --filter '@aether/ui' \
+            --filter '@olympuslabs/aether-shared' --filter '@olympuslabs/aether-web' --filter '@aether/ui' \
             --filter '@olympus/brand' --filter '@aether/proof-contracts' \
             --filter '@aether/proof-fixtures' --filter '@aether/proof-runner'
-          pnpm --filter '@aether/shared' run build
-          pnpm --filter '@aether/web' --filter '@aether/proof-contracts' run build
+          pnpm --filter '@olympuslabs/aether-shared' run build
+          pnpm --filter '@olympuslabs/aether-web' --filter '@aether/proof-contracts' run build
           pnpm --filter '@aether/proof-fixtures' run build
           pnpm --filter '@aether/proof-runner' run build
       - name: Install Playwright Chromium for identity UI evidence

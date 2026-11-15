@@ -1,7 +1,7 @@
-import type { PlatformType } from '@aether/shared/contextual';
-import type { Provenance } from '@aether/shared/provenance';
+import type { PlatformType } from '@olympuslabs/aether-shared/contextual';
+import type { Provenance } from '@olympuslabs/aether-shared/provenance';
 
-/** Platform the data originated from — aligned with @aether/shared PlatformType. */
+/** Platform the data originated from — aligned with @olympuslabs/aether-shared PlatformType. */
 export type SourcePlatform = PlatformType;
 
 /** Classification of the data payload type. */

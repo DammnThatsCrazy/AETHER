@@ -198,7 +198,7 @@ jobs:
         run: pnpm --filter '@aether/proof-contracts' run test
 
   # -------------------------------------------------------------------
-  # sdk — SDK-specific tests for packages/sdk/web (@aether/web).
+  # sdk — SDK-specific tests for packages/sdk/web (@olympuslabs/aether-web).
   # Blocks merge if SDK functionality is broken.
   # -------------------------------------------------------------------
   sdk:
@@ -225,7 +225,7 @@ jobs:
         run: pnpm install
 
       - name: Run SDK tests
-        run: pnpm --filter '@aether/web' run test
+        run: pnpm --filter '@olympuslabs/aether-web' run test
 
   # -------------------------------------------------------------------
   # smoke-web — Smoke test the web SDK sample apps (web-next + web-script-tag)
@@ -505,8 +505,8 @@ jobs:
                --filter '@olympus/status' \
                --filter '@olympus/olympus-marketing' \
                --filter '@aether/aether-marketing' \
-               --filter '@aether/web' \
-               --filter '@aether/shared' \
+               --filter '@olympuslabs/aether-web' \
+               --filter '@olympuslabs/aether-shared' \
                --filter '@aether/config' \
                --filter '@olympus/brand' \
                run build

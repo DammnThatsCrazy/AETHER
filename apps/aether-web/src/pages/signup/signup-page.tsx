@@ -26,7 +26,7 @@ import {
 } from "@aether-app/features/settings/settings-handoff";
 import { api } from "@aether-app/lib/api/endpoints";
 import { OtpInput } from "@aether-app/components/otp-input";
-import { SDK_VERSION } from "@aether/shared";
+import { SDK_VERSION } from "@olympuslabs/aether-shared";
 
 type Step = 1 | 2 | 3;
 
@@ -299,10 +299,10 @@ export function EmailSignupPage() {
   }
 
   const snippets = {
-    web: `import aether from '@aether/web-sdk';\naether.init({ apiKey: '${revealedKey ?? "YOUR_API_KEY"}' });`,
-    ios: `.package(url: "https://github.com/AetherSDK/aether-ios.git", from: "${SDK_VERSION}")`,
-    android: `implementation("io.aether:sdk-android:${SDK_VERSION}")`,
-    rn: `npm install @aether/react-native-sdk`,
+    web: `import aether from '@olympuslabs/aether-web';\naether.init({ apiKey: '${revealedKey ?? "YOUR_API_KEY"}' });`,
+    ios: `.package(url: "https://github.com/DammnThatsCrazy/aether-ios.git", exact: "${SDK_VERSION}")`,
+    android: `implementation("com.olympuslabsml:aether-android:${SDK_VERSION}")`,
+    rn: `npm install @olympuslabs/aether-react-native@${SDK_VERSION}`,
   };
 
   return (

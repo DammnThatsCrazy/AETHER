@@ -5,8 +5,8 @@ import { ToastProvider, queryCache } from '@aether/ui';
 import {
   fundingSessionStatuses,
   reconciliationStates,
-} from '@aether/shared';
-import type { FundingSessionStatus, ReconciliationState } from '@aether/shared';
+} from '@olympuslabs/aether-shared';
+import type { FundingSessionStatus, ReconciliationState } from '@olympuslabs/aether-shared';
 import { PaymentRailsPage } from '@aether-app/pages/payment-rails';
 import {
   ReconciliationStateBadge,

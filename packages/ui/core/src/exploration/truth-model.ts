@@ -3,13 +3,13 @@
  * so the state/notice logic is unit-testable.
  */
 
-import type { DimensionState } from '@aether/shared/dimension-state';
-import type { DimensionFreshness } from '@aether/shared/dimension-state';
-import type { ObservationClass } from '@aether/shared/graph-contract';
+import type { DimensionState } from '@olympuslabs/aether-shared/dimension-state';
+import type { DimensionFreshness } from '@olympuslabs/aether-shared/dimension-state';
+import type { ObservationClass } from '@olympuslabs/aether-shared/graph-contract';
 import type {
   ApplicabilityReport,
   ExplorationCompleteness,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 
 type BadgeVariant = 'success' | 'info' | 'warning' | 'danger' | 'default';
 

@@ -10,3 +10,20 @@ in whole or in part, is strictly prohibited without the prior written
 consent of Aether Platform.
 
 For licensing inquiries, contact: legal@aether.io
+
+--------------------------------------------------------------------------
+
+EXCEPTION — PUBLISHED SDK PACKAGES
+
+The following directories are NOT covered by the proprietary terms above.
+They are licensed under the Apache License, Version 2.0, as stated in the
+LICENSE and NOTICE files inside each directory:
+
+  packages/shared              (@olympuslabs/aether-shared)
+  packages/sdk/web             (@olympuslabs/aether-web)
+  packages/sdk/server          (@olympuslabs/aether-server)
+  packages/sdk/react-native    (@olympuslabs/aether-react-native)
+  packages/sdk/ios             (AetherSDK, CocoaPods / Swift Package Manager)
+  packages/sdk/android         (com.olympuslabsml:aether-android, Maven Central)
+
+All other files in this repository remain proprietary.

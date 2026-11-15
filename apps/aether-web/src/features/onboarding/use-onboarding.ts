@@ -1,7 +1,7 @@
 import { useMutation, useQuery, queryCache } from '@aether/ui';
 import { z } from 'zod';
 import { restClient } from '@aether-app/lib/api/rest/client';
-import type { TenantOnboardingStatus } from '@aether/shared';
+import type { TenantOnboardingStatus } from '@olympuslabs/aether-shared';
 
 const wrap = <T extends z.ZodType>(dataSchema: T) => z.object({ data: dataSchema, status: z.string(), timestamp: z.string() });
 const unknown = z.unknown();

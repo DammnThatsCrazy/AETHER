@@ -20,8 +20,8 @@ import {
   importTransforms,
   primitiveFields,
   isTerminalImportStatus,
-} from '@aether/shared';
-import type { ImportPrimitive, ImportTransform, FieldMapping } from '@aether/shared';
+} from '@olympuslabs/aether-shared';
+import type { ImportPrimitive, ImportTransform, FieldMapping } from '@olympuslabs/aether-shared';
 import {
   useImportDetail,
   useImportCommits,

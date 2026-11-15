@@ -5,17 +5,17 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@aether\/web$/,
+        find: /^@olympuslabs\/aether-web$/,
         replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       },
       {
-        find: /^@aether\/shared\/consent-receipt$/,
+        find: /^@olympuslabs\/aether-shared\/consent-receipt$/,
         replacement: fileURLToPath(
           new URL('../../shared/consent-receipt.ts', import.meta.url),
         ),
       },
       {
-        find: /^@aether\/shared\/commerce-bridge$/,
+        find: /^@olympuslabs\/aether-shared\/commerce-bridge$/,
         replacement: fileURLToPath(
           new URL('../../shared/commerce-bridge.ts', import.meta.url),
         ),

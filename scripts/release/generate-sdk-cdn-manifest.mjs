@@ -150,7 +150,7 @@ const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`;
 write('sdk/manifests/web/latest.json', manifestJson);
 write(`sdk/manifests/web/${VERSION}.json`, manifestJson);
 
-console.log(`Staged CDN layout for @aether/web v${VERSION} (major v${MAJOR})`);
+console.log(`Staged CDN layout for @olympuslabs/aether-web v${VERSION} (major v${MAJOR})`);
 console.log(`  ${CDN_BASE}/v1.js`);
 console.log(`  ${CDN_BASE}/sdk/v${MAJOR}/loader.js`);
 console.log(`  ${manifest.downloads.sdkBundleUrl}`);

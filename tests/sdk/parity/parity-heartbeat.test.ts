@@ -50,7 +50,7 @@ describe('FPS-090: Parity Heartbeat', () => {
       platform_id: 'ios',
       environment: 'staging',
       event_type: 'sdk_session_alive',
-      sdk: { name: '@aether/react-native', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-react-native', version: '1.0.0' },
       identity: { anonymous_id: 'anon_ios_001', device_id: 'dev_ios_001' },
       timestamp: new Date().toISOString(),
       properties: {

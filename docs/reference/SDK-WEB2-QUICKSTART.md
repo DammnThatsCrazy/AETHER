@@ -51,11 +51,11 @@ SDK up itself, so there is no follow-up `init()` call and no build step.
 If you would rather not hand-edit HTML, install from npm instead:
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ```typescript
-import aether from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 ```
 
 ---
@@ -183,18 +183,18 @@ Add keys in **Settings → API Keys → Provider Keys**, or via API:
 
 ```bash
 # Meta Ads
-curl -X POST https://api.aether.io/v1/providers/keys \
+curl -X POST https://api.aether.network/v1/providers/keys \
   -H "X-API-Key: ak_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"provider_name": "meta_ads", "api_key": "YOUR_META_ACCESS_TOKEN"}'
 
 # Google Ads
-curl -X POST https://api.aether.io/v1/providers/keys \
+curl -X POST https://api.aether.network/v1/providers/keys \
   -H "X-API-Key: ak_YOUR_KEY" \
   -d '{"provider_name": "google_ads", "api_key": "YOUR_GOOGLE_ADS_TOKEN"}'
 
 # Plaid (bank account signals — requires credit consent from your end-users)
-curl -X POST https://api.aether.io/v1/providers/keys \
+curl -X POST https://api.aether.network/v1/providers/keys \
   -H "X-API-Key: ak_YOUR_KEY" \
   -d '{"provider_name": "plaid", "api_key": "YOUR_PLAID_SECRET"}'
 ```

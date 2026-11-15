@@ -1,6 +1,6 @@
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, GlyphIcon, LoadingState, StatusIndicator, TerminalSeparator } from '@aether/ui';
 import { useEventRequirements, useGoLiveReadiness, useOnboardingChecklist, useOnboardingStatus, usePatchOnboardingStep, useSdkInstructions } from '@aether-app/features/onboarding';
-import type { ImplementationBlocker, ImplementationStep } from '@aether/shared';
+import type { ImplementationBlocker, ImplementationStep } from '@olympuslabs/aether-shared';
 import { CommsConnectOnboardingStep } from './comms-connect-onboarding-step';
 
 function scoreColor(score: number | null) {

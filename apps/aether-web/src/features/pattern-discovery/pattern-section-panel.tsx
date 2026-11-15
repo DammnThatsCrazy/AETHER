@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState,
 } from '@aether/ui';
-import type { PatternSurface } from '@aether/shared';
+import type { PatternSurface } from '@olympuslabs/aether-shared';
 import { Link } from 'react-router-dom';
 import {
   SECTION_LAYOUT, markPatternsSeen, usePatternDiscoveryEnabled, usePatternSection, type PatternSummaryRow,

@@ -1,4 +1,4 @@
-import type { ConsentPurpose } from '@aether/shared/consent';
+import type { ConsentPurpose } from '@olympuslabs/aether-shared/consent';
 
 /** Resolution level for identity resolution. */
 export type IdentityResolutionLevel =

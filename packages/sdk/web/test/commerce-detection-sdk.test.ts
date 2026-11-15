@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import aether from '../src/index';
-import { SDK_SIGNAL_SCHEMA_VERSION } from '@aether/shared/commerce-bridge';
+import { SDK_SIGNAL_SCHEMA_VERSION } from '@olympuslabs/aether-shared/commerce-bridge';
 
 function installFetchCapture() {
   const sent: any[] = [];

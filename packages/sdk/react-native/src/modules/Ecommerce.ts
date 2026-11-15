@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { NativeModules } from 'react-native';
-import type { Product, CartItem, Order } from '@aether/shared/ecommerce-types';
+import type { Product, CartItem, Order } from '@olympuslabs/aether-shared/ecommerce-types';
 
 export type { Product, CartItem, Order };
 

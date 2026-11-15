@@ -4,7 +4,7 @@ Kotlin wrapper reference for the Aether Android SDK. This directory points to th
 
 ## What this is
 
-`tests/e2e/proof/apps/android/` is the Android proof harness — it uses `@aether/react-native` (the React Native bridge that wraps the native Android SDK) and exercises every signal in the canonical first-value lifecycle: init, heartbeat, consent, event, identify, journey, commerce, flush, reset.
+`tests/e2e/proof/apps/android/` is the Android proof harness — it uses `@olympuslabs/aether-react-native` (the React Native bridge that wraps the native Android SDK) and exercises every signal in the canonical first-value lifecycle: init, heartbeat, consent, event, identify, journey, commerce, flush, reset.
 
 This `packages/sdk/examples/android-kotlin/` directory provides a Kotlin-oriented README that explains how the native SDK is used under the hood, so Kotlin/Android developers can see the native SDK surface without needing to dig through the React Native bridge code.
 

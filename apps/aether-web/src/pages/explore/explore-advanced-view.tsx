@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { GraphContext, GraphObjectRef } from '@aether/shared/graph-context-contract';
+import type { GraphContext, GraphObjectRef } from '@olympuslabs/aether-shared/graph-context-contract';
 import {
   GraphTimeRail,
   NoesisContextStrip,

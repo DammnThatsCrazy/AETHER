@@ -12,7 +12,7 @@ import {
   formatCount,
   useTimeContext,
 } from '@aether/ui';
-import { aiInvocationStatuses } from '@aether/shared';
+import { aiInvocationStatuses } from '@olympuslabs/aether-shared';
 import {
   useAISummary,
   useAIInvocations,

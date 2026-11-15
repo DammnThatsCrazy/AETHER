@@ -21,7 +21,7 @@ import {
   useTimeContext,
   type TimeContext,
 } from '@aether/ui';
-import type { SyncChangeType } from '@aether/shared';
+import type { SyncChangeType } from '@olympuslabs/aether-shared';
 import { isFeatureEnabled } from '@aether-app/lib/featureFlags';
 import { useClientSync } from './use-client-sync';
 import { useRecentContinuations } from './use-continuations';

@@ -1,7 +1,7 @@
 import type { SDKState } from './types';
 import type { ReactElement } from 'react';
 import React from 'react';
-import type { ConsentState } from '@aether/shared/consent';
+import type { ConsentState } from '@olympuslabs/aether-shared/consent';
 import { getRealConsentState, getSDKInstance } from './sdk';
 
 interface DebugPanelProps {
@@ -96,7 +96,7 @@ export function DebugPanel({ state }: DebugPanelProps): ReactElement {
 
       {realConsent && (
         <div style={{ marginTop: 16, padding: 12, background: '#1a1a1a', borderRadius: 4, border: '1px solid #333' }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#aaa' }}>Real Consent State (from @aether/web SDK)</h3>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#aaa' }}>Real Consent State (from @olympuslabs/aether-web SDK)</h3>
           <ConsentGrid consent={realConsent} />
         </div>
       )}

@@ -17,7 +17,7 @@ describe('FPS-023: Graph Provenance Tracking', () => {
     expect(e.platform_id).toBe('web');
     expect(e.environment).toBe('staging');
     expect(e.event_type).toBe('page');
-    expect(e.sdk.name).toBe('@aether/web');
+    expect(e.sdk.name).toBe('@olympuslabs/aether-web');
     expect(e.sdk.version).toBe('0.1.0-alpha.0');
     expect(e.identity.anonymous_id).toBe('anon_001');
     expect(e.identity.user_id).toBe('user_001');

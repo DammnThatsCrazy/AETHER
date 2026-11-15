@@ -2,8 +2,8 @@ import type {
   ApplicabilityReport,
   ExplorationCompleteness,
   ExplorationTruth,
-} from '@aether/shared/exploration-contract';
-import type { ObservationClass } from '@aether/shared/graph-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
+import type { ObservationClass } from '@olympuslabs/aether-shared/graph-contract';
 import { Badge } from '../../components/badge';
 import { EmptyState } from '../../components/empty-state';
 import { ErrorState } from '../../components/error-state';

@@ -45,12 +45,12 @@ import { isCanonicalEventType } from './core/generated-consent-map';
 import {
   buildCanonicalConsentReceipt,
   type CanonicalConsentReceiptInput,
-} from '@aether/shared/consent-receipt';
+} from '@olympuslabs/aether-shared/consent-receipt';
 import {
   SDK_SIGNAL_SCHEMA_VERSION,
   type CommerceSignalType,
   type SDKCommerceSignal,
-} from '@aether/shared/commerce-bridge';
+} from '@olympuslabs/aether-shared/commerce-bridge';
 
 /**
  * BARE SDK signal name → wire event type. The SDK event plane speaks the
@@ -71,7 +71,7 @@ const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version
 // Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts (web
 // bundles standalone; literal kept in sync by scripts/validate_sdk_release_alignment.py).
 const CONTRACT_SCHEMA_VERSION = '1.0.0';
-const DEFAULT_ENDPOINT = 'https://api.aether.io';
+const DEFAULT_ENDPOINT = 'https://api.aether.network';
 
 class AetherSDK implements AetherSDKInterface {
   private config: AetherConfig | null = null;
@@ -1270,7 +1270,7 @@ class AetherSDK implements AetherSDKInterface {
       userId: identity.userId,
       properties: eventProperties,
       context: {
-        library: { name: '@aether/web', version: SDK_VERSION },
+        library: { name: '@olympuslabs/aether-web', version: SDK_VERSION },
         page: typeof window !== 'undefined' ? getPageContext() : undefined,
         device,
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,

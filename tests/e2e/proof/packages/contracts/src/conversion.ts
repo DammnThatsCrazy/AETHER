@@ -1,4 +1,4 @@
-import type { EventType } from '@aether/shared/events';
+import type { EventType } from '@olympuslabs/aether-shared/events';
 import type { SourceClassification } from './source-classification';
 
 /** A conversion event — a user action of business value. */

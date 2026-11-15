@@ -12,7 +12,7 @@ import {
   useToast,
   type TimeContext,
 } from '@aether/ui';
-import type { ImportStatus } from '@aether/shared';
+import type { ImportStatus } from '@olympuslabs/aether-shared';
 import { useImports, useCreateImport } from '@aether-app/features/imports';
 import type { ImportSessionRecord } from '@aether-app/features/imports';
 

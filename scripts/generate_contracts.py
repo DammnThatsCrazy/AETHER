@@ -20,7 +20,7 @@ Generated outputs:
 
 EventType consumers (guarded, NOT spliced — WS-C row 4 / Invariant #16):
   packages/sdk/web/src/types.ts             re-exports the generated EventType from
-                                        '@aether/shared/events' (a local hand-
+                                        '@olympuslabs/aether-shared/events' (a local hand-
                                         mirror union is a generator failure)
 
 Usage:
@@ -559,7 +559,7 @@ def validate_web_eventtype_reimport() -> None:
     silently fell behind the registry (it was missing navigation_intent and later
     registry events). The canonical EventType is generated into
     packages/shared/events.ts (this script); web now imports + re-exports it
-    (``import type { EventType } from '@aether/shared/events'; export type {
+    (``import type { EventType } from '@olympuslabs/aether-shared/events'; export type {
     EventType };``). Guard against re-introducing a hand-mirror union: a local
     ``export type EventType =`` declaration, or losing the re-export entirely,
     fails the generator (write and --check modes) so the drift cannot recur.
@@ -571,12 +571,12 @@ def validate_web_eventtype_reimport() -> None:
         raise ValueError(
             f"{WEB_TYPES_TS} declares a local `export type EventType =` union — "
             "remove it and re-export the generated EventType from "
-            "'@aether/shared/events' (Invariant #16)"
+            "'@olympuslabs/aether-shared/events' (Invariant #16)"
         )
-    if "export type { EventType }" not in text or "'@aether/shared/events'" not in text:
+    if "export type { EventType }" not in text or "'@olympuslabs/aether-shared/events'" not in text:
         raise ValueError(
             f"{WEB_TYPES_TS} does not re-export the generated EventType from "
-            "'@aether/shared/events' (Invariant #16)"
+            "'@olympuslabs/aether-shared/events' (Invariant #16)"
         )
 
 

@@ -5,7 +5,7 @@ import {
   useExplorationClient,
   useExplorationContext,
 } from '@aether/ui/exploration';
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 
 export function journeyExplorationContext(
   base: ExplorationContextV1,

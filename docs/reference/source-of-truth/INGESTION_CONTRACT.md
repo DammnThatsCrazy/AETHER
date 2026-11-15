@@ -32,7 +32,7 @@ Authorization: Bearer {apiKey}
 Content-Type: application/json
 ```
 
-Default `endpoint` = `https://api.aether.io`.
+Default `endpoint` = `https://api.aether.network`.
 
 ## Request body
 

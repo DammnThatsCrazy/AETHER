@@ -1,7 +1,7 @@
 /**
  * Phase 1 exploration lens runtime.
  *
- * The projection and engine lens registries in @aether/shared remain the
+ * The projection and engine lens registries in @olympuslabs/aether-shared remain the
  * authority.  This module is only the small, frontend-facing join between
  * those registries and the existing exploration surface capabilities.  In
  * particular, a blueprint family that does not have a canonical engine lens
@@ -12,24 +12,24 @@ import {
   explorationSurfaceIds,
   surfaceCapabilities,
   type ExplorationSurfaceId,
-} from '@aether/shared/surface-capabilities';
-import type { FilterFieldCategory } from '@aether/shared/filter-fields';
+} from '@olympuslabs/aether-shared/surface-capabilities';
+import type { FilterFieldCategory } from '@olympuslabs/aether-shared/filter-fields';
 import {
   type IntelligenceProjectionDefinition,
   type IntelligenceProjectionId,
   type IntelligenceProjectionSubjectKind,
   intelligenceProjectionDefinitions,
-} from '@aether/shared/intelligence-projections_generated';
+} from '@olympuslabs/aether-shared/intelligence-projections_generated';
 import {
   lensDefinitions,
   type LensDescriptor,
   type LensId,
-} from '@aether/shared/lenses_generated';
+} from '@olympuslabs/aether-shared/lenses_generated';
 import {
   resolveCapabilityState as resolveActionCapabilityState,
   type ActionCapabilityEvaluation,
   type CapabilityAvailability,
-} from '@aether/shared/action-runtime-contract';
+} from '@olympuslabs/aether-shared/action-runtime-contract';
 
 /** Blueprint vocabulary, deliberately distinct from canonical engine LensId. */
 export const blueprintLensIds = [

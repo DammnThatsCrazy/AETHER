@@ -1,8 +1,8 @@
-import type { ConsentState } from '@aether/shared/consent';
+import type { ConsentState } from '@olympuslabs/aether-shared/consent';
 
 /**
  * Per-batch ingestion health counters.
- * Mirrors the SDK's internal BatchHealth type — the @aether/web SDK
+ * Mirrors the SDK's internal BatchHealth type — the @olympuslabs/aether-web SDK
  * parses these from the /v1/batch response body and surfaces them via
  * the onBatchResult callback.
  */
