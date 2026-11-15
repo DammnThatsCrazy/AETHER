@@ -73,8 +73,9 @@ reviewed_source_commits:
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; the Profile360 slot statements here are updated.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; this document needs no other change.'}
+  - {'commit': '5dcf75ba', 'reason': 'Reviewed 5dcf75ba: the contract generator now types freshnessPolicy.slots and states per-slot maximum ages in the surface catalog. Generated-output typing only; this document needs no change.'}
 source_hashes:
-  "packages/shared/": "sha256:59d6e16683ab161b55fb087d170f65a745eb733f5d9f65d68154675a21b9f72a"
+  "packages/shared/": "sha256:ea40ae47490b3a4be6e917c03f6698c380b6dc5f48ba651814bf45bd538685bc"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
