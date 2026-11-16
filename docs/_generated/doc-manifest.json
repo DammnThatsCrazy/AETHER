@@ -126,6 +126,23 @@
       "canonical_owner": "agent@aether"
     },
     {
+      "path": "docs/architecture/AGENT-DETECTION-RELIABILITY.md",
+      "title": "Agent Detection Reliability — Current-State Assessment",
+      "slug": "architecture/agent-detection-reliability",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/AGENT-LAYER-PRODUCTION.md",
       "title": "Agent Layer Production Readiness",
       "slug": "operations/agent-layer-production",
@@ -2446,6 +2463,22 @@
       "status": "experimental",
       "since_version": "0.1.0",
       "canonical_owner": "architecture@aether"
+    },
+    {
+      "path": "docs/architecture/plans/PUBLIC-AGENT-REGISTRY.md",
+      "title": "Public Agent Registry — Zero-Install Agent, Principal and Relationship Resolution",
+      "slug": "plans/public-agent-registry",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "buyer",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/architecture/plans/RECONCILED_CONTROL_PHASES.md",
