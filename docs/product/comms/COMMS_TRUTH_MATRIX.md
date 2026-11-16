@@ -13,7 +13,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "services/api/connectors/integrations/connectors/adapters.py": "sha256:f308f8c9b61fb9516998ec4859ab1c3879bda32d8a596d620544961e8f933b9a"
-  "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:bde85842cf76e998c1f5e686ef69ed14968522d767f042bbfe65da109343f318"
   "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:0234e2146b1ec5626754f6bcd96a0013bb71d2c4fe766a20a4e9620d6fbbc60e"
   "services/api/journeys/measurement/silver_adapters.py": "sha256:d69f12e7e527d0f3244b355bae6025dbd9dbae4f38ec35acc66ff505459fab70"
 ---

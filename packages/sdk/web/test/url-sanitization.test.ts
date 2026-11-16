@@ -30,6 +30,13 @@ describe('sanitizeUrl', () => {
     expect(sanitized).not.toContain('access_token');
   });
 
+  it('strips signed ae click tokens but keeps unrelated ae values', () => {
+    const token = 'v1.eyJ0IjoidGVuYW50LWEifQ.abcdefghijklmnopqrstuvwxyz012345';
+    expect(sanitizeUrl(`https://x.test/p?a=1&ae=${token}`)).toBe('https://x.test/p?a=1');
+    expect(sanitizeSearch(`?ae=${token}&b=2`)).toBe('?b=2');
+    expect(sanitizeUrl('https://x.test/p?ae=express')).toBe('https://x.test/p?ae=express');
+  });
+
   it('strips fragments (OAuth implicit tokens live there)', () => {
     expect(sanitizeUrl('https://x.test/p?a=1#access_token=abc')).toBe(
       'https://x.test/p?a=1',

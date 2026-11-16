@@ -23,4 +23,10 @@ describe('acquisition evidence', () => {
     expect(evidence.utmCampaign).toBe('summer');
     expect(evidence.referralToken).toBeUndefined();
   });
+
+  it('captures only a signed ae click token as clickToken', () => {
+    const token = 'v1.eyJ0IjoidGVuYW50LWEifQ.abcdefghijklmnopqrstuvwxyz012345';
+    expect(evidenceFromSearchParams(new URLSearchParams(`ae=${token}`)).clickToken).toBe(token);
+    expect(evidenceFromSearchParams(new URLSearchParams('ae=express')).clickToken).toBeUndefined();
+  });
 });

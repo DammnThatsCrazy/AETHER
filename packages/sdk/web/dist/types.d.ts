@@ -625,6 +625,8 @@ export interface AcquisitionEvidence {
     landingPage?: string;
     /** Opaque `aether_ref` token. Verification and interpretation are server-owned. */
     referralToken?: string;
+    /** Opaque signed `ae` email click token. Verification and recipient attribution are server-owned. */
+    clickToken?: string;
     firstCapturedAt?: string;
     lastObservedAt?: string;
     sessionId?: string;

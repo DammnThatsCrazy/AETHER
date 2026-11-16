@@ -9,6 +9,14 @@ export declare function sha256(input: string): Promise<string>;
 export declare function anonymizeIP(ip: string): string;
 /** Detect device context from browser environment */
 export declare function getDeviceContext(): DeviceContext;
+/**
+ * Signed per-recipient email click token (`ae=v<ver>.<payload>.<sig>`). It is
+ * shipped only through the typed `clickToken` field. The bare `ae` name is too
+ * generic to strip by key, so only token-shaped values are removed.
+ */
+export declare const CLICK_TOKEN_PARAM = "ae";
+/** True when a value has the shape of a signed Aether click token. */
+export declare function isClickToken(value: string | null | undefined): value is string;
 /** Configure URL sanitization from AetherConfig (privacy-safe default: on). */
 export declare function configureUrlSanitization(options?: {
     enabled?: boolean;
@@ -18,7 +26,8 @@ export declare function configureUrlSanitization(options?: {
 export declare function sanitizeSearch(search: string): string;
 /**
  * Strip fragments and sensitive query params (aether_ref, aether_cid, click
- * IDs, token params) from a URL before it is transmitted anywhere.
+ * IDs, token params, signed `ae` click tokens) from a URL before it is
+ * transmitted anywhere.
  * Relative URLs are resolved against the current page origin when available.
  */
 export declare function sanitizeUrl(url: string | undefined | null): string;

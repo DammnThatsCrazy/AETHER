@@ -60,4 +60,27 @@ describe('TrafficSourceTracker referral evidence', () => {
     expect(detected.landingPage).not.toContain('gclid');
     expect(detected.landingPage).not.toContain('access_token');
   });
+
+  it('captures a signed ae click token as clickToken and strips it from the landing page', () => {
+    const token = 'v1.eyJ0IjoidGVuYW50LWEifQ.abcdefghijklmnopqrstuvwxyz012345';
+    window.history.replaceState({}, '', `/sale?utm_source=email&ae=${token}`);
+
+    const tracker = new TrafficSourceTracker();
+    const detected = tracker.detect();
+
+    expect(detected.clickToken).toBe(token);
+    expect(tracker.toEventPayload()).toMatchObject({ clickToken: token });
+    expect(detected.landingPage).toContain('utm_source=email');
+    expect(detected.landingPage).not.toContain(token);
+    expect(detected.landingPage).not.toContain('ae=');
+  });
+
+  it('ignores a tenant-owned ae parameter that is not a signed token', () => {
+    window.history.replaceState({}, '', '/checkout?ae=express');
+
+    const detected = new TrafficSourceTracker().detect();
+
+    expect(detected.clickToken).toBeNull();
+    expect(detected.landingPage).toContain('ae=express');
+  });
 });

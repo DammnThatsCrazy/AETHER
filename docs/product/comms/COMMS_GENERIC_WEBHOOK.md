@@ -204,6 +204,19 @@ POST /v1/comms/click-tokens/verify   → verify + correlation evidence
 
 Tokens are HMAC-signed, key-versioned (`COMMS_CLICK_TOKEN_KEYS`,
 `COMMS_CLICK_TOKEN_ACTIVE_VERSION`), expiring, tenant-bound, and contain no
-raw PII. On landing, the SDK forwards the token as acquisition evidence;
-campaign evidence priority is: signed token → provider click id → utm_id →
+raw PII. On landing, the web SDK forwards the token as
+`context.trafficSource.clickToken` (and strips it from every transmitted URL).
+At ingestion the Silver dispatcher verifies the token for the event's own tenant,
+removes it from stored URLs, and applies the result to the landing touchpoint:
+
+| Recipient outcome | Touchpoint effect |
+|---|---|
+| `resolved` — alias maps to exactly one tenant-owned entity, visitor not bound to another | `profile_id` set to the recipient when empty; `identity_resolution_method=signed_click`, confidence 0.9 |
+| `forwarded` — visitor already bound to a different entity | identity untouched; `forwarded_link`, confidence 0.4 |
+| `unresolved` / `absent` | campaign lineage only |
+
+Campaign, message, link and sequence lineage are stamped on every outcome.
+Campaign evidence priority is: signed token → provider click id → utm_id →
 external campaign id → utm_campaign composite → referrer → manual review.
+A link shared without a token (for example, pasted by hand) carries no recipient
+and so can never be attributed to a person.
