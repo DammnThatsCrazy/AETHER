@@ -11,9 +11,9 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:40b7cd21b1d10ed068e057f249964ceb67fd8f0be088df67205eea50ae96e8d7"
-  "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
-  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
+  "packages/sdk/web/src/index.ts": "sha256:53635bb48461322dc7e32dd0e79ba6a72f1ced80940f53fc23503a76a3d89913"
+  "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:b7951a75cfb47b19da22cae331399bb32a29e0545699cb8a49d63a1ee34fc3f9"
+  "packages/shared/acquisition-evidence.ts": "sha256:e4e871496633b6b1712a313a0c6e99f29e61d50f6ba2c162579ca957f0468d4b"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -55,7 +55,7 @@ config. A publishing pipeline that would rather not hand-edit HTML can install
 from npm instead:
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ## Quick Start
@@ -65,7 +65,7 @@ JavaScript instead — an npm install, or attributes you would rather compute �
 call `init()` yourself:
 
 ```typescript
-import aether from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 
 aether.init({
   apiKey: 'pk_your_publishable_key',
@@ -191,7 +191,7 @@ connect; if the backend matches, it returns a `ResolvedIdentity` and the SDK
 silently merges the anonymous IDs.
 
 ```typescript
-import type { ResolvedIdentity } from '@aether/web';
+import type { ResolvedIdentity } from '@olympuslabs/aether-web';
 
 aether.init({
   apiKey: '...',
@@ -250,7 +250,7 @@ again.
 
 Consent purposes are **registry-derived** — the canonical set of 12 purposes
 lives in `packages/shared/contracts/consent-registry.json` (the web SDK consumes
-the generated `@aether/shared` consent contract, never a hand copy). Base
+the generated `@olympuslabs/aether-shared` consent contract, never a hand copy). Base
 purposes (`analytics`, `marketing`, `personalization`, `web3`, `agent`,
 `commerce`) can be granted together; explicit opt-in purposes
 (`financial_activity`, `credit`, `location`, `economic_observability`,
@@ -473,6 +473,8 @@ The SDK automatically captures on init:
 - All UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`)
 - 12 click IDs (`gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`)
 - The opaque `aether_ref` value as `referralToken`
+- A signed per-recipient email click token (`ae=v<ver>.<payload>.<sig>`) as
+  `clickToken`. Values without that shape are ignored and left in the URL.
 - Landing page URL
 
 **SPA persistence:** Traffic source data is cached in `sessionStorage` on first detection. Subsequent SPA navigations return the original source data instead of losing it when `document.referrer` clears.
@@ -482,9 +484,11 @@ events as `context.trafficSource`; it does not emit a separate
 `context.acquisitionEvidence` field. `referralToken` is forwarded unchanged in
 that raw context and is interpreted only after server-side verification — the
 typed field is its ONLY carrier: the captured landing page URL is sanitized
-(fragments and sensitive query params such as `aether_ref` and click IDs
-stripped) so the token never travels inside a URL. The schema-versioned
-`AcquisitionEvidence` helper from `@aether/shared` (schema v3, including
+(fragments and sensitive query params such as `aether_ref`, signed `ae` click
+tokens and click IDs stripped) so the token never travels inside a URL.
+`clickToken` is verified server-side, where it attributes the visit to the email
+recipient unless the visitor is already a different known person. The schema-versioned
+`AcquisitionEvidence` helper from `@olympuslabs/aether-shared` (schema v3, including
 `entryMethod`, `destinationDomain`, and first-touch fields) remains available
 to custom integrations through
 `evidenceFromSearchParams(new URLSearchParams(window.location.search))`.
@@ -530,7 +534,7 @@ interface AetherConfig {
     build?: string; environment?: string;  // context.application on every event
     namespace?: string;
   };
-  endpoint?: string;                       // Default: 'https://api.aether.io'
+  endpoint?: string;                       // Default: 'https://api.aether.network'
   wsEndpoint?: string;                     // WebSocket endpoint override
   debug?: boolean;                         // Enable console logging
   autoResumeJourney?: boolean;             // Cross-device resolve (default: true)
@@ -585,7 +589,7 @@ interface AetherConfig {
     heartbeatInterval?: number;            // Session heartbeat in ms (default: 30000)
     batchSize?: number;                    // Events per batch (default: 10)
     flushInterval?: number;                // Flush interval in ms (default: 5000)
-    maxQueueSize?: number;                 // Max queued events (default: 100)
+    maxQueueSize?: number;                 // Hard cap on queued events (default: 100); see Delivery below
     retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
     customHeaders?: Record<string, string>;
     manifestPublicKey?: string;            // base64url P-256 key; verifies signed remote-config manifests
@@ -593,6 +597,28 @@ interface AetherConfig {
   };
 }
 ```
+
+## Delivery and failure handling
+
+- **Queue bound.** `maxQueueSize` is a hard cap. When the queue is full (for
+  example while offline) the oldest events are evicted first, except `consent`
+  and `identify` events, which are kept. Every eviction is counted as
+  `queue_full` in `getDiagnostics().droppedEvents`.
+- **Retries.** `5xx`, `429` and network failures retry with backoff, then the
+  batch returns to the queue for the next flush. Each event keeps its `id`, so a
+  resend is de-duplicated by the backend.
+- **Rejected key (`401` / `403`).** The events are valid; the key is not. The
+  SDK holds them (within the queue cap), pauses sending for 1 minute, doubling up
+  to 15 minutes per consecutive rejection, and resumes on its own once a send
+  succeeds. `onError` fires once per incident, and `getDiagnostics().authPaused`
+  is `true` while paused. Unload beacons are skipped while paused; the queue is
+  already persisted for the next page load.
+- **Other `4xx`** (malformed or rejected batch) are terminal: the batch is
+  dropped and reported through `onError`, so it cannot block later events.
+- **Persistence is per install.** The queue saved to `localStorage` on unload
+  is keyed by endpoint, key and site, so initializing with a different key or
+  site (for example the React provider restarting) never picks up and sends
+  another install's backlog.
 
 ## Plugins
 
@@ -729,12 +755,12 @@ All events are silently dropped at flush time if the required consent purpose is
 - x402 lifecycle events → `commerce` consent required
 - `contract_action` → `web3` consent required
 
-## React Browser Wrapper (`@aether/web/react`)
+## React Browser Wrapper (`@olympuslabs/aether-web/react`)
 
-Install: `npm install @aether/web react`
+Install: `npm install @olympuslabs/aether-web react`
 
 ```tsx
-import { AetherProvider, useAether, useConsentState, useIdentity, useScreenOrPageTracking, useJourneyResumed } from '@aether/web/react';
+import { AetherProvider, useAether, useConsentState, useIdentity, useScreenOrPageTracking, useJourneyResumed } from '@olympuslabs/aether-web/react';
 
 function App() {
   return (
@@ -758,5 +784,15 @@ function MyComponent() {
   return <button onClick={() => aether.track('cta_click')}>Click</button>;
 }
 ```
+
+The provider loads the SDK only in the browser (nothing runs during server
+rendering) and renders its children once the SDK is ready. It restarts the SDK
+(destroy, then init) only when `apiKey`, `siteId`, `endpoint` or `environment`
+changes, so an inline `config={{ ... }}` object does not restart it on every
+render. Other options are applied once at init; in development the provider
+warns if one changes later. It is safe under React Strict Mode (one init per
+mount) and cleans up on unmount. After a restart, late responses and route
+hooks from the previous key or site are ignored, so they cannot change the new
+install's configuration, identity or page views.
 
 The provider is SSR-safe: `AetherProvider` is a no-op when `typeof window === 'undefined'`.

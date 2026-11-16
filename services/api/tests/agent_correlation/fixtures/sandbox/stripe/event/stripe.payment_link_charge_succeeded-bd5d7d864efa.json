@@ -1,0 +1,80 @@
+{
+  "account_bindings": {},
+  "certification": {
+    "companions": [
+      {
+        "actor_refs": [],
+        "correlation_tokens": [
+          "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        ],
+        "infrastructure_refs": [],
+        "object_refs": [],
+        "observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "occurred_at": "2026-11-14T23:13:42Z",
+        "provider_family": "aether_certification",
+        "schema_version": "1",
+        "signed_request": null,
+        "source_role": "agent_runtime",
+        "tenant_id": "aether_certification"
+      }
+    ],
+    "key_b64": "2GAznibPJupHxFC48otqM99T2ug107zxMZX2PVbQM1c",
+    "key_id": "cert",
+    "tenant_id": "aether_certification"
+  },
+  "expected": {
+    "links": [
+      {
+        "evidence_class": "DETERMINISTIC_BINDING",
+        "key_kind": "aether_correlation_token",
+        "observation_id": "stripe:evt_3UbqYgG4IgWgDCUX0uwPGb5m",
+        "other_observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "status": "linked"
+      }
+    ],
+    "object_types": [
+      "charge",
+      "payment_intent"
+    ],
+    "observation_count": 1,
+    "observation_digest": "b193c12803b4501ce62a375da4c68d58119b781e5e42301dd273c10d1acb6ac4",
+    "roles": [
+      "system_of_record"
+    ],
+    "tokens": 1
+  },
+  "kind": "event",
+  "origin": "sandbox_recorded",
+  "provider": "stripe",
+  "provider_api": {
+    "api_version": "2026-03-25.dahlia",
+    "host": "api.stripe.com",
+    "via": "stripe_connector_read"
+  },
+  "realm": "test",
+  "record": {
+    "api_version": "2026-03-25.dahlia",
+    "context": "acct_1TOploG4IgWgDCUX",
+    "created": 1794699634,
+    "data": {
+      "object": {
+        "description": "",
+        "id": "ch_3UbqYgG4IgWgDCUX0K5kOd5t",
+        "livemode": false,
+        "metadata": {
+          "aether_correlation": "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        },
+        "object": "charge",
+        "payment_intent": "pi_3UbqYgG4IgWgDCUX0p5vNIcB",
+        "status": "succeeded"
+      }
+    },
+    "id": "evt_3UbqYgG4IgWgDCUX0uwPGb5m",
+    "livemode": false,
+    "type": "charge.succeeded"
+  },
+  "record_sha256": "bd5d7d864efa500f3ee1c7d73311ce467dca68cb75a028250c546cc3f59f3476",
+  "recorded_at": "2026-11-15T18:53:57+00:00",
+  "recorder": "stripe.payment_link_charge_succeeded",
+  "schema_version": "1"
+}

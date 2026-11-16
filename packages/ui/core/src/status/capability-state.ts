@@ -20,8 +20,8 @@
  * apps render capability status consistently and never invent a "live" badge.
  */
 
-import type { ImplementationStatus } from '@aether/shared/connector-taxonomy';
-import type { DimensionState } from '@aether/shared/dimension-state';
+import type { ImplementationStatus } from '@olympuslabs/aether-shared/connector-taxonomy';
+import type { DimensionState } from '@olympuslabs/aether-shared/dimension-state';
 
 /** The full credential-waiting / capability state matrix, ordered by lifecycle. */
 export const capabilityStates = [

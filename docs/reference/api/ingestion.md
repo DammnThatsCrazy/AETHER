@@ -60,7 +60,7 @@ credential and its server-side binding.
       "userId": "usr_18f2",
       "properties": { "url": "https://example.com/pricing", "referrer": "" },
       "context": {
-        "library": { "name": "@aether/web", "version": "8.12.0" },
+        "library": { "name": "@olympuslabs/aether-web", "version": "8.12.0" },
         "surface": "web",
         "schemaVersion": "1.0.0",
         "sequence": { "event": 0 }

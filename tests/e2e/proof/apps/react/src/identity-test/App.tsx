@@ -2,7 +2,7 @@
  * FPS — React SDK Identity Late Binding Test
  */
 import { useEffect, useState } from 'react';
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 export default function IdentityTest() {
   const [results, setResults] = useState<string[]>([]);

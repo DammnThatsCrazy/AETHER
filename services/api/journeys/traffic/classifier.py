@@ -28,7 +28,7 @@ only URL, and (when present) a one-way path hash are emitted for persistence.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -326,8 +326,49 @@ class SourceClassifier:
         verified_referral: Optional[dict[str, Any]] = None,
         explicit_actor_type: Optional[str] = None,
         declared_entry_method: Optional[str] = None,
+        server_agent_evidence: Optional[dict[str, Any]] = None,
+        actor_evidence: tuple[str, ...] = (),
     ) -> ClassifiedSource:
-        """Classify raw source evidence without assigning a campaign."""
+        """Classify raw source evidence without assigning a campaign.
+
+        ``actor_evidence`` names the evidence behind ``explicit_actor_type``
+        (e.g. ``actor:webdriver_flag``) so the actor claim stays auditable.
+
+        ``server_agent_evidence`` is the ingestion server's own check of the
+        request (``journeys.traffic.agent_verification.server_agent_evidence``):
+        the matched user-agent signature from the real request header and
+        whether the client IP is inside that provider's published range.
+        """
+        result = self._classify_inner(
+            referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
+            click_ids, landing_page,
+            user_agent=user_agent,
+            verified_referral=verified_referral,
+            explicit_actor_type=explicit_actor_type,
+            declared_entry_method=declared_entry_method,
+            server_agent_evidence=server_agent_evidence,
+        )
+        if actor_evidence:
+            result = replace(result, evidence=tuple(result.evidence) + tuple(actor_evidence))
+        return result
+
+    def _classify_inner(
+        self,
+        referrer: str = "",
+        referrer_domain: str = "",
+        utm_source: Optional[str] = None,
+        utm_medium: Optional[str] = None,
+        utm_campaign: Optional[str] = None,
+        click_ids: Optional[dict[str, str]] = None,
+        landing_page: str = "",
+        *,
+        user_agent: str = "",
+        verified_referral: Optional[dict[str, Any]] = None,
+        explicit_actor_type: Optional[str] = None,
+        declared_entry_method: Optional[str] = None,
+        server_agent_evidence: Optional[dict[str, Any]] = None,
+    ) -> ClassifiedSource:
+        """Precedence-ordered classification; see :meth:`classify`."""
         del utm_campaign, landing_page  # campaign and destination are separate concerns
         click_ids = click_ids or {}
         entry_hint = self._entry_method_hint(declared_entry_method)
@@ -335,7 +376,10 @@ class SourceClassifier:
             referrer=referrer, referrer_domain=referrer_domain,
         )
 
-        machine = self._classify_user_agent(user_agent, domain, safe_referrer, path_hash)
+        machine = self._classify_user_agent(
+            user_agent, domain, safe_referrer, path_hash,
+            server_agent_evidence=server_agent_evidence,
+        )
         if machine is not None:
             return machine
 
@@ -381,7 +425,7 @@ class SourceClassifier:
         return self._result(
             "(direct)", "(none)", SOURCE_CLASS_DEFAULTS["direct_unknown"]["label"], 0.5,
             source_class="direct_unknown", mediation="direct_entry",
-            actor_type=explicit_actor_type or "human", journey_role="entry",
+            actor_type=explicit_actor_type or "unknown", journey_role="entry",
             verification="none",
             entry_method=entry_method, proof_level=proof_level,
             evidence=evidence,
@@ -393,39 +437,70 @@ class SourceClassifier:
         domain: str,
         safe_referrer: str,
         path_hash: Optional[str],
+        *,
+        server_agent_evidence: Optional[dict[str, Any]] = None,
     ) -> Optional[ClassifiedSource]:
+        """Declared AI agents and crawlers, graded by how the claim was verified.
+
+        A user-agent string is a declaration, never proof (anyone can send it):
+
+        - payload user-agent only            -> ``declared``, low confidence
+        - real request header (server saw it) -> ``declared``
+        - header + client IP outside the provider's published range
+                                              -> ``declared``, very low confidence
+        - header + client IP inside the provider's published range
+                                              -> ``platform_verified``
+        """
+        server = server_agent_evidence or {}
+        header_signature = str(server.get("ua_signature") or "").lower() or None
+        server_state = str(server.get("verification") or "")
         ua = (user_agent or "").lower()
+        if header_signature and header_signature not in ua:
+            # The server saw a declaration the payload did not repeat (or the
+            # payload carries a different UA): the server-observed header wins.
+            ua = header_signature
         if not ua:
             return None
+
+        def grade(signature: str, verified_conf: float) -> tuple[str, str, float]:
+            if header_signature != signature:
+                return "declared", "user_agent_claim", 0.5
+            if server_state == "provider_ip_range":
+                return "platform_verified", "provider_ip_range", verified_conf
+            if server_state == "ip_mismatch":
+                return "declared", "user_agent_ip_mismatch", 0.3
+            return "declared", "user_agent_header", 0.7
 
         for signature, mediation, provider, product in self.MACHINE_USER_AGENTS:
             if signature in ua:
                 source = provider or mediation
+                proof, verification, confidence = grade(signature, 0.98)
                 return self._result(
                     source, "machine", "AI Crawler" if mediation == "crawler_discovery" else "Machine Referral",
-                    0.98,
+                    confidence,
                     source_class="machine_referral", mediation=mediation,
                     ai_provider=provider, ai_product=product, actor_type="machine",
-                    journey_role="excluded", verification="user_agent_signature",
+                    journey_role="excluded", verification=verification,
                     domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                     attribution_eligible=False,
                     traffic_origin="external",
                     entry_method="web_referrer" if domain else "unknown",
-                    proof_level="server_observed",
-                    evidence=(f"user_agent:{signature}",),
+                    proof_level=proof,
+                    evidence=(f"user_agent:{signature}", f"agent_verification:{verification}"),
                 )
 
         for signature, provider, product in self.AGENT_USER_AGENTS:
             if signature in ua:
+                proof, verification, confidence = grade(signature, 0.95)
                 return self._result(
-                    provider, "agent_referral", "Agent Referral", 0.92,
+                    provider, "agent_referral", "Agent Referral", confidence,
                     source_class="agent_referral", mediation="agent_mediated_referral",
                     ai_provider=provider, ai_product=product, actor_type="agent",
-                    journey_role="handoff", verification="user_agent_signature",
+                    journey_role="handoff", verification=verification,
                     domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                     entry_method="web_referrer" if domain else "unknown",
-                    proof_level="server_observed",
-                    evidence=(f"user_agent:{signature}",),
+                    proof_level=proof,
+                    evidence=(f"user_agent:{signature}", f"agent_verification:{verification}"),
                 )
         return None
 
@@ -508,7 +583,7 @@ class SourceClassifier:
             source, medium, channel, 1.0,
             source_class=source_class,
             mediation=mediation,
-            actor_type=explicit_actor_type or "human",
+            actor_type=explicit_actor_type or "unknown",
             journey_role="campaign",
             verification="verified_click_id",
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
@@ -533,7 +608,7 @@ class SourceClassifier:
         ai_identity = self._ai_identity_for_source(source_token)
         if ai_identity:
             provider, product = ai_identity
-            actor = self._normalize_actor(explicit_actor_type or "human")
+            actor = self._normalize_actor(explicit_actor_type or "unknown")
             is_agent = medium in {"agent", "agent_referral"} or actor == "agent"
             mediation = (
                 "agent_mediated_referral" if is_agent else "ai_mediated_human_referral"
@@ -564,7 +639,7 @@ class SourceClassifier:
                 source, medium,
                 SOURCE_CLASS_DEFAULTS[source_class]["label"], 0.95,
                 source_class=source_class, mediation=mediation,
-                actor_type=self._normalize_actor(explicit_actor_type or "human"),
+                actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
                 journey_role="campaign", verification="declared_campaign_evidence",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                 entry_method="utm_declaration",
@@ -579,7 +654,7 @@ class SourceClassifier:
         return self._result(
             source_token, medium, self._channel_from_medium(medium), 0.95,
             source_class="external_referral", mediation="ordinary_referral",
-            actor_type=self._normalize_actor(explicit_actor_type or "human"),
+            actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
             journey_role="campaign", verification="declared_campaign_evidence",
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
             entry_method="utm_declaration",
@@ -653,7 +728,7 @@ class SourceClassifier:
                 provider, "ai_referral", "AI Referral", 0.96,
                 source_class="ai_referral", mediation="ai_mediated_human_referral",
                 ai_provider=provider, ai_product=product,
-                actor_type=self._normalize_actor(explicit_actor_type or "human"),
+                actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                 entry_method=entry_method, proof_level=proof_level,
@@ -664,7 +739,7 @@ class SourceClassifier:
             return self._result(
                 self.EMAIL_DOMAINS[domain], "email", "Email", 0.9,
                 source_class="email", mediation="ordinary_referral",
-                actor_type=self._normalize_actor(explicit_actor_type or "human"),
+                actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                 entry_method=entry_method, proof_level=proof_level,
@@ -676,7 +751,7 @@ class SourceClassifier:
             return self._result(
                 search_source, "organic", "Organic Search", 0.9,
                 source_class="organic_search", mediation="ordinary_referral",
-                actor_type=self._normalize_actor(explicit_actor_type or "human"),
+                actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                 entry_method=entry_method, proof_level=proof_level,
@@ -688,7 +763,7 @@ class SourceClassifier:
             return self._result(
                 social_source, "social", "Organic Social", 0.9,
                 source_class="organic_social", mediation="ordinary_referral",
-                actor_type=self._normalize_actor(explicit_actor_type or "human"),
+                actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                 entry_method=entry_method, proof_level=proof_level,
@@ -698,7 +773,7 @@ class SourceClassifier:
         return self._result(
             domain, "referral", "Referral", 0.65,
             source_class="external_referral", mediation="unknown_external_referral",
-            actor_type=self._normalize_actor(explicit_actor_type or "human"),
+            actor_type=self._normalize_actor(explicit_actor_type or "unknown"),
             journey_role="discovery", verification="inferred",
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
             entry_method=entry_method, proof_level=proof_level,

@@ -386,10 +386,54 @@ async def resolve_provider_recipient_identity(
     }
 
 
+async def resolve_unique_tenant_entity_for_alias(
+    tenant_id: str,
+    alias_type: Any,
+    alias_value_hash: str,
+    *,
+    alias_repository: Any = None,
+    entity_repository: Any = None,
+) -> Optional[str]:
+    """Return the one tenant-owned canonical entity holding an alias, else None.
+
+    An alias held by several subjects is ambiguous evidence, never permission
+    to pick one; an entity that is missing or owned by another tenant is
+    rejected. Never raises — identity storage is optional in local mode.
+    """
+    if not tenant_id or not alias_value_hash:
+        return None
+    try:
+        if alias_repository is None:
+            from identity.identity.repository import IdentityResolutionRepository
+
+            alias_repository = IdentityResolutionRepository()
+        entity_ids = await alias_repository.find_subjects_by_alias(
+            tenant_id, alias_type, alias_value_hash
+        )
+        if len(entity_ids) != 1 or not entity_ids[0]:
+            return None
+        canonical_id = str(entity_ids[0])
+        if entity_repository is None:
+            from repositories.repos import EntityRepository
+
+            entity_repository = EntityRepository()
+        entity = await entity_repository.find_by_id(canonical_id)
+    except Exception:  # pragma: no cover - identity backend optional in local
+        return None
+    if (
+        not isinstance(entity, dict)
+        or entity.get("tenant_id") != tenant_id
+        or entity.get("entity_id") != canonical_id
+    ):
+        return None
+    return canonical_id
+
+
 __all__ = [
     "ProviderIdentity",
     "ProviderIdentityRepository",
     "ProviderIdentityBridge",
     "resolve_provider_recipient_identity",
+    "resolve_unique_tenant_entity_for_alias",
     "record_identity_from_event",
 ]

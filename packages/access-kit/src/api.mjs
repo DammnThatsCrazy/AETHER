@@ -7,7 +7,7 @@ import {
   isFrameForRequest,
 } from './experience360.mjs';
 
-const DEFAULT_API_URL = 'https://api.aether.io';
+const DEFAULT_API_URL = 'https://api.aether.network';
 const REQUEST_TIMEOUT_MS = 15_000;
 const CAPABILITY_ID_PATTERN = /^cap_[a-f0-9]{24}$/;
 const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;

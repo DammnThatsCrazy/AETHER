@@ -3,7 +3,7 @@
 set -euo pipefail
 docker run --detach --name access-kit-container-check \
   --publish 127.0.0.1:18080:8080 \
-  --env AETHER_API_URL=https://api.aether.io \
+  --env AETHER_API_URL=https://api.aether.network \
   --env AETHER_MCP_ALLOWED_HOSTS=localhost \
   aether-access-kit:ci
 cleanup() {

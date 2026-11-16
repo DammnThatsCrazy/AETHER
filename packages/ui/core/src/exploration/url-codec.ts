@@ -24,7 +24,7 @@ import type {
   PresentationSpec,
   SelectionSet,
   TemporalSelection,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import type {
   FilterExpression,
   FilterGroup,
@@ -32,14 +32,14 @@ import type {
   RelationshipLayer,
   TemporalAuthority,
   TemporalRange,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import {
   explorationTemporalFields,
   explorationTemporalModes,
   explorationViews,
-} from '@aether/shared/exploration-contract';
-import { EDGE_LAYER_MAP, RELATIONSHIP_LAYERS } from '@aether/shared/graph-contract';
-import { temporalAuthorities } from '@aether/shared/temporal';
+} from '@olympuslabs/aether-shared/exploration-contract';
+import { EDGE_LAYER_MAP, RELATIONSHIP_LAYERS } from '@olympuslabs/aether-shared/graph-contract';
+import { temporalAuthorities } from '@olympuslabs/aether-shared/temporal';
 import { isValidInstant, isValidTimeZone } from '../time';
 
 import {

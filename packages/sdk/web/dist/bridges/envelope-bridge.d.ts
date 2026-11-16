@@ -1,4 +1,4 @@
-import { type AetherEvent, type BridgeResult } from '@aether/shared/commerce-bridge';
+import { type AetherEvent, type BridgeResult } from '@olympuslabs/aether-shared/commerce-bridge';
 /**
  * Bridge a canonical envelope event into the commerce vocabulary.
  *

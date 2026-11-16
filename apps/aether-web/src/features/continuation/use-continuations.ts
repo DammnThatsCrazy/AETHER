@@ -13,7 +13,7 @@ import { api } from '@aether-app/lib/api/endpoints';
 import type {
   ContinuationContext,
   ContinuationSelection,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import type {
   ContinuationCreateInput,
   ContinuationHandoffInput,

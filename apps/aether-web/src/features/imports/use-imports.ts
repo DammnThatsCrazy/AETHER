@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useQuery, useMutation, queryCache } from '@aether/ui';
-import type { FieldMapping } from '@aether/shared';
+import type { FieldMapping } from '@olympuslabs/aether-shared';
 import {
   fetchImports,
   createImport,

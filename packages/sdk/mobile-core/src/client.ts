@@ -3,7 +3,7 @@
  *
  * Wraps the flag-gated mobile/continuity/sync backend surfaces (all snake_case
  * wire contracts) behind typed methods. Every response type is the corresponding
- * `@aether/shared` contract twin, so the client cannot drift from the backend
+ * `@olympuslabs/aether-shared` contract twin, so the client cannot drift from the backend
  * without the parity tests catching it.
  */
 import type {
@@ -13,7 +13,7 @@ import type {
   MobileInstallation,
   PushProvider,
   PushSubscription,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 import type { MobileConfig } from './config';
 import { normalizeBaseUrl } from './config';

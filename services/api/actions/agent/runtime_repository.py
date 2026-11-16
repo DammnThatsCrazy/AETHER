@@ -14,7 +14,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from shared.common.common import BadRequestError, ConflictError
 from shared.logger.logger import metrics
@@ -117,6 +117,26 @@ def objective_request_fingerprint(
     })
 
 
+OBJECTIVE_CLAIM_STALE_SECONDS = 30
+
+
+def objective_claim_key(tenant_id: str, idempotency_key: str) -> str:
+    """Durable key for one tenant's use of one objective idempotency key."""
+    digest = hashlib.sha256(f"{tenant_id}\x1f{idempotency_key}".encode("utf-8")).hexdigest()
+    return f"objclaim:{digest}"
+
+
+def _claim_is_stale(claim: dict[str, Any]) -> bool:
+    try:
+        claimed_at = datetime.fromisoformat(str(claim.get("claimed_at", "")))
+    except ValueError:
+        return True
+    if claimed_at.tzinfo is None:
+        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - claimed_at).total_seconds()
+    return age > OBJECTIVE_CLAIM_STALE_SECONDS
+
+
 def target_key_for(target: dict[str, Any] | None) -> str:
     """Stable identity of the canonical object a mutation writes.
 
@@ -207,6 +227,10 @@ class AgentRuntimeRepository:
         # inverse cannot be verified against the graph.
         self.canonical_versions: DurableStore = get_store("agent_canonical_versions")
         self.repair_tasks: DurableStore = get_store("agent_rollback_repairs")
+        # One record per (tenant, idempotency key), claimed with a conditional
+        # write before the objective exists, so simultaneous first requests
+        # cannot create two objectives for the same key.
+        self.objective_claims: DurableStore = get_store("agent_objective_idempotency")
 
     async def append_event(
         self,
@@ -250,11 +274,12 @@ class AgentRuntimeRepository:
         idempotency_key: str,
         request_id: str,
     ) -> dict[str, Any]:
+        fingerprint = objective_request_fingerprint(
+            tenant_id, goal, objective_type, severity, priority, payload,
+        )
+        # Objectives created before claims existed are found by scan.
         existing = await self.objectives.find(tenant_id=tenant_id, idempotency_key=idempotency_key)
         if existing:
-            fingerprint = objective_request_fingerprint(
-                tenant_id, goal, objective_type, severity, priority, payload,
-            )
             for row in existing:
                 recorded_fingerprint = objective_request_fingerprint(
                     tenant_id,
@@ -289,6 +314,68 @@ class AgentRuntimeRepository:
             "paused_at": None,
             "cancelled_at": None,
         }
+        claim_key = objective_claim_key(tenant_id, idempotency_key)
+        candidate = {
+            "tenant_id": tenant_id,
+            "idempotency_key": idempotency_key,
+            "fingerprint": fingerprint,
+            "objective": objective,
+            "claimed_at": now,
+        }
+        claim = await self.objective_claims.atomic_update(
+            claim_key, lambda current: current if current is not None else candidate,
+        )
+        claimed = claim.get("objective") or {}
+        if claimed.get("objective_id") != objective["objective_id"]:
+            # Another request owns this key.
+            if claim.get("fingerprint") != fingerprint:
+                raise ConflictError(
+                    "Idempotency key was already used for different objective content",
+                    details={"kind": "idempotency_conflict", "resource": "objective"},
+                )
+            stored = await self.objectives.get(str(claimed.get("objective_id", "")))
+            if stored is not None:
+                return stored
+            if not _claim_is_stale(claim):
+                # The owner is still writing; its objective is the answer.
+                return claimed
+            # The owner stopped between claiming and writing. One caller at a
+            # time takes over its write under an expiring lease; the others
+            # return the objective. A lease whose holder also stopped expires
+            # after the same stale window, so the key always recovers.
+            repair_token = new_id("repair")
+            repair_at = utc_now()
+
+            def _take_lease(current: Optional[dict[str, Any]]) -> dict[str, Any]:
+                record = current or claim
+                held = record.get("repair_token")
+                if held and not _claim_is_stale({"claimed_at": record.get("repair_started_at")}):
+                    return record
+                return {**record, "repair_token": repair_token, "repair_started_at": repair_at}
+
+            taken = await self.objective_claims.atomic_update(claim_key, _take_lease)
+            if taken.get("repair_token") != repair_token:
+                return claimed
+            try:
+                return await self._write_new_objective(claimed, opened_by, request_id)
+            except Exception:
+                # Release the lease so the next request can retry at once.
+                await self.objective_claims.atomic_update(
+                    claim_key,
+                    lambda current: (
+                        {k: v for k, v in current.items() if k not in {"repair_token", "repair_started_at"}}
+                        if current and current.get("repair_token") == repair_token
+                        else current or claim
+                    ),
+                )
+                raise
+        return await self._write_new_objective(objective, opened_by, request_id)
+
+    async def _write_new_objective(
+        self, objective: dict[str, Any], opened_by: str, request_id: str,
+    ) -> dict[str, Any]:
+        tenant_id = objective["tenant_id"]
+        now = objective["created_at"]
         await self.objectives.set(objective["objective_id"], objective)
         plan = {
             "plan_id": new_id("plan"),

@@ -376,9 +376,9 @@ final class AetherSDKTests: XCTestCase {
     func testTierATransportEndpoint() {
         // Verify the SDK uses /v1/batch endpoint
         // This is a static contract test - the string is baked into the implementation
-        let endpoint = "https://api.aether.io"
-        XCTAssertTrue(endpoint.contains("aether.io"))
-        XCTAssertEqual(endpoint + "/v1/batch", "https://api.aether.io/v1/batch")
+        let endpoint = AetherConfig(apiKey: "pk_test").endpoint
+        XCTAssertEqual(endpoint, "https://api.aether.network")
+        XCTAssertEqual(endpoint + "/v1/batch", "https://api.aether.network/v1/batch")
     }
 
     func testTierACanonicalPurposes() {

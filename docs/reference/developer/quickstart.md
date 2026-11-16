@@ -13,13 +13,13 @@ since_version: 0.1.0
 ## 1. Install the SDK
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ## 2. Initialize
 
 ```typescript
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 const aether = AetherSDK.init({
   tenantId: 'your-tenant-id',

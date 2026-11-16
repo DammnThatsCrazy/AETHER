@@ -359,11 +359,13 @@ cost_guardrails:
   status_api_url: "https://api.olympuslabsml.com/health"
 sdk_release:
   package_families:
-    - "@aether/shared"
-    - "@aether/web"
-    - "@aether/react-native"
+    - "@olympuslabs/aether-shared"
+    - "@olympuslabs/aether-web"
+    - "@olympuslabs/aether-server"
+    - "@olympuslabs/aether-react-native"
     - AetherSDK (CocoaPods)
-    - com.aether:sdk-android
+    - AetherSDK (Swift Package Manager, DammnThatsCrazy/aether-ios mirror)
+    - com.olympuslabsml:aether-android (Maven Central)
   publish_workflow: .github/workflows/publish-sdk.yml
   publish_mode: manual_workflow_dispatch_with_dry_run
   mobile_apps_included: false

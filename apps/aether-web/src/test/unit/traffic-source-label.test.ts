@@ -1,5 +1,5 @@
 // Canonical traffic-source presentation: labels come from the generated
-// registry (@aether/shared/traffic-source), the honest fallback is
+// registry (@olympuslabs/aether-shared/traffic-source), the honest fallback is
 // "Direct / Unknown", and evidence tooltips only surface fields that exist.
 import { describe, it, expect } from 'vitest';
 import {

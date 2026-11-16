@@ -56,8 +56,13 @@ def test_other_posts_still_require_write(monkeypatch):
 
 
 def test_read_semantic_set_is_exact_and_mcp_allowlisted():
-    assert mw._READ_SEMANTIC_POST_ROUTES == {("POST", "/v1/experience360/frames")}
+    assert mw._READ_SEMANTIC_POST_ROUTES == {
+        ("POST", "/v1/experience360/frames"),
+        # Identifier lookup with the identifier in the body, not the URL.
+        ("POST", "/v1/profile/resolve"),
+    }
     assert "/v1/experience360/frames" in mw._MCP_OAUTH_READ_ROUTES
+    assert "/v1/profile/resolve" in mw._MCP_OAUTH_READ_ROUTES
     # write-capable POSTs must never join the delegated-MCP read allowlist
     assert "/v1/continuations" not in mw._MCP_OAUTH_READ_ROUTES
 

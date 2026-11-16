@@ -14,7 +14,7 @@ describe('FPS-092: Parity Identify', () => {
     expect(envelope.platform_id).toBe(platform);
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('identify');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
     expect(typeof envelope.timestamp).toBe('string');
   }
@@ -29,7 +29,7 @@ describe('FPS-092: Parity Identify', () => {
 
   it('should validate iOS identify event shares same contract', () => {
     const envelope = identifyEventFixture as unknown as EventEnvelope;
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.platform_id).toBe('web');
   });
 

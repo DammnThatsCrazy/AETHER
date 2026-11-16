@@ -16,14 +16,13 @@
 //   await aether.flush();
 
 import os from 'node:os';
-import path from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
-import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
+import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@olympuslabs/aether-shared';
 // Registry-generated purpose sets — hand-written copies here drifted to 9 of
 // the registry's 12 purposes before being replaced with the canonical source.
-import { CONSENT_PURPOSES as ALL_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } from '@aether/shared/consent';
-import type { EventType } from '@aether/shared';
+import { CONSENT_PURPOSES as ALL_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } from '@olympuslabs/aether-shared/consent';
+import type { EventType } from '@olympuslabs/aether-shared';
 import { EventQueue } from './queue';
 import { DurableEventQueue } from './durable-queue';
 import type { EventQueueLike, SpoolFullInfo } from './durable-queue';
@@ -55,7 +54,7 @@ export { makeServerClient } from './client';
 // Disk-backed durable queue (Reliability Phase 2 program §2). The standalone
 // class is milestone M4; M5 wires it into AetherServerSDK below as an opt-in
 // queue with startup replay and a documented disk-space bound. Re-exported so
-// package consumers can also use it directly — @aether/server's package.json
+// package consumers can also use it directly — @olympuslabs/aether-server's package.json
 // "exports" map has no deep-import subpath, so without these lines the class
 // and its option types would be unreachable outside this package.
 export { DurableEventQueue } from './durable-queue';
@@ -78,7 +77,12 @@ export {
 export type { AgentEventEnvelope } from './agentic';
 
 
-const DEFAULT_ENDPOINT = 'https://ingest.aether.so/v1/batch';
+/** True inside an AWS Lambda execution environment. */
+function isAwsLambda(): boolean {
+  return typeof process.env.AWS_LAMBDA_FUNCTION_NAME === 'string';
+}
+
+const DEFAULT_ENDPOINT = 'https://api.aether.network/v1/batch';
 
 export class AetherServerSDK {
   // application stays optional-valued: Required<> would strip its undefined,
@@ -131,19 +135,33 @@ export class AetherServerSDK {
       flushAt: config.flushAt ?? 100,
       flushInterval: config.flushInterval ?? 5000,
       maxQueueSize: config.maxQueueSize ?? 1000,
-      userAgent: config.userAgent ?? '@aether/server',
+      userAgent: config.userAgent ?? '@olympuslabs/aether-server',
       onBatchResult: config.onBatchResult ?? (() => { /* no-op */ }),
     };
     this.consent = this.buildConsentState(config.consent ?? {});
 
     // --- Durable queue selection (Reliability Phase 2 §2, M5) -------------
-    // Durability is opt-in: on when `durable: true` OR a `spoolPath` is given
-    // (a spoolPath implies durable). Off by default -> in-memory EventQueue,
-    // identical to pre-M5 behavior, so existing consumers see no change.
+    // Durability is opt-in and needs an explicit, host-chosen spool location:
+    // a `spoolPath` turns it on. `durable: true` without one is a config
+    // error, not a silent fallback to the OS temp dir, which containers and
+    // serverless platforms discard on restart (that would look durable and
+    // lose events). Off by default -> in-memory EventQueue.
     this.onSpoolDrop = config.onSpoolDrop;
-    const durableEnabled = config.durable === true || typeof config.spoolPath === 'string';
+    if (config.durable === true && typeof config.spoolPath !== 'string') {
+      throw new Error(
+        'Aether Server SDK: `durable: true` requires `spoolPath`, a file on storage that survives ' +
+          'restarts (for example a mounted volume). The SDK no longer falls back to the OS temp directory.',
+      );
+    }
+    const durableEnabled = typeof config.spoolPath === 'string';
+    if (durableEnabled && isAwsLambda()) {
+      console.warn(
+        '[aether] Durable mode on AWS Lambda: the spool lives on this instance\'s local disk and is lost ' +
+          'when the instance is recycled. Call `await aether.flush()` before each handler returns.',
+      );
+    }
     if (durableEnabled) {
-      const spoolPath = config.spoolPath ?? this.defaultSpoolPath();
+      const spoolPath = config.spoolPath as string;
       const durable = new DurableEventQueue({
         spoolPath,
         maxSize: this.config.maxQueueSize,
@@ -238,7 +256,7 @@ export class AetherServerSDK {
         // every event to its origin plane. Stamped for all server-SDK events.
         surface: 'server',
         // Envelope schema version this emitter conforms to (single source:
-        // CONTRACT_SCHEMA_VERSION in @aether/shared).
+        // CONTRACT_SCHEMA_VERSION in @olympuslabs/aether-shared).
         schemaVersion: CONTRACT_SCHEMA_VERSION,
         // Host OS identity in the canonical envelope shape.
         operatingSystem: { name: os.type(), version: os.release() },
@@ -412,18 +430,6 @@ export class AetherServerSDK {
     }
   }
 
-  /**
-   * Default spool file used when `durable: true` is set without a `spoolPath`.
-   * It must be STABLE across restarts (durability replays the same file) and
-   * must not collide across write keys, but the write key is a secret — so
-   * only a short, non-reversible digest of it appears in the filename. The OS
-   * temp dir is a pragmatic default; hosts wanting stronger durability set an
-   * explicit `spoolPath` on a persistent volume.
-   */
-  private defaultSpoolPath(): string {
-    const digest = createHash('sha256').update(this.config.writeKey).digest('hex').slice(0, 16);
-    return path.join(os.tmpdir(), 'aether-server-spool', `${digest}.jsonl`);
-  }
 
   private buildConsentState(partial: Partial<ServerConsentState>): ServerConsentState {
     // Deny-by-default across the full registry vocabulary, then apply the
@@ -447,4 +453,4 @@ export class AetherServerSDK {
 // because agent-telemetry extends AetherServerSDK from this module.
 export { AgentTelemetryClient, attestAgentEvent, validateAgentDeploymentContext } from './agent-telemetry';
 export type { AgentTelemetryConfig } from './agent-telemetry';
-export type { AgentDeploymentContext } from '@aether/shared';
+export type { AgentDeploymentContext } from '@olympuslabs/aether-shared';

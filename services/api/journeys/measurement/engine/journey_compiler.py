@@ -593,8 +593,8 @@ def _classify_pair(
     curr_family = curr.get("activity_family", "")
 
     # Actor transitions
-    prev_actor = prev.get("actor_type", "human")
-    curr_actor = curr.get("actor_type", "human")
+    prev_actor = prev.get("actor_type") or "unknown"
+    curr_actor = curr.get("actor_type") or "unknown"
     if prev_actor == "human" and curr_actor == "agent":
         return TransitionType.human_to_agent.value
     if prev_actor == "agent" and curr_actor == "human":

@@ -37,8 +37,8 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
   granted purposes to the backend as an ingestion hint; it does not drop events
   locally, so `BatchHealth.dropped_by_consent` is always `0`.
 - **server / offline queue** — by default a bounded in-process queue with
-  exponential backoff retry; `durable: true` or `spoolPath` selects the
-  disk-backed `DurableEventQueue`, which persists accepted events and replays
+  exponential backoff retry; setting `spoolPath` selects the disk-backed
+  `DurableEventQueue` (`durable: true` alone throws), which persists accepted events and replays
   them at startup.
 - **react-native** — the JS bridge exposes `observe`, `queueDepth`, and
   `onBatchResult`, but consent gating, batching, retry, and offline persistence are enforced in the

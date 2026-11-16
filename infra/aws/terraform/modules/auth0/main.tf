@@ -65,8 +65,7 @@ resource "auth0_resource_server" "api" {
 }
 
 # A delegated MCP token has its own exact resource audience and a single read
-# scope. No DCR or default third-party client grant is enabled here: opening
-# registration is a separate reviewed Auth0 tenant decision.
+# scope. Client registration (DCR / CIMD) is a separate opt-in below.
 resource "auth0_resource_server" "access_mcp" {
   count       = var.mcp_resource_uri == "" ? 0 : 1
   name        = "AETHER Access MCP (${var.environment})"
@@ -79,6 +78,52 @@ resource "auth0_resource_server" "access_mcp" {
   skip_consent_for_verifiable_first_party_clients = false
   enforce_policies                                = true
   token_dialect                                   = "access_token_authz"
+
+  # Only user-delegated tokens: no machine-to-machine (client credentials)
+  # access to the MCP audience.
+  subject_type_authorization {
+    client {
+      policy = "deny_all"
+    }
+  }
+}
+
+# --------------------------------------------------------------------------
+# MCP client registration (opt-in: enable_access_mcp_dcr)
+#
+# Lets any MCP host register itself (Dynamic Client Registration) or identify
+# itself with a Client ID Metadata Document, then sign a user in. Abuse
+# controls, all enforced by Auth0:
+#   * Registered clients are third-party. Their only API access is the default
+#     grant below: user-delegated, MCP audience, exactly `access_kit:read`.
+#     In Auth0's strict third-party mode a third-party client has no access to
+#     any other API (including the Aether REST API) without its own grant.
+#   * MCP tokens live one hour, carry no refresh token, and the API accepts
+#     them only through the MCP service's signed per-request assertion.
+#   * Users always see a consent screen (no first-party consent skip).
+#   * Auth0 rate-limits the registration endpoint; stale registrations are
+#     pruned by scripts/prune_auth0_mcp_clients.py.
+# The tenant flags stay managed while remote MCP OAuth is on, so turning this
+# variable off writes `false` back to the tenant instead of orphaning it.
+# --------------------------------------------------------------------------
+
+resource "auth0_tenant" "access_mcp_client_registration" {
+  count = var.mcp_resource_uri == "" ? 0 : 1
+
+  client_id_metadata_document_supported = var.enable_mcp_client_registration
+
+  flags {
+    enable_dynamic_client_registration = var.enable_mcp_client_registration
+  }
+}
+
+resource "auth0_client_grant" "access_mcp_third_party_read" {
+  count = var.enable_mcp_client_registration ? 1 : 0
+
+  audience     = auth0_resource_server.access_mcp[0].identifier
+  default_for  = "third_party_clients"
+  subject_type = "user"
+  scopes       = [auth0_resource_server_scope.access_mcp_read[0].scope]
 }
 
 resource "auth0_resource_server_scope" "access_mcp_read" {
@@ -95,6 +140,10 @@ resource "auth0_resource_server_scope" "access_mcp_read" {
 resource "auth0_connection" "database" {
   name     = "aether-${var.environment}-db"
   strategy = "auth0"
+
+  # Third-party (self-registered MCP) clients can only sign users in through a
+  # domain-level connection. Promoted only while MCP client registration is on.
+  is_domain_connection = var.enable_mcp_client_registration
 
   options {
     password_policy        = "good"

@@ -366,7 +366,7 @@ export function App(): React.ReactNode {
   const [dismissResult, setDismissResult] = useState(false);
 
   // Sync local state with the panel's mutable state, and initialize the
-  // @aether/web SDK on mount so connector actions emit canonical events.
+  // @olympuslabs/aether-web SDK on mount so connector actions emit canonical events.
   useEffect(() => {
     const unsub = panel.subscribe(() => {
       setState(panel.getState());

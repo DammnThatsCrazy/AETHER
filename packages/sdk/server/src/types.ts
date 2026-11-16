@@ -1,8 +1,8 @@
 // Server SDK types — the consent vocabulary is the canonical, registry-generated
-// contract re-exported from @aether/shared, so this SDK cannot drift from the
+// contract re-exported from @olympuslabs/aether-shared, so this SDK cannot drift from the
 // registry again (a hand-written copy here shipped 9 of 12 purposes).
 
-export type { ConsentPurpose } from '@aether/shared/consent';
+export type { ConsentPurpose } from '@olympuslabs/aether-shared/consent';
 
 export interface ServerConsentState {
   analytics: boolean;
@@ -123,26 +123,24 @@ export interface AetherServerConfig {
   // them. Delivered events are pruned from the spool; the spool's on-disk
   // footprint is hard-bounded by `maxSpoolBytes`.
   //
-  // Selection: durability is on when EITHER `durable: true` OR `spoolPath`
-  // is set (providing a spoolPath implies durable). It is OFF by default —
-  // the in-memory queue is used — so existing consumers are unaffected.
-  //
-  // Intended default flip: once the durable path has soaked in production,
-  // the default becomes "durable whenever a writable spool location is
-  // available"; today it stays strictly opt-in to avoid surprising hosts
-  // with unexpected disk writes or read-only-filesystem warnings. See the
-  // note on AetherServerSDK's constructor in index.ts.
+  // Selection: durability is on when `spoolPath` is set. It is OFF by
+  // default (the in-memory queue is used), and `durable: true` without a
+  // `spoolPath` throws: only the host knows which storage survives its
+  // restarts, so the SDK never guesses (an OS temp-dir spool would look
+  // durable on containers and serverless while losing events).
 
   /**
-   * Enable the disk-backed durable queue. Defaults to false. When true
-   * without a `spoolPath`, a stable per-writeKey file under the OS temp dir
-   * is used (see AetherServerSDK's default spool path).
+   * Enable the disk-backed durable queue. Defaults to false. Requires
+   * `spoolPath`: constructing the SDK with `durable: true` and no
+   * `spoolPath` throws (there is no temp-directory fallback).
    */
   durable?: boolean;
   /**
-   * Filesystem path for the durable spool file. Setting this implies
-   * `durable: true`. Choose a location the process may write and that
-   * survives restarts (a persistent volume for strongest durability).
+   * Filesystem path for the durable spool file. Setting this enables
+   * durability. It must be on storage that survives restarts (a mounted
+   * volume on ECS/Fargate or Kubernetes, the app's data directory on a VM).
+   * On AWS Lambda local disk does not survive instance recycling, so the SDK
+   * warns; call `await flush()` before each handler returns instead.
    */
   spoolPath?: string;
   /**

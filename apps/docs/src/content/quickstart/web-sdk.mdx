@@ -15,7 +15,7 @@ import { Available, Preview } from '../../components/Availability';
 
 # Getting Started with the Web SDK
 
-`@aether/web` is Aether's browser SDK. It captures page views, custom events,
+`@olympuslabs/aether-web` is Aether's browser SDK. It captures page views, custom events,
 e-commerce signals, wallet activity, and performance metrics from a single
 `init()` call, and ships them through a consent-aware, batched event queue.
 
@@ -25,7 +25,7 @@ minutes.
 ## Install
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 A CDN build is also available if you'd rather not add a build-time
@@ -41,7 +41,7 @@ Create a write-scoped API key in **Settings → API Keys**, then initialize the
 SDK as early as possible on the page — typically in your app's entry point:
 
 ```typescript
-import aether from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 
 aether.init({
   apiKey: 'YOUR_WRITE_KEY',

@@ -20,8 +20,8 @@ import {
 import type {
   ExplorationAnchor,
   ExplorationContextV1,
-} from '@aether/shared/exploration-contract';
-import type { ProjectionId } from '@aether/shared/intelligence-projection';
+} from '@olympuslabs/aether-shared/exploration-contract';
+import type { ProjectionId } from '@olympuslabs/aether-shared/intelligence-projection';
 import {
   type ProjectionSurfaceEnvelope,
   type ProjectionSurfaceSummary,

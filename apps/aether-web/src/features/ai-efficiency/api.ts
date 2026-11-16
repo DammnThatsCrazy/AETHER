@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { restClient, RestClientError } from '@aether-app/lib/api/rest/client';
-import { aiInvocationStatuses, costBases, aiEfficiencyDetectors } from '@aether/shared';
+import { aiInvocationStatuses, costBases, aiEfficiencyDetectors } from '@olympuslabs/aether-shared';
 
 const wrap = <T extends z.ZodType>(dataSchema: T) =>
   z.object({ data: dataSchema, status: z.string(), timestamp: z.string() });
@@ -16,7 +16,7 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>):
 
 const BASE = '/v1/economic/ai';
 
-// ── Wire schemas (snake_case per backend; mirrors @aether/shared ai-execution) ──
+// ── Wire schemas (snake_case per backend; mirrors @olympuslabs/aether-shared ai-execution) ──
 // Tolerant on purpose: the backend is built in parallel. Unknown costs arrive
 // as null and stay null — they are displayed as "unknown", never rendered as 0.
 

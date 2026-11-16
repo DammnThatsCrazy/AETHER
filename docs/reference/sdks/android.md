@@ -15,7 +15,7 @@ The Aether Android SDK is a thin observation client that captures observations f
 ## Installation
 
 ```gradle
-implementation 'com.aether:sdk-android:0.1.0-alpha.0'
+implementation 'com.olympuslabsml:aether-android:0.1.0-alpha.0'
 ```
 
 ## Capabilities

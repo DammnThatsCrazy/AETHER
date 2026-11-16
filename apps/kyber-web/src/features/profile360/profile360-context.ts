@@ -2,8 +2,8 @@ import type {
   GraphContext,
   GraphObjectRef,
   GraphScope,
-} from "@aether/shared/graph-context-contract";
-import type { EvidenceRef } from "@aether/shared/operational-intelligence";
+} from "@olympuslabs/aether-shared/graph-context-contract";
+import type { EvidenceRef } from "@olympuslabs/aether-shared/operational-intelligence";
 import type { TimeWindow } from "@aether/ui";
 import type { GraphNode, Profile360EntityType } from "@kyber/types";
 

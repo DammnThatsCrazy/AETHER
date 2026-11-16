@@ -1,12 +1,12 @@
 /** @description FPS-053 — React SDK Provider
- * Verifies the @aether/react-native bridge exports a usable provider shape,
+ * Verifies the @olympuslabs/aether-react-native bridge exports a usable provider shape,
  * that the singleton default is defined, and that the provider config contract
  * matches what the web SDK expects (apiKey required, endpoint optional).
  */
 import { describe, it, expect } from 'vitest';
 import { EventEnvelope } from '@aether/proof-contracts';
 import { trackEventFixture, identifyEventFixture } from '@aether/proof-fixtures';
-import AetherRN, { AetherContext } from '@aether/react-native';
+import AetherRN, { AetherContext } from '@olympuslabs/aether-react-native';
 
 describe('FPS-053: React Provider', () => {
   it('should export a default AetherRN singleton', () => {
@@ -49,7 +49,7 @@ describe('FPS-053: React Provider', () => {
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('page');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('0.1.0-alpha.0');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
     expect(envelope.identity.user_id).toBe('user_001');
@@ -68,7 +68,7 @@ describe('FPS-053: React Provider', () => {
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('identify');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
     expect(envelope.identity.user_id).toBe('user_002');
     expect(envelope.timestamp).toBe('2024-09-11T12:05:00.000Z');
@@ -93,7 +93,7 @@ describe('FPS-053: React Provider', () => {
   });
 
   it('should validate provider config endpoint is a valid URL string', () => {
-    const endpoint = 'https://api.aether.io/v1';
+    const endpoint = 'https://api.aether.network/v1';
     expect(typeof endpoint).toBe('string');
     expect(endpoint.startsWith('https://')).toBe(true);
     expect(endpoint.length).toBeGreaterThan(10);

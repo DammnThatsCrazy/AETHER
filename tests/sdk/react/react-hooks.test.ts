@@ -1,5 +1,5 @@
 /** @description FPS-054 — React SDK Hooks
- * Verifies the @aether/react-native bridge exports hook functions that
+ * Verifies the @olympuslabs/aether-react-native bridge exports hook functions that
  * return SDK state, identity data, and consent state. Since the native
  * module is not available in the JS test environment, we validate the
  * hook contract against the bridge exports and fixture data.
@@ -13,7 +13,7 @@ import {
   useConsentState,
   useAetherContext,
   AetherContext,
-} from '@aether/react-native';
+} from '@olympuslabs/aether-react-native';
 
 describe('FPS-054: React Hooks', () => {
   it('should export useAether hook', () => {
@@ -91,7 +91,7 @@ describe('FPS-054: React Hooks', () => {
     };
     expect(config.apiKey).toBeTruthy();
     expect(config.debug).toBe(true);
-    expect(config.sdkName).toBe('@aether/web');
+    expect(config.sdkName).toBe('@olympuslabs/aether-web');
     expect(config.sdkVersion).toBe('0.1.0-alpha.0');
   });
 

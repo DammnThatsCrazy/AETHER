@@ -13,6 +13,7 @@ import {
 import { registerEntityTools } from '../src/entity-tools.mjs';
 import { registerAccountContextTool } from '../src/account-context-tools.mjs';
 import { registerAccessOperationTools } from '../src/access-operation-tools.mjs';
+import { registerProfile360Tools } from '../src/profile360-tools.mjs';
 import { registerContinuationTools } from '../src/continuation-tools.mjs';
 import { registerAgentBehaviorTools } from '../src/agent-behavior-tools.mjs';
 import { invokeAccessOperation } from '../src/access-operations.mjs';
@@ -111,6 +112,8 @@ export function createAccessMcpServer(
     get: () => invokeAccessOperation('account.context', {}, accessEnv),
   });
   registerAccessOperationTools(server, accessEnv);
+  // Profile360 reads need only `read`, so delegated OAuth callers get them too.
+  registerProfile360Tools(server, accessEnv);
   // The delegated MCP OAuth token carries a read-only scope. Do not even
   // advertise continuation state tools to that caller; API key and human
   // session callers still receive server-side read/write permission checks.

@@ -9,7 +9,7 @@
  */
 import { useQuery } from '@aether/ui';
 import { api } from '@kyber/lib/api/endpoints';
-import type { RelationshipLayer } from '@aether/shared';
+import type { RelationshipLayer } from '@olympuslabs/aether-shared';
 
 export const GRAPH_LAYERS: readonly RelationshipLayer[] = ['H2H', 'H2A', 'A2H', 'A2A'];
 const STALE = 30_000;

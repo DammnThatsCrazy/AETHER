@@ -62,7 +62,7 @@ export function AetherProvider({
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    const endpoint = config.endpoint ?? 'https://api.aether.io';
+    const endpoint = config.endpoint ?? 'https://api.aether.network';
 
     Aether.init(config);
     semanticContext.resetSession();

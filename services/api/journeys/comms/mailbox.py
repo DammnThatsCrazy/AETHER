@@ -88,6 +88,18 @@ def build_email_alias(raw_email: str, tenant_id: str) -> Optional[EmailAlias]:
     )
 
 
+# Identity confidence per evidence method for an individual (non-shared)
+# mailbox. Also consumed by the post-click correlation path (click_token).
+IDENTITY_METHOD_CONFIDENCE: dict[str, float] = {
+    "provider_profile": 0.7,        # probable
+    "verified_mailbox": 0.9,        # strong — mailbox tied to account
+    "authenticated_session": 1.0,   # deterministic — post-click auth
+    "signed_click": 0.9,            # strong — signed token correlation
+    "forwarded_link": 0.4,          # reduced — link may have travelled
+    "open_pixel": 0.3,              # weak
+}
+
+
 def identity_confidence_for_alias(
     alias: EmailAlias,
     *,
@@ -102,11 +114,4 @@ def identity_confidence_for_alias(
         return 0.0
     if alias.is_shared_mailbox:
         return 0.2  # organization-level evidence only
-    return {
-        "provider_profile": 0.7,        # probable
-        "verified_mailbox": 0.9,        # strong — mailbox tied to account
-        "authenticated_session": 1.0,   # deterministic — post-click auth
-        "signed_click": 0.9,            # strong — signed token correlation
-        "forwarded_link": 0.4,          # reduced — link may have travelled
-        "open_pixel": 0.3,              # weak
-    }.get(method, 0.5)
+    return IDENTITY_METHOD_CONFIDENCE.get(method, 0.5)

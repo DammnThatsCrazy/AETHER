@@ -30,7 +30,7 @@ _ALL_PURPOSES = frozenset({
     "analytics", "marketing", "personalization", "web3",
     "agent", "commerce", "credit", "location",
 })
-_DEFAULT_ENDPOINT = "https://ingest.aether.so/v1/batch"
+_DEFAULT_ENDPOINT = "https://api.aether.network/v1/batch"
 
 
 class AetherServerClient:

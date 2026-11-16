@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.repos import get_pool
+from shared.freshness.source_watermarks import advances_watermark
 
 # --------------------------------------------------------------------------- #
 # DDL — duplicated verbatim in alembic/versions/<date>_computation_substrate.py
@@ -134,6 +135,7 @@ class ComputedResultsRepository:
         return rec
 
     # ── writes ────────────────────────────────────────────────────────────
+    @advances_watermark("economic_facts")
     async def insert_result(self, result: dict) -> dict:
         rec = self._row(result)
         pool = await self._backend()
@@ -187,6 +189,7 @@ class ComputedResultsRepository:
             rec["computed_at"], rec["created_at"],
         )
 
+    @advances_watermark("economic_facts")
     async def supersede(
         self, tenant_id: str, prior_result_id: str, new_result: dict, *, reason: str
     ) -> dict:

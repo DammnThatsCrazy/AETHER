@@ -134,3 +134,22 @@ def test_traffic_metrics_summary_selects_only_family() -> None:
     for key in keys:
         base = key.split("{", 1)[0]
         assert base in traffic_metrics.METRIC_NAMES
+
+
+def test_actor_detection_metric_counts_unknown_and_verified_agents() -> None:
+    from ingestion.silver.dispatcher import _emit_classification_metrics
+
+    unknown = {"actor_type": "unknown", "proof_level": "none", "verification_level": "none"}
+    verified = {
+        "actor_type": "agent",
+        "proof_level": "platform_verified",
+        "verification_level": "provider_ip_range",
+    }
+    u0 = metrics.get_counter("actor_detection_total", labels=unknown)
+    v0 = metrics.get_counter("actor_detection_total", labels=verified)
+    _emit_classification_metrics([
+        {"source_class": "direct_unknown", "proof_level": "none", "verification_level": "none"},
+        {"source_class": "agent_referral", **verified},
+    ])
+    assert metrics.get_counter("actor_detection_total", labels=unknown) == u0 + 1
+    assert metrics.get_counter("actor_detection_total", labels=verified) == v0 + 1

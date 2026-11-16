@@ -1,5 +1,5 @@
 // Minimal react-native stub for node/vitest environment.
-// Only the APIs used by @aether/react-native bridge are mocked.
+// Only the APIs used by @olympuslabs/aether-react-native bridge are mocked.
 export const NativeModules: Record<string, any> = {
   AetherNative: null,
   AetherEcommerce: {

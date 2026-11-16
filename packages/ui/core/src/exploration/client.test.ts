@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   ExplorationContextV1,
   ExplorationResultEnvelope,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 import type {
   ExplorationApiResponse,
   ExplorationTransport,

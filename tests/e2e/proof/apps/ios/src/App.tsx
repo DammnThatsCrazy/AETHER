@@ -275,7 +275,7 @@ function InitializationScreen(): React.ReactElement {
     <View style={styles.container}>
       <Text style={styles.header}>Initialization</Text>
       <Text style={styles.subheader}>
-        Calls Aether.init() from @aether/react-native with the canonical RN
+        Calls Aether.init() from @olympuslabs/aether-react-native with the canonical RN
         config, plus SDK-local session / anonymous id setup.
       </Text>
       <TouchableOpacity

@@ -590,12 +590,11 @@ class AttributionEngine:
 
 def _touchpoint_to_resolver_dict(tp: dict[str, Any]) -> dict[str, Any]:
     """Convert a canonical touchpoint row to the dict format expected by AttributionResolver."""
+    # An identity (profile/anonymous id) proves who the record belongs to, not
+    # that a human acted: absent actor evidence stays "unknown".
     actor_type = tp.get("actor_type")
     if not actor_type:
-        if tp.get("agent_id"):
-            actor_type = "agent"
-        elif tp.get("profile_id") or tp.get("anonymous_id"):
-            actor_type = "human"
+        actor_type = "agent" if tp.get("agent_id") else "unknown"
     return {
         "channel": tp.get("channel", "unknown"),
         "source": tp.get("source", "unknown"),
@@ -642,10 +641,7 @@ def _build_resolver_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:
         # receives on the production path.
         props = _touchpoint_to_resolver_dict(tp)["properties"]
         if not props.get("actor_type"):
-            if tp.get("agent_id"):
-                props["actor_type"] = "agent"
-            elif tp.get("profile_id") or tp.get("anonymous_id"):
-                props["actor_type"] = "human"
+            props["actor_type"] = "agent" if tp.get("agent_id") else "unknown"
         if tp.get("agent_id"):
             props["agent_id"] = tp["agent_id"]
         if tp.get("wallet_id"):

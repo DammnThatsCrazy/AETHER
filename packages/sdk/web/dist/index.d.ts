@@ -27,6 +27,16 @@ declare class AetherSDK implements AetherSDKInterface {
     private fingerprintCollector;
     private plugins;
     private initialized;
+    /** Removes the SPA route hooks installed by setupSPATracking(). */
+    private spaTrackingTeardown;
+    /**
+     * Bumped by destroy(). Work started under one init (route hooks, config and
+     * identity requests, manifest callbacks) captures the generation and does
+     * nothing once it changes, so a destroy()/init() cycle (the React provider
+     * restarting for a new key or site) cannot have the previous install's late
+     * responses or retained hooks act on the replacement instance.
+     */
+    private initGeneration;
     private debug;
     private _lastEmailHash;
     private healthAgent;

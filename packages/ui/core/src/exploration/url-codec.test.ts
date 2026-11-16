@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ExplorationContextV1, FilterGroup } from '@aether/shared';
+import type { ExplorationContextV1, FilterGroup } from '@olympuslabs/aether-shared';
 import {
   encodeExplorationContext,
   decodeExplorationContext,

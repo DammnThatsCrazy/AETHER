@@ -13,21 +13,24 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the Access Kit Auth0 client work. The linked root main.tf change is comment-only; the Native CLI application is an Auth0 module resource and does not alter deployment profile topology or runtime resource selection, so this profile guide needed no body change."
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
+  - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
   "config/aws_price_book.yaml": "sha256:428e6099d0a5d2d985c8675b6f382a30403ef9690464f75dff192cc60199ba19"
   "config/capability_overlays.yaml": "sha256:aab4be2180c27275e54164100963b8c3fda947fbcceecb99114bc6412f923407"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
+  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
-  "infra/aws/terraform/main.tf": "sha256:b6f5669c78ac87a35f01642cf0840a96293c6bd836f4f3ecc5079ecec15483d0"
+  "infra/aws/terraform/main.tf": "sha256:381b92359daeb6abb711ad61f1b2093c9c7d85cbd421e7c652e6c16c788a84c8"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:327097c1efc7b214e8b56ead967d30dbab9376854840c20a2d59372660f2b6d5"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"
-  "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
-  "infra/aws/terraform/variables.tf": "sha256:ca0ecdd26f0d7212e4ab11cd7361af4ae6e562915a9f36b7e5d76cb97c1a4b6e"
+  "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
+  "infra/aws/terraform/variables.tf": "sha256:22328f7f50c525c17270afcf588ebdc28e6e6a09425c7b12e15e8860afd5a870"
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
   "scripts/release/check_profile_config.py": "sha256:77bd45e6128fb26beb490906c88686c378a2d074dd7dfd18c88a1a7e4cbc1b73"
   "scripts/release/check_profile_parity.py": "sha256:da8bd779227c8f0945ea4b897559720f7600bcd6f9dccf8c1f659b5e6a7ede15"
@@ -346,12 +349,16 @@ customer endpoint from `tfmcp`. `enable_access_mcp_repository` provisions the
 immutable `aether-access-mcp` ECR repository; after a reviewed image publish,
 `enable_access_mcp` adds a digest-pinned Fargate service and HTTPS ALB route at
 `/v1/access/mcp`. It accepts caller Aether credentials per request and has no
-shared tenant secret or workload AWS permissions. The service is allowed only
-on `production`, the single persistent state that owns the globally
-named ECR repository; staging is rejected. The service is disabled by default. A separate
+shared tenant secret or workload AWS permissions. The service is allowed
+only on the per-account persistent state owners of that repository:
+`production`, and `staging` under the staging lifecycle
+(`customer_services.access-mcp` in `config/runtime_deployment.yaml`, 1 task
+awake and 0 asleep, no autoscaling target). The service is disabled by default. A separate
 `enable_access_mcp_oauth` opt-in adds the Auth0 MCP audience and a KMS-backed
 service assertion secret shared only by the MCP and API tasks; MCP-audience
-tokens cannot be replayed directly to the public REST API.
+tokens cannot be replayed directly to the public REST API. A further
+`enable_access_mcp_dcr` opt-in turns on MCP host self-registration (Auth0 DCR
+and Client ID Metadata Documents) with a read-only third-party default grant.
 `enable_access_continuations` independently enables the existing continuation
 API on the backend task for named Access Kit create/readback, with caller
 `write`/`read` permissions still enforced. Both options default off and

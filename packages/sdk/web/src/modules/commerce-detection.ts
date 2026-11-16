@@ -22,7 +22,7 @@ import { now, sanitizeUrl } from '../utils';
 import {
   type CommerceSignalType,
   type SDKCommerceSignal,
-} from '@aether/shared/commerce-bridge';
+} from '@olympuslabs/aether-shared/commerce-bridge';
 
 /**
  * Monotonic sequence backing the deterministic signal_id fallback. Reset on

@@ -59,6 +59,16 @@
       "status": "uncertified"
     },
     {
+      "fixtures": 1,
+      "kind": "access_grant_graphql",
+      "last_recorded_at": "2026-11-15T18:54:40+00:00",
+      "provider": "shopify",
+      "provider_api": [
+        "{\"api_version\": \"admin-graphql (connector-pinned)\", \"host\": \"myshopify.com\", \"via\": \"shopify_connector_dev_store\"}"
+      ],
+      "status": "sandbox_certified"
+    },
+    {
       "fixtures": 0,
       "kind": "inventory_level",
       "provider": "shopify",
@@ -107,9 +117,9 @@
       "status": "sandbox_certified"
     },
     {
-      "fixtures": 2,
+      "fixtures": 3,
       "kind": "event",
-      "last_recorded_at": "2026-11-14T23:50:03+00:00",
+      "last_recorded_at": "2026-11-15T18:53:57+00:00",
       "provider": "stripe",
       "provider_api": [
         "{\"api_version\": \"2026-03-25.dahlia\", \"host\": \"api.stripe.com\", \"via\": \"stripe_connector_read\"}"

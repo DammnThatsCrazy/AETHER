@@ -6,8 +6,8 @@
  */
 
 import { ErrorState, LoadingState } from '@aether/ui';
-import type { ExplorationAnchor } from '@aether/shared/exploration-contract';
-import type { ProjectionId } from '@aether/shared/intelligence-projection';
+import type { ExplorationAnchor } from '@olympuslabs/aether-shared/exploration-contract';
+import type { ProjectionId } from '@olympuslabs/aether-shared/intelligence-projection';
 import {
   projectionDisplayName,
   projectionSurfaceEvidenceReadiness,

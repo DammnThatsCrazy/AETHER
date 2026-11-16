@@ -150,7 +150,7 @@ used — never text-field content.
 payload shape as native:
 
 ```tsx
-import { AetherPressable } from '@aether/react-native';
+import { AetherPressable } from '@olympuslabs/aether-react-native';
 
 <AetherPressable aetherId="checkout.confirm" onPress={onCheckout}>
   <Text>Confirm</Text>
@@ -158,7 +158,7 @@ import { AetherPressable } from '@aether/react-native';
 ```
 
 ```ts
-import { useTrackedPress } from '@aether/react-native';
+import { useTrackedPress } from '@olympuslabs/aether-react-native';
 
 const onPress = useTrackedPress('checkout.confirm', handleConfirm);
 ```

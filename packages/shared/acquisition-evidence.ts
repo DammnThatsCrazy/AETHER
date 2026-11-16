@@ -14,8 +14,8 @@
 //
 // Invariant: canonicalCampaignId, if supplied, is ALWAYS validated server-side
 // against tenant ownership before use. Never trust it blindly.
-// referralToken is likewise opaque client-side and is never a campaign or
-// provider assertion until a server verifies and interprets it.
+// referralToken and clickToken are likewise opaque client-side and are never a
+// campaign, provider or identity assertion until a server verifies them.
 // =============================================================================
 
 export interface AcquisitionEvidence {
@@ -64,6 +64,14 @@ export interface AcquisitionEvidence {
    * are server-owned.
    */
   referralToken?: string | undefined;
+
+  /**
+   * Opaque signed per-recipient email click token captured from the `ae`
+   * landing parameter. The SDK does not parse or trust this value; the server
+   * verifies tenant, signature and expiry before attributing the visit to the
+   * recipient (a forwarded link never reassigns a known visitor's identity).
+   */
+  clickToken?: string | undefined;
 
   /**
    * How the entry evidence was physically observed (canonical EntryMethod from
@@ -118,6 +126,9 @@ export type PaidMediaEvidence = AcquisitionEvidence & {
 
 export const ACQUISITION_EVIDENCE_SCHEMA_VERSION = 3;
 
+/** Shape of a signed Aether email click token (`v<ver>.<payload>.<sig>`). */
+const CLICK_TOKEN_SHAPE = /^v[0-9A-Za-z]{1,16}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{16,}$/;
+
 /** Build a minimal AcquisitionEvidence from URL search params (browser). */
 export function evidenceFromSearchParams(params: URLSearchParams): AcquisitionEvidence {
   const clickIds: AcquisitionEvidence['clickIds'] = {};
@@ -136,6 +147,7 @@ export function evidenceFromSearchParams(params: URLSearchParams): AcquisitionEv
     utmId: params.get('utm_id') ?? undefined,
     canonicalCampaignId: params.get('aether_cid') ?? undefined,
     referralToken: params.get('aether_ref') ?? undefined,
+    clickToken: CLICK_TOKEN_SHAPE.test(params.get('ae') ?? '') ? params.get('ae')! : undefined,
     clickIds: Object.keys(clickIds).length > 0 ? clickIds : undefined,
     landingPage: (globalThis as any).window?.location?.href,
     referrer: (globalThis as any).document?.referrer || undefined,

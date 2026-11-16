@@ -14,7 +14,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/shared": "*"
+    "@olympuslabs/aether-shared": "*"
   },
   "devDependencies": {
     "typescript": "^5.3.0"

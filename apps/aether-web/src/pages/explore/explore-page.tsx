@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { GraphObjectRef } from '@aether/shared/graph-context-contract';
+import type { GraphObjectRef } from '@olympuslabs/aether-shared/graph-context-contract';
 import { useGraphActions, useGraphContext } from '@aether/ui/exploration';
 import type { GraphNode } from '@aether-app/components/graph/graph-canvas';
 import { ExploreAdvancedView } from './explore-advanced-view';

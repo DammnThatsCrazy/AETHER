@@ -1,7 +1,7 @@
 import { cn } from '@kyber/lib/utils';
 import { Button, Toggle, Select, Badge, Input } from '@aether/ui';
 import type { GraphLayer, GraphOverlay, EntityType } from '@kyber/types';
-import type { PathMode } from '@aether/shared/operational-intelligence';
+import type { PathMode } from '@olympuslabs/aether-shared/operational-intelligence';
 
 // ---------------------------------------------------------------------------
 // Constants

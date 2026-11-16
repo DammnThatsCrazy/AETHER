@@ -1584,6 +1584,12 @@ class ExternalAgentTelemetryConfig:
     behavior_jobs_interval_seconds: int = max(
         900, _env_int("AETHER_AGENT_BEHAVIOR_JOBS_INTERVAL_SECONDS", 21_600)
     )
+    #: Days an unreviewed agent continuity review item stays open after it was
+    #: last reported. The behavior job expires older items (it leaves the queue;
+    #: nothing is merged or deleted, and a new report reopens it). 0 disables.
+    continuity_review_expiry_days: int = max(
+        0, _env_int("AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS", 30)
+    )
 
 
 @dataclass(frozen=True)

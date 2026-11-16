@@ -12,7 +12,7 @@ import type {
   ExplorationContextV1,
   ExplorationResultEnvelope,
   PresentationSpec,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 import type {
   GraphContext,
   GraphObjectRef,
@@ -20,9 +20,9 @@ import type {
   GraphSelectionState,
   ExplorationTrailEntry,
   GraphSnapshotRef,
-} from '@aether/shared/graph-context-contract';
-import { validateGraphContext } from '@aether/shared/graph-context-contract';
-import type { FilterExpression, FilterGroup } from '@aether/shared/graph-contract';
+} from '@olympuslabs/aether-shared/graph-context-contract';
+import { validateGraphContext } from '@olympuslabs/aether-shared/graph-context-contract';
+import type { FilterExpression, FilterGroup } from '@olympuslabs/aether-shared/graph-contract';
 import { isKnownField, isOperatorValidForField } from './registry';
 import {
   explorationContextToGraphContext,

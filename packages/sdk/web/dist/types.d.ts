@@ -1,4 +1,4 @@
-import type { CanonicalConsentReceipt, CanonicalConsentReceiptInput } from '@aether/shared';
+import type { CanonicalConsentReceipt, CanonicalConsentReceiptInput } from '@olympuslabs/aether-shared';
 /**
  * Identity resolved from a prior device/session via wallet address lookup.
  * Returned by POST /sdk/identity/resolve when a known wallet is recognized.
@@ -409,7 +409,7 @@ export interface ProtocolInfo {
     logoUrl?: string;
 }
 /**
- * Canonical EventType — registry-generated, re-exported from @aether/shared
+ * Canonical EventType — registry-generated, re-exported from @olympuslabs/aether-shared
  * (scripts/generate_contracts.py splices it into packages/shared/events.ts from
  * packages/shared/contracts/event-registry.json). This file previously carried
  * a hand-written EventType union that silently fell behind the registry (e.g.
@@ -420,7 +420,7 @@ export interface ProtocolInfo {
  * backend-side from `wallet`/`transaction` events; they are emitted by the SDK
  * only as the parent observation types above.
  */
-import type { EventType } from '@aether/shared/events';
+import type { EventType } from '@olympuslabs/aether-shared/events';
 export type { EventType };
 export type JourneyLifecycleEventType = 'journey_started' | 'journey_paused' | 'journey_resumed' | 'journey_continued' | 'journey_completed' | 'journey_abandoned' | 'journey_checkpoint';
 export type JourneyStatus = 'started' | 'paused' | 'resumed' | 'continued' | 'completed' | 'abandoned' | 'checkpoint';
@@ -514,9 +514,9 @@ export interface EventContext {
     timezone?: string;
     /** UTC offset in minutes captured AT EVENT OCCURRENCE (not SDK init): -new Date().getTimezoneOffset(). */
     utcOffsetMinutes?: number;
-    /** Where the timezone claim came from (canonical vocabulary in @aether/shared temporal.ts). */
+    /** Where the timezone claim came from (canonical vocabulary in @olympuslabs/aether-shared temporal.ts). */
     timeZoneSource?: string;
-    /** Which clock produced the event timestamp (canonical vocabulary in @aether/shared temporal.ts). */
+    /** Which clock produced the event timestamp (canonical vocabulary in @olympuslabs/aether-shared temporal.ts). */
     clockSource?: string;
     userAgent?: string;
     consent?: ConsentState;
@@ -575,6 +575,14 @@ export interface DeviceContext {
     language: string;
     cookieEnabled: boolean;
     online: boolean;
+    /** Automation evidence (presence-only). See getAutomationSignals(). */
+    automation?: AutomationSignals;
+}
+export interface AutomationSignals {
+    /** W3C navigator.webdriver: browser is controlled by automation. */
+    webdriver: boolean;
+    /** A trusted (browser-generated) pointer, key or touch event occurred on this page. */
+    trustedInputSeen: boolean;
 }
 export interface CampaignContext {
     source?: string;
@@ -625,6 +633,8 @@ export interface AcquisitionEvidence {
     landingPage?: string;
     /** Opaque `aether_ref` token. Verification and interpretation are server-owned. */
     referralToken?: string;
+    /** Opaque signed `ae` email click token. Verification and recipient attribution are server-owned. */
+    clickToken?: string;
     firstCapturedAt?: string;
     lastObservedAt?: string;
     sessionId?: string;
@@ -1416,7 +1426,7 @@ export interface BitcoinTransactionOptions extends TransactionOptions {
     feeRate?: number;
     isInscription?: boolean;
 }
-import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
+import type { ConsentState, ConsentPurpose } from '@olympuslabs/aether-shared/consent';
 export type { ConsentState, ConsentPurpose };
 export interface ConsentConfig {
     purposes: ConsentPurpose[];

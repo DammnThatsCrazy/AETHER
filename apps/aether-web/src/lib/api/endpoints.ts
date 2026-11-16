@@ -33,7 +33,7 @@ import type {
   ContinuationContext, ContinuationSelection,
   ContinuationCanonicalContext, ContinuationSummary, ResourceReference,
   SelectionMode, ClientSyncResponse,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 // ─── Auth grant shapes (trust-plane sessions vs legacy API keys) ─────────────
 
@@ -1449,10 +1449,10 @@ export const api = {
     query: (body: Record<string, unknown>) =>
       restClient.post('/v1/graph/query', unknownSchema, body),
 
-    paths: (body: import('@aether/shared/operational-intelligence').PathQuery) =>
+    paths: (body: import('@olympuslabs/aether-shared/operational-intelligence').PathQuery) =>
       restClient.post('/v1/graph/paths', unknownSchema, body),
 
-    expand: (body: import('@aether/shared/operational-intelligence').NodeExpansionRequest) =>
+    expand: (body: import('@olympuslabs/aether-shared/operational-intelligence').NodeExpansionRequest) =>
       restClient.post('/v1/graph/paths/expand', unknownSchema, body),
 
     explain: (body: { tenant_id: string; path_id: string }) =>
@@ -1473,7 +1473,7 @@ export const api = {
     compareSnapshot: (id: string, body: { tenantId: string; anchor: unknown; asOf: string; compareTo: string }) =>
       restClient.post(`/v1/graph/snapshots/${id}/compare`, unknownSchema, body),
 
-    createJob: (body: import('@aether/shared/operational-intelligence').PathQuery) =>
+    createJob: (body: import('@olympuslabs/aether-shared/operational-intelligence').PathQuery) =>
       restClient.post('/v1/graph/paths/jobs', unknownSchema, body),
 
     getJob: (jobId: string, tenant_id: string) =>

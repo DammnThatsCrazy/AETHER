@@ -17,7 +17,7 @@ Process for cutting an SDK release. Publishing is automated via
 
 ## Checklist
 
-- [ ] Tests green for all SDKs (`@aether/web` vitest; native build checks).
+- [ ] Tests green for all SDKs (`@olympuslabs/aether-web` vitest; native build checks).
 - [ ] Cross-SDK conformance matrix derives cleanly
       (`python scripts/release/sdk_conformance.py --quiet` — every claimed
       capability cell verified against SDK sources; also enforced by the
@@ -28,8 +28,8 @@ Process for cutting an SDK release. Publishing is automated via
 - [ ] Backward-compatibility notes for any changed event/field.
 - [ ] Sample integration verified (Demo App / quickstart).
 - [ ] Dispatch a `workflow_dispatch` on `publish-sdk.yml` (use `dry_run` first).
-- [ ] Verify published artifacts: npm (`@aether/web`, `@aether/react-native`,
-      `@aether/shared`), CocoaPods (`AetherSDK`), Maven (`com.aether:sdk-android`).
+- [ ] Verify published artifacts: npm (`@olympuslabs/aether-web`, `@olympuslabs/aether-react-native`,
+      `@olympuslabs/aether-shared`), CocoaPods (`AetherSDK`), Maven (`com.olympuslabsml:aether-android`).
 - [ ] Staged rollout: set `rollout_percentage` in the SDK manifest; monitor
       `sdk_health` / `sdk_drift`; roll back via the manifest if needed.
 

@@ -6,6 +6,7 @@ Each feature is measured across independent dimensions. Implementation completio
 
 | Feature | Scope | Impl % | Prod % | Ceiling | Achieved | Activation | Confidence |
 |---|---|--:|--:|---|:--:|---|---|
+| Access Kit (MCP / CLI / API) | access-kit-design-partner-v1 v1 | 100% | 75% | VERIFIED | — | ENVIRONMENT_VALIDATION_PENDING | LOW |
 | Agentic x402 | agentic-x402-v1 v1 | 100% | 100% | VERIFIED | ✅ | ENVIRONMENT_VALIDATION_PENDING | MODERATE |
 | Backend API | backend-api-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Campaign Intelligence | campaign-intelligence-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
@@ -41,6 +42,18 @@ Each feature is measured across independent dimensions. Implementation completio
 | Smart Contracts & Rewards | smart-contracts-rewards-v1 v1 | 100% | 100% | RELEASE_TURNKEY | ✅ | AUDIT_WAITING | MODERATE |
 | Stablecoin Intelligence | stablecoin-intelligence-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | LIVE_DATA_WAITING | LOW |
 | Tenant Import Engine | tenant-import-engine-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
+
+## Access Kit (MCP / CLI / API) (`access-kit`)
+
+- **Scope:** access-kit-design-partner-v1 v1 — design-partner-pilot
+- **Implementation:** RUNTIME_INTEGRATED · 100% of in-scope repository controls
+- **Productionization:** 75% of in-scope productionization controls
+- **Repository ceiling:** VERIFIED (achieved: no)
+- **Activation:** ENVIRONMENT_VALIDATION_PENDING
+- **Remaining repository work:** None
+- **Confidence:** LOW — gap: no hosted verdict on this branch yet
+- **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_PRODUCTIONIZATION, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Agentic x402 (`agentic-x402`)
 

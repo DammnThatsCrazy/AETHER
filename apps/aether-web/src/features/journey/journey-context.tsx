@@ -6,8 +6,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import Aether from '@aether/web';
-import type { ResolvedIdentity } from '@aether/web';
+import Aether from '@olympuslabs/aether-web';
+import type { ResolvedIdentity } from '@olympuslabs/aether-web';
 import { useAuth } from '@aether-app/features/auth';
 import { env } from '@aether-app/lib/env';
 

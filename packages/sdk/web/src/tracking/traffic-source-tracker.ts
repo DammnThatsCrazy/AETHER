@@ -4,7 +4,7 @@
 // No source classification, no channel grouping, no regex matching.
 // =============================================================================
 
-import { sanitizeUrl } from '../utils';
+import { sanitizeUrl, isClickToken, CLICK_TOKEN_PARAM } from '../utils';
 
 const CLICK_ID_PARAMS = [
   'gclid', 'msclkid', 'fbclid', 'ttclid', 'twclid',
@@ -21,6 +21,8 @@ export interface TrafficSourceData {
   utmTerm?: string | null;
   utmContent?: string | null;
   referralToken?: string | null;
+  /** Signed per-recipient email click token from `?ae=`; verified server-side. */
+  clickToken?: string | null;
   clickIds: Record<string, string>;
   landingPage: string;
 }
@@ -78,6 +80,10 @@ export class TrafficSourceTracker {
       // The typed referralToken field is the ONLY carrier — the landing page
       // URL below is sanitized so aether_ref never travels inside a URL.
       referralToken: params.get('aether_ref'),
+      // Signed per-recipient email click token. Opaque here: the backend
+      // verifies tenant, signature and expiry and attributes the visit to the
+      // recipient. Like aether_ref it never travels inside a URL.
+      clickToken: isClickToken(params.get(CLICK_TOKEN_PARAM)) ? params.get(CLICK_TOKEN_PARAM) : null,
       clickIds,
       landingPage: sanitizeUrl(window.location.href),
     };

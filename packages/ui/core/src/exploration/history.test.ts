@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appendTrail, clearHistory, createExplorationHistory, nextFocus, previousFocus } from './history';
-import type { ExplorationTrailEntry } from '@aether/shared/graph-context-contract';
+import type { ExplorationTrailEntry } from '@olympuslabs/aether-shared/graph-context-contract';
 
 const scope = { tenant_id: 't1', workspace_id: 'w1', environment_id: 'staging' } as const;
 const entry = (id: string, occurred_at = `2026-01-0${id}T00:00:00Z`): ExplorationTrailEntry => ({ object: { ...scope, kind: 'entity', id }, action: 'open', occurred_at });

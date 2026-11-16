@@ -29,6 +29,12 @@ Usage:
   aether entities neighborhood ENTITY_ID [--limit N] [--json]
   aether experience360 frame get --surface SURFACE --subject-kind KIND --subject-id ID
                                  [--slots SLOT,SLOT,...] [--as-of RFC3339] [--no-evidence] [--json]
+  aether profile360 search (--email V | --wallet V | --device V | --session V
+                            | --social V | --customer V) [--json]
+  aether profile360 get ENTITY_ID [--subject-kind KIND] [--as-of RFC3339] [--no-evidence] [--json]
+  aether profile360 slots ENTITY_ID --slots SLOT,SLOT,... [--subject-kind KIND] [--as-of RFC3339] [--json]
+  aether profile360 evidence ENTITY_ID [--slots SLOT,SLOT,...] [--subject-kind KIND]
+                             [--as-of RFC3339] [--json]
   aether access operations list [--json]
   aether access operations show OPERATION_ID [--json]
   aether access invoke OPERATION_ID [--input-json JSON] [--json]
@@ -54,7 +60,7 @@ Authentication:
   AETHER_AUTH0_AUDIENCE    Aether API resource-server audience
   AETHER_PUBLISHABLE_KEY   Site-bound pk_ key, for ingest only
   AETHER_SITE_ID           Site ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
-  AETHER_API_URL           API origin (default: https://api.aether.io)
+  AETHER_API_URL           API origin (default: https://api.aether.network)
 
 Set exactly one API credential: AETHER_API_KEY or AETHER_SESSION_TOKEN. The CLI
 uses a saved human session from the OS credential store when neither is supplied.
@@ -194,6 +200,7 @@ async function main() {
     || area === 'entities'
     || area === 'continuations'
     || area === 'experience360'
+    || area === 'profile360'
     || (area === 'access' && command === 'invoke')
     || (area === 'usage' && command === 'summary')
     || area === 'agents'
@@ -305,6 +312,53 @@ async function main() {
       process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'profile360') {
+    const USAGE = `Usage: aether profile360 search|get|slots|evidence ... (see aether --help)\n\n${HELP}`;
+    const common = ['subject-kind', 'as-of'];
+    const allowed = {
+      search: ['email', 'wallet', 'device', 'session', 'social', 'customer'],
+      get: [...common, 'no-evidence'],
+      slots: [...common, 'slots'],
+      evidence: [...common, 'slots'],
+    }[command];
+    if (!allowed || Object.keys(options).some((key) => !allowed.includes(key))) throw new Error(USAGE);
+    let operationId;
+    let input;
+    if (command === 'search') {
+      if (positionals.length !== 2) throw new Error(USAGE);
+      operationId = 'profile360.search';
+      input = Object.fromEntries(Object.entries(options));
+    } else {
+      if (positionals.length !== 3) throw new Error(USAGE);
+      const base = {
+        entity_id: subcommand,
+        ...(options['subject-kind'] ? { subject_kind: options['subject-kind'] } : {}),
+        ...(options['as-of'] ? { as_of: options['as-of'] } : {}),
+      };
+      if (command === 'get') {
+        operationId = 'profile360.get';
+        input = { ...base, ...(options['no-evidence'] ? { include_evidence: false } : {}) };
+      } else if (command === 'slots') {
+        if (!options.slots) throw new Error(USAGE);
+        operationId = 'profile360.slot.get';
+        input = { ...base, slots: options.slots.split(',') };
+      } else {
+        operationId = 'profile360.evidence.get';
+        input = { ...base, ...(options.slots ? { slots: options.slots.split(',') } : {}) };
+      }
+    }
+    const result = await invokeAccessOperation(operationId, input, process.env);
+    const output = { operation_id: operationId, data: result.data,
+      ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }

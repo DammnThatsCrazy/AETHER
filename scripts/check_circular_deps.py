@@ -25,9 +25,9 @@ INDEX_FILES = tuple(f"index{ext}" for ext in EXTENSIONS)
 
 ALIAS_ROOTS = {
     "@kyber/": Path("apps/kyber-web/src"),
-    "@aether/shared/": Path("packages/shared/src"),
-    "@aether/web/": Path("packages/sdk/web/src"),
-    "@aether/react-native/": Path("packages/sdk/react-native/src"),
+    "@olympuslabs/aether-shared/": Path("packages/shared/src"),
+    "@olympuslabs/aether-web/": Path("packages/sdk/web/src"),
+    "@olympuslabs/aether-react-native/": Path("packages/sdk/react-native/src"),
 }
 
 

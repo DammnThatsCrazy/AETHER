@@ -31,6 +31,7 @@ from shared.graph.graph import (
 )
 from shared.logger.logger import get_logger
 from shared.temporal.instant import coerce_utc_lenient
+from shared.freshness.source_watermarks import advances_watermark
 
 logger = get_logger("aether.repository")
 
@@ -1547,6 +1548,7 @@ class AnalyticsRepository:
             self._inflight_queries.pop(cache_key, None)
         return copy.deepcopy(results) if flight.waiters else results
 
+    @advances_watermark("analytics_events")
     async def record_event(self, event_id: str, data: dict) -> dict:
         """Raw upsert under a caller-chosen id (fixtures and legacy callers).
 
@@ -1558,6 +1560,7 @@ class AnalyticsRepository:
         await self._invalidate_after_write((data or {}).get("tenant_id"))
         return row
 
+    @advances_watermark("analytics_events")
     async def record_processed_event(self, record: dict) -> bool:
         """Insert a processed SDK event once and advance its session rollup.
 
@@ -2940,6 +2943,7 @@ class DelegationRepository(BaseRepository):
         super().__init__("delegations")
         self._cache = cache
 
+    @advances_watermark("agent_access")
     async def grant(
         self,
         delegation_id: str,
@@ -2968,6 +2972,7 @@ class DelegationRepository(BaseRepository):
         await self._invalidate_cache(grantee_entity_id, tenant_id)
         return record
 
+    @advances_watermark("agent_access")
     async def revoke(
         self, delegation_id: str, revoked_by_entity_id: str,
     ) -> Optional[dict]:

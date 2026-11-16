@@ -31,6 +31,7 @@ import {
   keyMintRoute,
   platformsFor,
   sdkKeyLabel,
+  snippetFor,
   type SdkOption,
 } from './onboarding-model';
 import { StepHeading } from './step-heading';
@@ -143,13 +144,6 @@ const BADGE: Record<'live' | 'ready' | 'issued' | 'none', { readonly label: stri
   issued: { label: 'key issued', tone: 'amber' },
   none: { label: 'no key', tone: 'mute' },
 };
-
-function snippetFor(sdk: SdkOption, shown: RevealedKey | null, siteId: string | null): string {
-  if (shown?.snippet && sdk.id === 'web') return shown.snippet;
-  return sdk.snippet
-    .replace(/YOUR_API_KEY/g, shown ? `${shown.key.slice(0, 12)}…` : sdk.keyKind === 'publishable' ? 'pk_YOUR_PUBLISHABLE_KEY' : 'YOUR_API_KEY')
-    .replace(/YOUR_SITE_ID/g, shown?.siteId ?? siteId ?? 'site_YOUR_SITE_ID');
-}
 
 export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: SdksStepProps) {
   const selectPlan = useSelectPlan();

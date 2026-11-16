@@ -1,6 +1,6 @@
 // @aether/proof-connectors — connector panel state + actions
 // FPS-061–FPS-063: live connector state with real ingestion API calls
-// + @aether/web SDK integration for canonical event envelopes
+// + @olympuslabs/aether-web SDK integration for canonical event envelopes
 
 import type { ConnectorState, ConnectorProvider, CredentialStatus, TokenRefreshStatus, BackfillStatus, IncrementalSyncStatus, WebhookStatus, GraphWrites, GraphNode, GraphEdge } from './types';
 import { initialConnectorState } from './types';
@@ -322,7 +322,7 @@ export async function connectProvider(providerType: ConnectorProvider): Promise<
     tokenRefreshStatus: 'valid' as TokenRefreshStatus,
   });
 
-  // Prove the connector was activated via the @aether/web SDK.
+  // Prove the connector was activated via the @olympuslabs/aether-web SDK.
   sdk.identifyConnector(providerType);
   sdk.trackConnectorEvent('connector.connect', { provider: providerType });
   sdk.emitHeartbeat();
@@ -400,7 +400,7 @@ export async function startBackfill(): Promise<void> {
     incrementalSyncStatus: 'idle' as IncrementalSyncStatus,
   });
 
-  // Prove the backfill started via the @aether/web SDK.
+  // Prove the backfill started via the @olympuslabs/aether-web SDK.
   sdk.trackConnectorEvent('connector.backfill_start', {
     provider: state.provider,
     recordCount: 3,
@@ -540,7 +540,7 @@ export async function triggerIncrementalSync(): Promise<void> {
     lastActionResult: null,
   });
 
-  // Prove the incremental sync started via the @aether/web SDK.
+  // Prove the incremental sync started via the @olympuslabs/aether-web SDK.
   sdk.trackConnectorEvent('connector.sync_start', {
     provider: state.provider,
     syncType: 'incremental',
@@ -618,7 +618,7 @@ export async function replayWebhook(): Promise<void> {
     lastActionResult: null,
   });
 
-  // Prove the webhook replay started via the @aether/web SDK.
+  // Prove the webhook replay started via the @olympuslabs/aether-web SDK.
   sdk.trackConnectorEvent('connector.webhook_replay', {
     provider: state.provider ?? 'stripe',
     eventType: 'checkout.session.completed',

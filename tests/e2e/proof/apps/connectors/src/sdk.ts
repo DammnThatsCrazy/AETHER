@@ -1,15 +1,15 @@
-// @aether/proof-connectors — thin @aether/web SDK wrapper
+// @aether/proof-connectors — thin @olympuslabs/aether-web SDK wrapper
 // Initializes the real Aether SDK with proof-connectors platform context and
 // exposes connector-lifecycle event emitters that send canonical envelopes to
 // POST /v1/batch via the SDK's EventQueue.
 //
 // SDK import: default export is the singleton AetherSDK instance.
-// Import: import Aether from '@aether/web';
+// Import: import Aether from '@olympuslabs/aether-web';
 // Init: Aether.init(config);
 // Emit: Aether.observe(type, props) for canonical events, Aether.track(name, props) for custom events.
 
-import Aether from '@aether/web';
-import type { AetherConfig } from '@aether/web';
+import Aether from '@olympuslabs/aether-web';
+import type { AetherConfig } from '@olympuslabs/aether-web';
 import type { ConnectorState } from './types';
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ const AETHER_API_KEY = (import.meta.env as { VITE_AETHER_API_KEY?: string }).VIT
 // ---------------------------------------------------------------------------
 
 let sdkInitialized = false;
-let sdkVersion = '0.1.0-alpha.0'; // mirrors @aether/web package.json version
+let sdkVersion = '0.1.0-alpha.0'; // mirrors @olympuslabs/aether-web package.json version
 
 // ---------------------------------------------------------------------------
 // Config builder
@@ -92,13 +92,13 @@ function getSdkConfig(): AetherConfig {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Returns the @aether/web SDK version string. */
+/** Returns the @olympuslabs/aether-web SDK version string. */
 export function getSDKVersion(): string {
   return sdkVersion;
 }
 
 /**
- * Initialize the @aether/web SDK singleton with proof-connectors platform context.
+ * Initialize the @olympuslabs/aether-web SDK singleton with proof-connectors platform context.
  * Must be called before any track/observe/flush calls.
  */
 export async function initSDK(): Promise<void> {
@@ -122,7 +122,7 @@ export async function initSDK(): Promise<void> {
   Aether.init(config);
   sdkInitialized = true;
 
-  console.log(`[proof-connectors/sdk] Initialized @aether/web v${sdkVersion} → ${config.endpoint}/v1/batch`);
+  console.log(`[proof-connectors/sdk] Initialized @olympuslabs/aether-web v${sdkVersion} → ${config.endpoint}/v1/batch`);
 }
 
 /** True if the SDK was initialized with a valid API key and endpoint. */
@@ -177,7 +177,7 @@ export function identifyConnector(providerId: string): void {
     console.warn('[proof-connectors/sdk] identifyConnector: SDK not available');
     return;
   }
-  // The @aether/web SDK does not expose a dedicated `identify()` method on the
+  // The @olympuslabs/aether-web SDK does not expose a dedicated `identify()` method on the
   // singleton. Emit the identity as a canonical `identify` event via observe()
   // (which accepts any registry event type) — this is the correct public path.
   Aether.observe('identify', {

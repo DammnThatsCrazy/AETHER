@@ -28,6 +28,14 @@ globalThis.fetch = async (url, init = {}) => {
     });
   }
 
+  if (parsedUrl.pathname === '/v1/profile/resolve') {
+    if (process.env.ACCESS_KIT_MOCK_TRACE === '1') process.stderr.write(`MOCK_BODY ${init.body}\n`);
+    return new Response(JSON.stringify({ data: { resolved_user_id: 'ent-resolved' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-resolve-id' },
+    });
+  }
+
   if (mode === 'entities-denied') {
     return new Response(JSON.stringify({
       error: { code: 'permission_denied' },

@@ -20,12 +20,12 @@ import {
   agentDeploymentEnvironments,
   agentDeploymentConsentModes,
   agentDeploymentStatuses,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import type {
   ExternalPlatform,
   AgentDeploymentEnvironment,
   AgentDeploymentConsentMode,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import { useAgentDeployments, useCreateAgentDeployment } from '@aether-app/features/deployments';
 import type { AgentDeploymentRecord } from '@aether-app/features/deployments';
 import {

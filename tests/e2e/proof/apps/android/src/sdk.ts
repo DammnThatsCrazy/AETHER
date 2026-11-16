@@ -1,19 +1,19 @@
 // =============================================================================
 // Aether SDK — React Native Proof Harness Integration (Android surface)
-// Wraps @aether/react-native and falls back to direct POST /v1/batch for
+// Wraps @olympuslabs/aether-react-native and falls back to direct POST /v1/batch for
 // signals the native SDK does not surface to JS (heartbeat, identity). Every
 // event-sending function constructs the canonical envelope per
 // docs/reference/api/ingestion.md.
 // =============================================================================
 
-import Aether, { type AetherRNConfig } from '@aether/react-native';
+import Aether, { type AetherRNConfig } from '@olympuslabs/aether-react-native';
 import type { SDKState, EventDeliveryStatus } from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** RN SDK version — mirrors @aether/react-native package version. */
+/** RN SDK version — mirrors @olympuslabs/aether-react-native package version. */
 const SDK_VERSION = '0.1.0-alpha.0';
 
 /** Default staging ingestion endpoint. Overridden by AETHER_API_URL env. */
@@ -160,7 +160,7 @@ function buildEnvelope(
     anonymousId: state.anonymousId ?? '',
     context: {
       library: {
-        name: '@aether/react-native',
+        name: '@olympuslabs/aether-react-native',
         version: SDK_VERSION,
       },
       surface: 'android',
@@ -275,7 +275,7 @@ async function postBatch(
 /**
  * Initialize the Aether RN SDK (Android surface).
  *
- * Calls Aether.init() from @aether/react-native with a canonical RN config,
+ * Calls Aether.init() from @olympuslabs/aether-react-native with a canonical RN config,
  * then records SDK-local state (session, anonymous id, consent default).
  */
 export function initSDK(

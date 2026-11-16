@@ -50,7 +50,7 @@ depends on the host OS credential service; unit tests inject a fake store and
 do not prove native Keychain, Credential Manager, or Secret Service access.
 
 Set `AETHER_API_URL` to an API origin if using a non-default environment. It
-defaults to `https://api.aether.io`; the client requires HTTPS except for
+defaults to `https://api.aether.network`; the client requires HTTPS except for
 loopback development origins.
 
 Supply only the credential required by the command being used:
@@ -156,7 +156,11 @@ aether continuations show cont_0123456789abcdef0123456789abcdef --json
 aether access operations list --json
 aether access operations show entities.neighborhood --json
 aether access invoke entities.neighborhood --input-json '{"entity_id":"entity_123","limit":25}' --json
-aether experience360 frame get --surface agent360 --subject-kind agent --subject-id agent_123 --slots identity,tool_usage --json
+aether profile360 search --email person@example.com --json
+aether profile360 get entity_123 --json
+aether profile360 slots entity_123 --slots risk_summary,value_summary --json
+aether profile360 evidence entity_123 --json
+aether experience360 frame get --surface profile360 --subject-kind entity --subject-id entity_123 --slots identity_spine,risk_summary --json
 aether account context --json
 aether usage summary --json
 aether auth context --json
@@ -171,7 +175,8 @@ aether auth sessions revoke SESSION_ID --json
 One bounded read maps to the existing authenticated `POST /v1/experience360/frames`
 route (a read; POST carries the structured body). Input is `surface`, `subject`
 (`kind`, `id`), optional `requested_slots` (1-32 unique slot IDs of that surface),
-optional RFC 3339 `as_of`, and optional `include_evidence`. The surface, its
+optional RFC 3339 `as_of`, and optional `include_evidence`. The adapter accepts
+only `profile360`, the one surface audited for design-partner use. The surface, its
 subject kinds, and its slot IDs are checked against a pinned snapshot of the 360
 catalog (`src/experience360-catalog.mjs`, guarded by a drift test) before any
 request; unknown fields, tenant/actor/policy/lens/paging/query fields, and
@@ -179,15 +184,15 @@ oversized values are rejected locally. Tenant and actor come only from the
 credential, and the server authorizes every call.
 
 ```sh
-aether experience360 frame get --surface agent360 --subject-kind agent --subject-id agent_123 --json
-aether access invoke experience360.frame.get --input-json '{"surface":"agent360","subject":{"kind":"agent","id":"agent_123"}}' --json
+aether experience360 frame get --surface profile360 --subject-kind entity --subject-id entity_123 --json
+aether access invoke experience360.frame.get --input-json '{"surface":"profile360","subject":{"kind":"entity","id":"entity_123"}}' --json
 ```
 
 ```js
 const frame = await access.experience360.frame({
-  surface: 'agent360',
-  subject: { kind: 'agent', id: 'agent_123' },
-  requested_slots: ['identity', 'tool_usage'],
+  surface: 'profile360',
+  subject: { kind: 'entity', id: 'entity_123' },
+  requested_slots: ['identity_spine', 'risk_summary'],
 });
 ```
 
@@ -213,6 +218,34 @@ string, and accepts only safe non-negative observation counts. Overview counts
 and grouping maps are validated; maps expose at most 50 bounded keys with
 non-negative integer values, and the `sampled` flag is set when local
 projection truncates a map.
+
+## Profile360 reads
+
+Four named reads cover the usual path: find an entity, open its profile, drill
+into a few slots, and cite the evidence.
+
+```sh
+aether profile360 search --email person@example.com --json     # -> entity_id
+aether profile360 get entity_123 --json                         # full frame
+aether profile360 slots entity_123 --slots risk_summary,value_summary --json
+aether profile360 evidence entity_123 --json                    # evidence only
+```
+
+```js
+const { data: found } = await access.profile360.search({ email: 'person@example.com' });
+const profile = await access.profile360.get(found.entity_id);
+const risk = await access.profile360.slots(found.entity_id, ['risk_summary']);
+const trace = await access.profile360.evidence(found.entity_id);
+```
+
+MCP hosts get `profile360_search`, `profile360_get`, `profile360_slot_get` and
+`profile360_evidence_get`, including over the hosted server with delegated OAuth
+(they need only `read`). Search sends the identifier in the request body
+(`POST /v1/profile/resolve`), never in the URL. Every slot carries a server
+freshness verdict (`fresh`, `stale` or `unknown`) next to its state; a `stale`
+or `unknown` slot is still returned and must not be treated as current. The
+evidence view copies each slot's evidence, provenance, freshness and reason
+codes from the server and leaves out slot content.
 
 ## Agent behavior reads
 
@@ -315,7 +348,7 @@ Native application provisioned by the existing Terraform Auth0 module:
 ```sh
 export AETHER_AUTH0_DOMAIN=your-tenant.us.auth0.com
 export AETHER_AUTH0_CLIENT_ID="$(terraform -chdir=infra/aws/terraform output -raw aether_cli_auth0_client_id)"
-export AETHER_AUTH0_AUDIENCE=https://api.aether.io
+export AETHER_AUTH0_AUDIENCE=https://api.aether.network
 ```
 
 The CLI opens Auth0's verification URL and prints the short user code. It does
@@ -431,7 +464,7 @@ Build the standalone Access Kit image from the repository root:
 ```sh
 docker build -f packages/access-kit/Dockerfile -t aether-access-kit .
 docker run --rm -p 8080:8080 \
-  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_URL=https://api.aether.network \
   -e AETHER_MCP_ALLOWED_HOSTS=mcp.example.com \
   -e AETHER_MCP_ALLOWED_ORIGINS=https://console.example.com \
   aether-access-kit
@@ -513,7 +546,7 @@ service is required for explicit environment credentials:
 
 ```sh
 docker run --rm \
-  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_URL=https://api.aether.network \
   -e AETHER_API_KEY \
   aether-access-kit node ./bin/aether.js entities list --json
 ```
@@ -550,7 +583,7 @@ aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 ACCESS_KIT_IMAGE="${ECR_REGISTRY}/aether-access-mcp@${ACCESS_MCP_IMAGE_DIGEST}"
 docker run --rm \
-  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_URL=https://api.aether.network \
   -e AETHER_API_KEY \
   "$ACCESS_KIT_IMAGE" node ./bin/aether.js entities list --json
 ```

@@ -1,5 +1,5 @@
-import aether, { type AetherConfig } from '@aether/web';
-import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
+import aether, { type AetherConfig } from '@olympuslabs/aether-web';
+import type { ConsentState, ConsentPurpose } from '@olympuslabs/aether-shared/consent';
 import type { SDKState, BatchHealth } from './types';
 
 const SDK_VERSION = '0.1.0-alpha.0';

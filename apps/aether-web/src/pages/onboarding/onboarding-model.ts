@@ -1,4 +1,4 @@
-import { SDK_VERSION, type SourcePlatform } from '@aether/shared';
+import { SDK_VERSION, type SourcePlatform } from '@olympuslabs/aether-shared';
 import type { ActivationState, ActivationStatus } from '@aether-app/features/activation/use-activation';
 
 /**
@@ -146,8 +146,10 @@ export interface SdkOption {
 }
 
 // Install + init snippets mirror the repo SDK references (docs/reference/
-// SDK-IOS.md, SDK-ANDROID.md, SDKS.md); native versions come from the shared
-// SDK_VERSION. YOUR_API_KEY is replaced by the issued key's prefix.
+// developer/install-the-sdk.md, SDK-IOS.md, SDK-ANDROID.md); every install line
+// pins the shared SDK_VERSION (pre-1.0 minors may break). YOUR_API_KEY and
+// YOUR_SITE_ID are filled by `snippetFor` with the full issued key, so a copied
+// snippet runs as-is. The server snippet never inlines its secret key.
 export const SDK_OPTIONS: readonly SdkOption[] = [
   {
     id: 'web',
@@ -158,7 +160,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'web',
     keyKind: 'publishable',
     keyPlatform: 'web',
-    snippet: "npm install @aether/web\n\nimport aether from '@aether/web';\naether.init({ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' });",
+    snippet: `npm install @olympuslabs/aether-web@${SDK_VERSION}\n\nimport aether from '@olympuslabs/aether-web';\naether.init({ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' });`,
   },
   {
     id: 'react',
@@ -169,7 +171,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'web',
     keyKind: 'publishable',
     keyPlatform: 'web',
-    snippet: "npm install @aether/web react\n\nimport { AetherProvider } from '@aether/web/react';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>",
+    snippet: `npm install @olympuslabs/aether-web@${SDK_VERSION}\n\nimport { AetherProvider } from '@olympuslabs/aether-web/react';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>`,
   },
   {
     id: 'react-native',
@@ -180,7 +182,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'react-native',
     keyKind: 'secret',
     keyPlatform: 'react-native',
-    snippet: "npm install @aether/react-native\n\nimport { AetherProvider } from '@aether/react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>",
+    snippet: `npm install @olympuslabs/aether-react-native@${SDK_VERSION}\ncd ios && pod install\n\nimport { AetherProvider } from '@olympuslabs/aether-react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>`,
   },
   {
     id: 'ios',
@@ -191,7 +193,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'ios',
     keyKind: 'secret',
     keyPlatform: 'ios',
-    snippet: `pod 'AetherSDK', '= ${SDK_VERSION}'\n\nlet config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nAether.shared.initialize(config: config)`,
+    snippet: `// Swift Package Manager: https://github.com/DammnThatsCrazy/aether-ios.git (exact: ${SDK_VERSION})\n// or CocoaPods:\npod 'AetherSDK', '${SDK_VERSION}'\n\nimport AetherSDK\n\nlet config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nAether.shared.initialize(config: config)`,
   },
   {
     id: 'android',
@@ -202,7 +204,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'android',
     keyKind: 'secret',
     keyPlatform: 'android',
-    snippet: `implementation("io.aether:sdk-android:${SDK_VERSION}")\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY")\nAether.initialize(application, config)`,
+    snippet: `// build.gradle.kts (Maven Central)\nimplementation("com.olympuslabsml:aether-android:${SDK_VERSION}")\n\nimport com.aether.sdk.Aether\nimport com.aether.sdk.AetherConfig\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY")\nAether.initialize(application, config)`,
   },
   {
     id: 'server',
@@ -213,9 +215,31 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'server',
     keyKind: 'secret',
     keyPlatform: 'node',
-    snippet: "npm install @aether/server\n\nimport { AetherServerSDK } from '@aether/server';\n\n// Server-side only. Never ship this key to a browser.\n// AETHER_API_KEY=YOUR_API_KEY\nconst aether = new AetherServerSDK({ writeKey: process.env.AETHER_API_KEY });",
+    snippet: `npm install @olympuslabs/aether-server@${SDK_VERSION}\n\nimport { AetherServerSDK } from '@olympuslabs/aether-server';\n\n// Server-side only. Set AETHER_API_KEY to the secret key above in your\n// server's environment; never ship it to a browser or app.\nconst aether = new AetherServerSDK({ writeKey: process.env.AETHER_API_KEY! });`,
   },
 ];
+
+/** The key the snippet should carry, when one has just been revealed. */
+export interface SnippetKey {
+  readonly key: string;
+  readonly siteId?: string;
+  /** Server-rendered CDN tag (publishable web keys only). */
+  readonly snippet?: string;
+}
+
+/**
+ * The install snippet for one SDK. With a freshly revealed key the snippet
+ * carries the full key (it is shown in full, with a copy button, right above),
+ * so the copied text works unedited. Without one it shows a placeholder of the
+ * right key class. The web row prefers the server-rendered CDN tag.
+ */
+export function snippetFor(sdk: SdkOption, shown: SnippetKey | null, siteId: string | null): string {
+  if (shown?.snippet && sdk.id === 'web') return shown.snippet;
+  const placeholder = sdk.keyKind === 'publishable' ? 'pk_YOUR_PUBLISHABLE_KEY' : 'YOUR_API_KEY';
+  return sdk.snippet
+    .replace(/YOUR_API_KEY/g, shown ? shown.key : placeholder)
+    .replace(/YOUR_SITE_ID/g, shown?.siteId ?? siteId ?? 'site_YOUR_SITE_ID');
+}
 
 /** The key label that ties a minted key to its SDK (one SDK = one key). */
 export function sdkKeyLabel(sdk: Pick<SdkOption, 'name'>): string {

@@ -6,13 +6,13 @@ This directory contains seven sample apps that demonstrate the Aether SDK first-
 
 | Example | Platform | SDK | Description |
 |---------|----------|-----|-------------|
-| `web-next/` | Web (Vite+React) | `@aether/web` | Full first-value journey in a modern React app, adapted from `tests/e2e/proof/apps/web/`. |
-| `web-script-tag/` | Web (plain HTML) | `@aether/web` (CDN) | Standalone HTML with the one-tag snippet — no bundler, no framework. |
-| `react-native/` | React Native (Expo) | `@aether/react-native` | Adapted from `tests/e2e/proof/apps/react-native/`. |
-| `ios-swift/` | iOS (Swift reference) | Native iOS SDK (via `@aether/react-native`) | Swift wrapper README pointing to `tests/e2e/proof/apps/ios/` for native SDK usage. |
-| `android-kotlin/` | Android (Kotlin reference) | Native Android SDK (via `@aether/react-native`) | Kotlin wrapper README pointing to `tests/e2e/proof/apps/android/` for native SDK usage. |
-| `server-node/` | Node.js server | `@aether/server` | Server-side first-value journey using the Aether Server SDK. |
-| `ecommerce-full-journey/` | Web (Vite+React) | `@aether/web` | Complete ecommerce flow: product_viewed → cart → checkout → payment → order_completed → conversion → flush. |
+| `web-next/` | Web (Vite+React) | `@olympuslabs/aether-web` | Full first-value journey in a modern React app, adapted from `tests/e2e/proof/apps/web/`. |
+| `web-script-tag/` | Web (plain HTML) | `@olympuslabs/aether-web` (CDN) | Standalone HTML with the one-tag snippet — no bundler, no framework. |
+| `react-native/` | React Native (Expo) | `@olympuslabs/aether-react-native` | Adapted from `tests/e2e/proof/apps/react-native/`. |
+| `ios-swift/` | iOS (Swift reference) | Native iOS SDK (via `@olympuslabs/aether-react-native`) | Swift wrapper README pointing to `tests/e2e/proof/apps/ios/` for native SDK usage. |
+| `android-kotlin/` | Android (Kotlin reference) | Native Android SDK (via `@olympuslabs/aether-react-native`) | Kotlin wrapper README pointing to `tests/e2e/proof/apps/android/` for native SDK usage. |
+| `server-node/` | Node.js server | `@olympuslabs/aether-server` | Server-side first-value journey using the Aether Server SDK. |
+| `ecommerce-full-journey/` | Web (Vite+React) | `@olympuslabs/aether-web` | Complete ecommerce flow: product_viewed → cart → checkout → payment → order_completed → conversion → flush. |
 
 Each example includes `.env.local` and `.env.staging` environment files for local and staging modes.
 

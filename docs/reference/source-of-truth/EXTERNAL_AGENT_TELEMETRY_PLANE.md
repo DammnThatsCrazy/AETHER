@@ -135,7 +135,10 @@ Scheduled behavior jobs (`AETHER_AGENT_BEHAVIOR_JOBS_ENABLED`, interval
 `AETHER_AGENT_BEHAVIOR_JOBS_INTERVAL_SECONDS`, default off) run under the
 `maintenance` worker role: stored daily behavior snapshots, drift between stored
 windows and Risk360 assessments from agent behavior evidence, for agents of
-active registered deployments.
+active registered deployments. Each pass also expires open agent continuity review items not reported
+for `AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS` (default 30, `0` disables). An
+expired item leaves the queue, is never merged or deleted, and reopens when the
+same evidence is reported again.
 Each window snapshot pages through exactly that window's facts, so newer traffic
 cannot crowd an earlier day out. A window too large to read whole within the page
 cap is skipped (`skipped_truncated_snapshots`) rather than overwrite a stored
@@ -151,7 +154,7 @@ hard-`False`.
 ### Example — Discord bot
 
 ```ts
-import { AgentTelemetryClient } from '@aether/server';
+import { AgentTelemetryClient } from '@olympuslabs/aether-server';
 
 const telemetry = new AgentTelemetryClient({
   writeKey: process.env.AETHER_WRITE_KEY!,

@@ -10,7 +10,7 @@ import {
   SOURCE_CLASS_DEFAULTS,
   canonicalSourceClass,
   type SourceClass,
-} from '@aether/shared/traffic-source';
+} from '@olympuslabs/aether-shared/traffic-source';
 
 /**
  * Customer-facing label for a (possibly legacy) source_class value.

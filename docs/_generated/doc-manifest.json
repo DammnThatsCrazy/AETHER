@@ -126,6 +126,23 @@
       "canonical_owner": "agent@aether"
     },
     {
+      "path": "docs/architecture/AGENT-DETECTION-RELIABILITY.md",
+      "title": "Agent Detection Reliability — Assessment and Remediation",
+      "slug": "architecture/agent-detection-reliability",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/AGENT-LAYER-PRODUCTION.md",
       "title": "Agent Layer Production Readiness",
       "slug": "operations/agent-layer-production",
@@ -2448,6 +2465,22 @@
       "canonical_owner": "architecture@aether"
     },
     {
+      "path": "docs/architecture/plans/PUBLIC-AGENT-REGISTRY.md",
+      "title": "Public Agent Registry — Zero-Install Agent, Principal and Relationship Resolution",
+      "slug": "plans/public-agent-registry",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "buyer",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/plans/RECONCILED_CONTROL_PHASES.md",
       "title": "Reconciled Control Plane — Phases",
       "slug": "plans/reconciled-control-phases",
@@ -4754,6 +4787,21 @@
       ],
       "status": "experimental",
       "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md",
+      "title": "Access Kit W3 Certification Runbook",
+      "slug": "runbooks/access-kit-w3-certification",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",

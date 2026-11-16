@@ -5,12 +5,12 @@ import {
   agentDeploymentEnvironments,
   agentDeploymentConsentModes,
   agentDeploymentStatuses,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import type {
   ExternalPlatform,
   AgentDeploymentEnvironment,
   AgentDeploymentConsentMode,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 const unknownSchema = z.unknown();
 const wrap = <T extends z.ZodType>(dataSchema: T) =>

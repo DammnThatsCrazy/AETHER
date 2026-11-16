@@ -83,8 +83,8 @@ Key P0 gaps:
 ## Phase 1 — Tenant Isolation Hardening (Complete)
 
 ### Files Changed
-- [x] `apps/aether-web/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation replaced with `classifyEdgeType()` from `@aether/shared`)
-- [x] `apps/aether-web/vite.config.ts` — extend `commonjsOptions.include` so Rollup resolves `@aether/shared` CJS exports
+- [x] `apps/aether-web/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation replaced with `classifyEdgeType()` from `@olympuslabs/aether-shared`)
+- [x] `apps/aether-web/vite.config.ts` — extend `commonjsOptions.include` so Rollup resolves `@olympuslabs/aether-shared` CJS exports
 - [x] `services/api/shared/graph/traversal.py` — added `tenant_id` param to BFS/path/temporal; two-set approach (visited + accepted)
 - [x] `services/api/graph/operational_intelligence/routes.py` — `graph_filter` now filters by tenantId; traversal calls pass `tenant_id`
 - [x] `tests/security/test_graph_tenant_isolation.py` — 8 adversarial tests; all pass

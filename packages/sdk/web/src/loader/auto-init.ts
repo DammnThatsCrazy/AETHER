@@ -34,7 +34,7 @@ export const DEFAULT_AUTO_INIT: Omit<AutoInitConfig, 'sdkKey' | 'siteId'> = {
   // (cdn.aether.network) — do not "unify" these two; they are separate
   // origins by design, and the API host is bedrock in
   // docs/product/productization/sdk-universal-ingestion-alignment/TARGET_ARCHITECTURE.md.
-  endpoint: 'https://api.aether.io',
+  endpoint: 'https://api.aether.network',
   autocapture: 'safe',
   consentMode: 'deferred',
   debug: false,

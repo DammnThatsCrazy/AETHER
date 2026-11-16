@@ -7,6 +7,8 @@ export interface TrafficSourceData {
     utmTerm?: string | null;
     utmContent?: string | null;
     referralToken?: string | null;
+    /** Signed per-recipient email click token from `?ae=`; verified server-side. */
+    clickToken?: string | null;
     clickIds: Record<string, string>;
     landingPage: string;
 }

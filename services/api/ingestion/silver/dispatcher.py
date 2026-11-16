@@ -61,6 +61,11 @@ from .projectors import (
 from .projectors.silver_graph_projector import SilverGraphProjector
 from journeys.comms.projector import CommsProjector, COMMS_TABLE
 from journeys.comms.contracts import COMMUNICATION_EVENT_TYPES
+from journeys.comms.click_token import (
+    apply_click_correlation_to_rows,
+    extract_and_strip_click_token,
+    resolve_click_correlation,
+)
 from journeys.traffic.referral_links import VerifiedReferralLinkRepository
 from journeys.traffic import metrics as traffic_metrics
 from journeys.traffic.shadow import shadow_compare_rows, is_shadow_enabled_for
@@ -472,6 +477,11 @@ def _emit_classification_metrics(rows: list[dict[str, Any]]) -> None:
         traffic_metrics.record_classification(
             str(source_class), str(row.get("proof_level") or "none")
         )
+        traffic_metrics.record_actor_detection(
+            str(row.get("actor_type") or "unknown"),
+            str(row.get("proof_level") or "none"),
+            str(row.get("verification_level") or "none"),
+        )
         if source_class == "direct_unknown":
             traffic_metrics.record_direct_unknown()
         conflicts = row.get("evidence_conflicts") or ()
@@ -540,6 +550,13 @@ class SilverDispatcher:
         # step also strips plaintext tokens and untrusted verified claims from
         # the event even when lookup fails.
         await _resolve_verified_referral(event)
+        # Signed per-recipient email click token (``ae``): verified for this
+        # tenant, stripped from every URL, never trusted from the client.
+        try:
+            await resolve_click_correlation(event)
+        except Exception as exc:  # never block Silver on correlation
+            logger.warning("click_correlation_error: %s", exc)
+            event.pop("_verified_click", None)
 
         is_comm_event = event_type in COMMUNICATION_EVENT_TYPES
         has_touchpoint_projector = any(
@@ -569,6 +586,7 @@ class SilverDispatcher:
                     if result.rows and result.table in (_TOUCHPOINT_TABLE, COMMS_TABLE):
                         if result.table == _TOUCHPOINT_TABLE:
                             _apply_verified_referral_to_rows(result.rows, event)
+                            apply_click_correlation_to_rows(result.rows, event)
                         await _resolve_campaign_rows(result.rows, table=result.table)
                     if result.rows and result.table == _TOUCHPOINT_TABLE:
                         _emit_classification_metrics(result.rows)
@@ -631,6 +649,7 @@ class SilverDispatcher:
         # must still prevent plaintext tokens or client-asserted verification
         # metadata from reaching Silver.
         _extract_and_sanitize_referral_token(event)
+        extract_and_strip_click_token(event)
         is_comm_event = event_type in COMMUNICATION_EVENT_TYPES
         has_touchpoint_projector = any(
             isinstance(candidate, TouchpointProjector) for candidate in projectors

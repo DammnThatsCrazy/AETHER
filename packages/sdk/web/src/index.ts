@@ -45,12 +45,12 @@ import { isCanonicalEventType } from './core/generated-consent-map';
 import {
   buildCanonicalConsentReceipt,
   type CanonicalConsentReceiptInput,
-} from '@aether/shared/consent-receipt';
+} from '@olympuslabs/aether-shared/consent-receipt';
 import {
   SDK_SIGNAL_SCHEMA_VERSION,
   type CommerceSignalType,
   type SDKCommerceSignal,
-} from '@aether/shared/commerce-bridge';
+} from '@olympuslabs/aether-shared/commerce-bridge';
 
 /**
  * BARE SDK signal name → wire event type. The SDK event plane speaks the
@@ -71,7 +71,7 @@ const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version
 // Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts (web
 // bundles standalone; literal kept in sync by scripts/validate_sdk_release_alignment.py).
 const CONTRACT_SCHEMA_VERSION = '1.0.0';
-const DEFAULT_ENDPOINT = 'https://api.aether.io';
+const DEFAULT_ENDPOINT = 'https://api.aether.network';
 
 class AetherSDK implements AetherSDKInterface {
   private config: AetherConfig | null = null;
@@ -94,6 +94,16 @@ class AetherSDK implements AetherSDKInterface {
   private fingerprintCollector: DeviceFingerprintCollector | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
+  /** Removes the SPA route hooks installed by setupSPATracking(). */
+  private spaTrackingTeardown: (() => void) | null = null;
+  /**
+   * Bumped by destroy(). Work started under one init (route hooks, config and
+   * identity requests, manifest callbacks) captures the generation and does
+   * nothing once it changes, so a destroy()/init() cycle (the React provider
+   * restarting for a new key or site) cannot have the previous install's late
+   * responses or retained hooks act on the replacement instance.
+   */
+  private initGeneration = 0;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
   private healthAgent: SDKHealthAgent | null = null;
@@ -342,6 +352,7 @@ class AetherSDK implements AetherSDKInterface {
    */
   async redeemJourneyHandoff(token: string): Promise<JourneyHandoffLink | null> {
     if (!this.config || !this.identityManager || !token) return null;
+    const generation = this.initGeneration;
     const sessionId = this.sessionManager?.getSession()?.id;
     if (!sessionId) return null;
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
@@ -358,6 +369,9 @@ class AetherSDK implements AetherSDKInterface {
       });
       if (!res.ok) return null;
       const body = await res.json() as { data?: Record<string, any> };
+      // Redeemed for an instance destroy() has since replaced: do not resume
+      // the old journey into the new install.
+      if (generation !== this.initGeneration) return null;
       const d = body.data;
       if (!d || d.link_basis !== 'explicit_handoff' || !d.journey_id) return null;
       const side = (x: Record<string, string> | undefined) => ({
@@ -480,7 +494,11 @@ class AetherSDK implements AetherSDKInterface {
     if (this.config?.autoResumeJourney !== false) {
       const newUserId = identity.userId !== priorUserId ? identity.userId : undefined;
       if (newUserId || data.email) {
+        // Captured before the async hash: identity data from this init must not
+        // be resolved under a replacement install's key.
+        const generation = this.initGeneration;
         this._hashEmail(data.email).then((emailHash) => {
+          if (generation !== this.initGeneration) return;
           if (emailHash === this._lastEmailHash && !newUserId) return;
           if (emailHash !== undefined) this._lastEmailHash = emailHash;
           this.resolveIdentity({ wallets: identity.wallets, userId: newUserId, emailHash }).catch(() => {});
@@ -510,12 +528,15 @@ class AetherSDK implements AetherSDKInterface {
 
   async flush(): Promise<void> {
     if (!this.eventQueue) return;
-    this.healthAgent?.setLastFlushStatus('flushing');
+    // Report on the agent this flush started under, not a replacement created
+    // by a destroy()/init() while it was in flight.
+    const agent = this.healthAgent;
+    agent?.setLastFlushStatus('flushing');
     try {
       await this.eventQueue.flush();
-      this.healthAgent?.setLastFlushStatus('success');
+      agent?.setLastFlushStatus('success');
     } catch (e) {
-      this.healthAgent?.setLastFlushStatus('failed');
+      agent?.setLastFlushStatus('failed');
       throw e;
     }
   }
@@ -537,6 +558,7 @@ class AetherSDK implements AetherSDKInterface {
 
   destroy(): void {
     this.log('info', 'Destroying Aether SDK');
+    this.initGeneration++;
     this.healthAgentConsentUnsub?.();
     this.healthAgentConsentUnsub = null;
     this.healthAgent?.stop();
@@ -586,6 +608,12 @@ class AetherSDK implements AetherSDKInterface {
       document.removeEventListener('visibilitychange', this.journeyVisibilityHandler);
     }
     this.journeyVisibilityHandler = null;
+    this.spaTrackingTeardown?.();
+    this.spaTrackingTeardown = null;
+    // Per-install de-dupe caches: a restarted SDK (new key or site) must
+    // resolve the same email again and record its own first route checkpoint.
+    this._lastEmailHash = undefined;
+    this.lastRouteCheckpointPath = null;
     this.currentJourney = null;
     this.lastJourneyPauseAt = null;
     this.initialized = false;
@@ -756,7 +784,12 @@ class AetherSDK implements AetherSDKInterface {
     },
     recordReceipt: async (input: CanonicalConsentReceiptInput) => {
       if (!this.config) throw new Error('Aether SDK is not initialized');
+      const generation = this.initGeneration;
       const receipt = await buildCanonicalConsentReceipt(input);
+      // Never record one install's consent under a replacement install's key.
+      if (generation !== this.initGeneration || !this.config) {
+        throw new Error('Aether SDK was restarted while recording consent; record it again');
+      }
       const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
       const response = await fetch(`${endpoint}/v1/consent/records`, {
         method: 'POST',
@@ -901,14 +934,18 @@ class AetherSDK implements AetherSDKInterface {
         customHeaders: this.config.advanced?.customHeaders ?? {},
         manifestPublicKey: this.config.advanced?.manifestPublicKey ?? '',
         getDynamicState: () => ({
-          authValid: true,
+          // False while the queue is paused after the API rejected the key.
+          authValid: !(this.eventQueue?.isAuthPaused() ?? false),
           consentValid: this.consentModule?.hasConsent('analytics') ?? true,
           walletConnected: (this.identityManager?.getWallets().length ?? 0) > 0,
         }),
       },
       this.eventQueue!,
     );
-    this.healthAgent.onManifestUpdate((manifest) => this.applyRemoteManifest(manifest));
+    const generation = this.initGeneration;
+    this.healthAgent.onManifestUpdate((manifest) => {
+      if (generation === this.initGeneration) this.applyRemoteManifest(manifest);
+    });
     this.healthAgent.start();
   }
 
@@ -947,6 +984,7 @@ class AetherSDK implements AetherSDKInterface {
   /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
   private async fetchConfig(): Promise<void> {
     if (!this.config) return;
+    const generation = this.initGeneration;
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
 
     try {
@@ -964,6 +1002,7 @@ class AetherSDK implements AetherSDKInterface {
         featureFlags?: { key: string; enabled: boolean; value?: unknown }[];
         funnelDefinitions?: FunnelDefinition[];
       };
+      if (generation !== this.initGeneration) return; // response for a destroyed instance
 
       // Load funnel definitions from backend
       if (data.funnelDefinitions && this.funnelModule) {
@@ -1270,7 +1309,7 @@ class AetherSDK implements AetherSDKInterface {
       userId: identity.userId,
       properties: eventProperties,
       context: {
-        library: { name: '@aether/web', version: SDK_VERSION },
+        library: { name: '@olympuslabs/aether-web', version: SDK_VERSION },
         page: typeof window !== 'undefined' ? getPageContext() : undefined,
         device,
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,
@@ -1385,6 +1424,7 @@ class AetherSDK implements AetherSDKInterface {
   }): Promise<void> {
     if (!this.config || !this.identityManager) return;
 
+    const generation = this.initGeneration;
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
     const currentAnonymousId = this.identityManager.getAnonymousId();
     const fp = this.fingerprintCollector;
@@ -1419,6 +1459,7 @@ class AetherSDK implements AetherSDKInterface {
 
       if (!res.ok) return;
       const data = await res.json() as { resolved: boolean; identity?: Record<string, unknown> };
+      if (generation !== this.initGeneration) return; // resolved for a destroyed instance
       if (!data.resolved || !data.identity) return;
 
       // Map snake_case backend fields to camelCase TypeScript type
@@ -1494,7 +1535,11 @@ class AetherSDK implements AetherSDKInterface {
       this.lastRouteCheckpointPath = path;
       this.checkpointJourney(path, { stepName: document.title || path, metadata: { source: 'spa_route' } });
     };
+    const generation = this.initGeneration;
     const onRoute = () => {
+      // A hook retained past destroy() (e.g. inside another library's later
+      // history wrapper, which teardown deliberately leaves in place) is inert.
+      if (generation !== this.initGeneration) return;
       this.pageView();
       // SPA route completion — correlate a pending navigation_intent.
       this.autoDiscovery?.recordArrival();
@@ -1504,9 +1549,21 @@ class AetherSDK implements AetherSDKInterface {
     };
     const origPush = history.pushState;
     const origReplace = history.replaceState;
-    history.pushState = (...args) => { origPush.apply(history, args); setTimeout(onRoute, 0); };
-    history.replaceState = (...args) => { origReplace.apply(history, args); setTimeout(onRoute, 0); };
-    window.addEventListener('popstate', () => { setTimeout(onRoute, 0); });
+    const patchedPush: History['pushState'] = (...args) => { origPush.apply(history, args); setTimeout(onRoute, 0); };
+    const patchedReplace: History['replaceState'] = (...args) => { origReplace.apply(history, args); setTimeout(onRoute, 0); };
+    const onPopState = () => { setTimeout(onRoute, 0); };
+    history.pushState = patchedPush;
+    history.replaceState = patchedReplace;
+    window.addEventListener('popstate', onPopState);
+    // Undone in destroy(), so a destroy()/init() cycle (for example the React
+    // provider restarting for a new key) does not stack a second set of hooks
+    // and record every navigation twice. The history methods are restored only
+    // if nothing has wrapped them since, so another library's patch survives.
+    this.spaTrackingTeardown = () => {
+      window.removeEventListener('popstate', onPopState);
+      if (history.pushState === patchedPush) history.pushState = origPush;
+      if (history.replaceState === patchedReplace) history.replaceState = origReplace;
+    };
   }
 
   private log(level: 'debug' | 'info' | 'warn' | 'error', ...args: unknown[]): void {

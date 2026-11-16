@@ -16,9 +16,9 @@ export interface SemanticContextEnvelope {
   timezone: string;
   /** UTC offset in minutes captured AT COLLECT TIME (not SDK init): -new Date().getTimezoneOffset(). */
   utcOffsetMinutes: number;
-  /** Where the timezone claim came from (canonical vocabulary in @aether/shared temporal.ts). */
+  /** Where the timezone claim came from (canonical vocabulary in @olympuslabs/aether-shared temporal.ts). */
   timeZoneSource: string;
-  /** Which clock produced the envelope timestamp (canonical vocabulary in @aether/shared temporal.ts). */
+  /** Which clock produced the envelope timestamp (canonical vocabulary in @olympuslabs/aether-shared temporal.ts). */
   clockSource: string;
   sessionId: string;
   screenPath: string[];

@@ -14,7 +14,7 @@ estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
   "apps/kyber-web/src/components/profile360/": "sha256:64796c4c115d0a65eb35e0596ee7a7047eb8b8ba3149eae9c206a9fd1156eb05"
-  "apps/kyber-web/src/features/profile360/": "sha256:3e4aac3b435b42d7435bb4af654be3f629cffd824766cc56ba6505e916003716"
+  "apps/kyber-web/src/features/profile360/": "sha256:26520d09c04b0030078fdd8878d3028bef7dc639c9c6bc653101476afa40c4be"
 ---
 # Aether Profile360 Frontend Architecture
 

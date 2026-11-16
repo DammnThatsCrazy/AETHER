@@ -87,6 +87,12 @@ transient-retry contract — including that `408 Request Timeout` and
 `425 Too Early` are retryable, not silent data loss — on both native
 implementations.
 
+The Web SDK's in-memory queue (persisted to `localStorage` on unload) is held to
+`maxQueueSize` by evicting the oldest events except `consent` and `identify`,
+counting each eviction as `queue_full`. A `401`/`403` holds the batch and
+pauses sending on a 1–15 minute backoff instead of dropping it; other non-`429`
+client errors stay terminal.
+
 ## Canonical envelope emission
 
 Every SDK stamps the canonical envelope context v1 fields it has a genuine

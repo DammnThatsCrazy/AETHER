@@ -14,7 +14,7 @@ import {
 } from '@aether-app/features/graph/use-graph-data';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
 import { PathInspector } from '@aether-app/components/graph/path-inspector';
-import type { RelationshipPath, PathExplanation, PathMode } from '@aether/shared/operational-intelligence';
+import type { RelationshipPath, PathExplanation, PathMode } from '@olympuslabs/aether-shared/operational-intelligence';
 import { api } from '@aether-app/lib/api/endpoints';
 
 // ── Tenant ID resolution ──────────────────────────────────────────────────────

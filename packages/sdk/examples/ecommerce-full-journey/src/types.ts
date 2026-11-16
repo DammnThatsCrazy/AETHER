@@ -1,5 +1,5 @@
 // packages/sdk/examples/ecommerce-full-journey/src/types.ts
-import type { ConsentState } from '@aether/shared/consent';
+import type { ConsentState } from '@olympuslabs/aether-shared/consent';
 
 export interface BatchHealth {
   accepted: number;

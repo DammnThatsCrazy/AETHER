@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:1dcf0c126f477760a98c6877653edd4a9a19bb4d1ba78f5b94a77ef15bf51d1b"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:683c8355a25835c0564e9755f2ddfc29384afe77cbacf0cd82927a02393fa534"
 ---
 
 # 360 System Blueprint
@@ -27,6 +27,32 @@ limits, and explicit unknown or degraded states. It does not create a parallel
 truth store or mutate graph state. Agent and execution views must distinguish
 observed activity from event-time authority to act, and attributed value from
 independently verified outcomes.
+
+## Slot freshness from source watermarks
+
+Freshness is measured against per-tenant pipeline watermarks, not against
+the age of the newest record: a person with no recent activity is not stale
+data. `services/api/shared/freshness/source_watermarks.py` keeps one
+watermark per (tenant, canonical authority). The owning writers advance it
+monotonically after each successful write: analytics events, delegation
+grants (`agent_access`), Silver comms facts, the graph mutation ledger
+(`relationship_facts`), location facts, computed economic results
+(`economic_facts`), AI execution facts (`ai_execution_facts`), and Risk360
+assessments. The value slots depend on both economic sources, matching what
+Economic360 reads for entity and Agent subjects; a tenant with no AI execution
+facts therefore reads `unknown`, never fresh. A surface's `freshnessPolicy.slots` names each slot's
+`maxAgeSeconds` and the watermarked authorities it depends on; the oldest of
+those watermarks decides the slot. Profile360 declares ten slots: sessions
+and communications 1 hour, risk 6 hours, relationships, agent delegations and
+value 24 hours, and location 7 days. Operators override a threshold with
+`EXPERIENCE360_FRESHNESS_MAX_AGE_OVERRIDES` (JSON, per surface and slot).
+
+Current frame reads carry `fresh` or `stale` with `sourceAsOf`, `ageSeconds`
+and `maxAgeSeconds`; a stale slot keeps its content and adds
+`slot_freshness_stale`. A source no writer has advanced leaves the slot
+`unknown` with `freshness_source_timestamp_missing`. Point-in-time reads
+(`asOf` set) are not judged against now. A watermark shows that the owning
+writer handled data for the tenant; it does not prove upstream completeness.
 
 ## Next implementation wave (2026-11-05)
 

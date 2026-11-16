@@ -14,7 +14,7 @@ import {
   validateRelationshipExtensions,
   type EconomicActionLike,
   type Handshake,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 // 1. Buyer agent sees a 402 response and records the handshake locally.
 let hs: Handshake = createHandshake({

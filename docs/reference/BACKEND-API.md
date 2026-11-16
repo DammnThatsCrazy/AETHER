@@ -24,20 +24,25 @@ reviewed_source_commits:
   - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
+  - {'commit': 'b8530123', 'reason': 'Reviewed atomic objective idempotency claims in services/api/actions/agent/runtime_repository.py. Retry and changed-content conflict semantics are unchanged; simultaneous first submissions now create one objective. No change to this document is needed.'}
+  - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; the freshness behavior is documented here.'}
+  - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
+  - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  "services/api/actions/": "sha256:91cdd186b7713453c7d6ea8eb0bf71f11250d5d60b03881277d6c830c2ae2ef0"
+  "services/api/actions/": "sha256:91cfc3c62393b72637056fc1608f98044dbd48be04e598c2566c8c56c0ca0f63"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
-  "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
-  "services/api/identity/": "sha256:82343e60e7de0cc13aa9518cc06872f43e232c69f9e212aa6b7288ba313953f8"
-  "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
-  "services/api/intelligence/": "sha256:f56736e8c0bdc2015fa25b602db1803dd46e0d68414c5c2aa343755c0b102c50"
-  "services/api/journeys/": "sha256:34e47fcaf6aaeae42d22ad4537cb05773babaa019b72312cbb964a5731cb32db"
+  "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
+  "services/api/identity/": "sha256:801f3896e6e1e1a8074a09ad8661ab795bb0863ab9c1e78d0be5dfaba4b69710"
+  "services/api/ingestion/": "sha256:da08cefeaf461b65f81aacc62aab001aa52050320c8f08ee005d90120d99c763"
+  "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
+  "services/api/journeys/": "sha256:b59b72d7771de8029a0fa1c84d69e48dc1dddd39f7d33e177e5171b4d6342616"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
-  "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
+  "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -941,12 +946,34 @@ provider, actor, verification level, or canonical campaign.
 
 | Priority | Signal | Confidence | Example |
 |----------|--------|------------|---------|
-| 1 | Machine user agent | 0.98 | `GPTBot` → crawler discovery, attribution-ineligible |
+| 1 | Declared AI agent / crawler user agent | 0.3–0.98 (see below) | `GPTBot` → crawler discovery, attribution-ineligible |
 | 2 | Verified referral link | 1.0 | controlled agent placement → verified provider/product evidence |
 | 3 | Click IDs | 1.0 | `gclid=abc` → google / cpc / Paid Search |
 | 4 | UTM params | 0.95 | `utm_source=newsletter` → newsletter / email / Email |
 | 5 | Referrer domain | up to 0.96 | `chatgpt.com` → OpenAI / ChatGPT / AI Referral |
 | 6 | No signals | 0.5 | → (direct) / (none) / Direct |
+
+**Declared agent verification.** A user-agent only declares an agent. The
+classifier grades it by what the ingestion server verified
+(`journeys/traffic/agent_verification.py`, provider ranges in
+`journeys/traffic/agent_provider_ranges.json`, refreshed by
+`scripts/refresh_agent_provider_ranges.py`):
+
+| Evidence | `proof_level` | `verification_level` | Confidence |
+|---|---|---|---|
+| Payload user-agent only | `declared` | `user_agent_claim` | 0.5 |
+| Real request header | `declared` | `user_agent_header` | 0.7 |
+| Header, client IP outside the provider's published range | `declared` | `user_agent_ip_mismatch` | 0.3 |
+| Header, client IP inside the provider's published range | `platform_verified` | `provider_ip_range` | 0.95–0.98 |
+
+The raw IP is used only for the range check and is never stored.
+
+**Actor evidence.** `actor_type` is set only from evidence: a declared actor,
+an `agentId`, a verified agent user-agent, or the web SDK's
+`context.device.automation.webdriver` flag (→ `machine`, evidence
+`actor:webdriver_flag`). With no evidence, `actor_type` is `unknown` — never
+`human`. `actor_detection_total{actor_type,proof_level,verification_level}`
+measures the split.
 
 **Supported Click IDs (12):** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
 
@@ -1808,6 +1835,7 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/identifiers` | All linked wallets, emails, devices, sessions, social handles |
 | GET | `/v1/profile/{user_id}/provenance` | Source attribution across identity, onchain, social data |
 | GET | `/v1/profile/resolve` | Resolve any identifier to canonical profile_id (query params: `wallet`, `email`, `device`, `session`, `social`, `customer`) |
+| POST | `/v1/profile/resolve` | Same resolution with exactly one identifier in the JSON body (`wallet`, `email`, `device`, `session`, `social` or `customer`), so the identifier never appears in a URL; a read (`read` permission), on the delegated-MCP read allowlist |
 | GET | `/v1/profile/{user_id}/lake/{domain}` | Domain-specific Gold data (identity, market, onchain, social) |
 | GET | `/v1/profile/{user_id}/campaigns` | Campaign attribution derived from analytics event stream |
 | GET | `/v1/profile/{user_id}/tier` | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank |
@@ -1937,6 +1965,14 @@ providers; it does not create a separate truth store or write graph state.
 |--------|----------|-------------|
 | POST | `/v1/experience360/frames` | Compose a product 360 frame; tenant scope comes from authenticated request state and policy runs before provider reads |
 | GET | `/v1/experience360/catalog` | Return all catalogued surfaces and technical-provider registration state |
+
+Frame slots carry a freshness verdict when the surface declares
+`freshnessPolicy.slots` (Profile360 today). On a current read, a slot is
+`fresh` or `stale` against the tenant's source watermarks, with `sourceAsOf`,
+`ageSeconds` and `maxAgeSeconds`; a stale slot keeps its content and adds the
+reason `slot_freshness_stale`. A source with no watermark reads `unknown`.
+Point-in-time reads (`asOf`) are not evaluated. Thresholds are overridable with
+`EXPERIENCE360_FRESHNESS_MAX_AGE_OVERRIDES`.
 
 The following authority writes feed partial 360 projections. They use the
 authenticated tenant and actor rather than caller-supplied identity:
@@ -3960,7 +3996,7 @@ All routes need `agent:manage` and the deployment registry flag. Tenant scope co
 - Value 360 (`economic360`) adds an `agent_mediated_activity` section: not applicable to non-agent subjects; for a canonical Agent it uses the tenant-admin identity binding, reports totals per currency as `reported` until confirmed, counts one correlated purchase once across its lifecycle phases (initiated, authorized, settled) while separate purchases stay distinct, and is `unknown` without a binding.
 - `GET /v1/agent/agents/principals/{entity_id}/agents` — `agent:manage`, registry flag. Agents acting for one person, linked only by an active recorded delegation grant from that person or a declared beneficiary on the agent's own facts, with usual disposition, decision count and human-agent coupling (approval latency, escalations, overrides). Never an identity merge (`identity_merge: not_performed`); at most 25 agents, with `source_truncated` when a fact read was capped.
 - `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` — `agent:manage`, registry flag. One reconstructed DecisionEnvelope (open or closed, with missing parts listed), its evidence-association attribution, the nine responsibility roles, and a counterfactual labelled `counterfactual — not observed` that ranks the whole post-removal choice set (already-permitted options included) and reports `changes_choice`. Returns 404 when the decision is not the named agent's or belongs to another tenant.
-- `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm` and `.../reject` — `agent:manage`, registry flag. Records a reviewer decision on one open `agent_continuity_candidate` item that touches this agent's source identities: `confirmed` (the deployments report one logical agent) or `rejected` (distinct agents). Review context only: nothing is merged, bound or relinked, and the response always carries `merge_performed: false` and `authority: "none"`. Decided items leave the queue shown in Agent 360. Repeating the same decision is idempotent, and the opposite decision returns 409. Another tenant's item, another agent's item, or an unknown id returns 404. The late-binding approve and merge routes cannot load these items.
+- `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm` and `.../reject` — `agent:manage`, registry flag. Records a reviewer decision on one open `agent_continuity_candidate` item that touches this agent's source identities: `confirmed` (the deployments report one logical agent) or `rejected` (distinct agents). Review context only: nothing is merged, bound or relinked, and the response always carries `merge_performed: false` and `authority: "none"`. Decided items leave the queue shown in Agent 360. Repeating the same decision is idempotent, and the opposite decision returns 409, as does a decision on an item that expired unreviewed (see `AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS`). Another tenant's item, another agent's item, or an unknown id returns 404. The late-binding approve and merge routes cannot load these items.
 
 ### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
 
@@ -3986,8 +4022,6 @@ When on, canonical activity emitted by the silver projectors requests a debounce
   - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.
 
   A token binds to the first anonymous ID that presented it (only its SHA-256 is stored), so it cannot attribute another device. Apple Ads campaigns only. Other ad networks stay Direct / Unknown at user level.
-
-  Recording an attribution requests a rebuild of the journey it belongs to: through the debounced activity rebuild when `JOURNEY_ACTIVITY_REBUILD_ENABLED` is on, otherwise through the touchpoint rebuild path directly. Attribution often resolves after the install's activity was compiled, so this puts the acquisition touchpoint into the journey even if the user does nothing else. The rebuild is best-effort; a failure never loses the recorded attribution.
 
 Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handoff_sweep`, maintenance role) and erased by anonymous ID through the `journey_handoffs` DSR component.
 
@@ -4409,6 +4443,19 @@ Communications tenant surface (`/v1/comms/*`):
   source-role evidence. HMAC authenticates the source, not participant identity
   or role. Provider conversation IDs remain source claims until canonical
   Conversation membership and message coverage are joined.
+- `POST /v1/comms/click-tokens` — issues signed per-recipient click tokens
+  (tenant-bound, expiring, key-versioned, no raw PII; a supplied
+  `recipient_email` is hashed to a tenant-scoped alias) for the sender to
+  append to each recipient's links as `?ae=<token>`.
+  `POST /v1/comms/click-tokens/verify` returns the correlation evidence for one
+  token. The same verification runs automatically at ingestion: the web SDK
+  forwards `ae` as `context.trafficSource.clickToken`, and the Silver dispatcher
+  stamps campaign/message/link lineage on the landing touchpoint. It attributes
+  an anonymous visit to the recipient (`identity_resolution_method="signed_click"`,
+  confidence 0.9) only when the alias maps to exactly one tenant-owned entity.
+  A visitor already bound to a different entity is recorded as `forwarded_link`
+  (0.4) and their identity is never reassigned. The token is removed from stored
+  URLs either way.
 - `GET /v1/comms/entitlement` — the tenant's comms plan entitlement, current
   connection usage, and quota state (`allowed` / `quota_approaching` /
   `quota_reached` / `upgrade_required`).

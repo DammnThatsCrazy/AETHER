@@ -5,7 +5,7 @@
  * host app injects the transport (`fetch`) and an auth-token provider, so the same
  * client runs under a real device runtime, a test harness, or a Node script.
  */
-import type { InstallationAppKind } from '@aether/shared';
+import type { InstallationAppKind } from '@olympuslabs/aether-shared';
 
 /** Which product plane the app is bound to. An Aether token can never call Kyber. */
 export type MobileAppKind = InstallationAppKind; // 'aether' | 'kyber'

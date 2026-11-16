@@ -245,4 +245,17 @@ locals {
   # exist — inferring it would report `dedicated` for any profile that simply
   # had more than one service, which is exactly what a consolidated profile has.
   runtime_execution_mode = local.runtime_profile.execution_mode
+
+  # The customer Access Kit MCP service is declared per profile under
+  # `customer_services.access-mcp` rather than `services`, because `services`
+  # becomes the worker for_each. Staging multiplies its fixed count by the
+  # lifecycle state (1 awake, 0 asleep). It has no autoscaling target, so no
+  # demand metric can scale it back out while staging sleeps. Other profiles
+  # keep the reviewed access_mcp_desired_count input.
+  access_mcp_runtime = try(local.runtime_profile.customer_services["access-mcp"], null)
+  access_mcp_desired_count = (
+    local.staging && local.access_mcp_runtime != null
+    ? local.access_mcp_runtime.desired_count * local.staging_state_multiplier
+    : var.access_mcp_desired_count
+  )
 }

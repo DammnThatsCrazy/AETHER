@@ -60,7 +60,7 @@ describe.skipIf(!API_KEY)('FPS-202: Graph Reconciliation', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       identity: { anonymous_id: 'anon_recon_001', user_id: 'user_recon_001' },
       timestamp: new Date().toISOString(),
       properties: {

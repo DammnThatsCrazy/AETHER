@@ -1405,10 +1405,10 @@ The physical SDK architecture should be:
 Then:
 
 ```text
-@aether/web
+@olympuslabs/aether-web
 @aether/ios
 @aether/android
-@aether/react-native
+@olympuslabs/aether-react-native
 ```
 
 provide platform-specific collection.
@@ -2021,7 +2021,7 @@ timezone = America/New_York
 UTC offset = -240
 campaign evidence
 surface = web
-SDK = @aether/web 9.x
+SDK = @olympuslabs/aether-web 9.x
 ```
 
 SDK emits:

@@ -22,7 +22,7 @@ Add the Aether iOS SDK to your `Package.swift` dependencies:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/aether/ios-sdk", from: "0.1.0-alpha.0")
+    .package(url: "https://github.com/DammnThatsCrazy/aether-ios.git", from: "0.1.0-alpha.0")
 ]
 ```
 
@@ -33,7 +33,7 @@ targets: [
     .target(
         name: "MyApp",
         dependencies: [
-            .product(name: "Aether", package: "aether-ios-sdk")
+            .product(name: "AetherSDK", package: "aether-ios")
         ]
     )
 ]
@@ -44,7 +44,7 @@ targets: [
 If your project uses CocoaPods, add the pod to your `Podfile`:
 
 ```ruby
-pod 'Aether', '~> 0.1.0-alpha.0'
+pod 'AetherSDK', '0.1.0-alpha.0'
 ```
 
 Then run `pod install`.
@@ -53,7 +53,7 @@ The exact source URL and version are determined by the release artifact. For a p
 
 ## Add your key
 
-You need a tenant ID and an API key for the environment you are targeting. For a proof run, use the proof tenant credentials from the staging environment. For local development, use your local tenant credentials. API keys are provisioned per tenant. See [Tenant Setup](/docs/developer/tenant-setup.md).
+You need the SDK key Aether issued for this app or site in the environment you are targeting (onboarding issues one per SDK; browser SDKs get a site-bound publishable `pk_` key). The key identifies the tenant, so there is no separate tenant ID. For a proof run, use the proof tenant credentials from the staging environment. For local development, use your local tenant credentials. API keys are provisioned per tenant. See [Tenant Setup](/docs/developer/tenant-setup.md).
 
 Do not commit API keys to the repository. Read them from the environment, your app's secret store, or the build configuration that supplies secrets at build time.
 
@@ -62,22 +62,26 @@ Do not commit API keys to the repository. Read them from the environment, your a
 Initialize the SDK early in your app's lifecycle, typically in `application(_:didFinishLaunchingWithOptions:)` or your app's entry point.
 
 ```swift
-import Aether
+import AetherSDK
 
-Aether.initialize(
-    tenantId: "aether-proof-tenant",
-    apiKey: Secrets.aetherApiKey,
-    appId: "my-ios-app"
-)
+let config = AetherConfig(apiKey: Secrets.aetherApiKey)
+Aether.shared.initialize(config: config)
+
+// Events are gated by consent. Grant the purposes your consent UI collected.
+Aether.shared.grantConsent(categories: ["analytics"])
 ```
 
-Initialization configures the SDK with your tenant, app, and site metadata. The SDK does not start emitting until you call the tracking methods, but it does validate the configuration and prepare the batch queue.
+`AetherConfig(apiKey:)` takes the key Aether issued for this app; the tenant is
+derived from the key on the server, so there is no tenant ID to pass. The
+ingestion endpoint defaults to `https://api.aether.network` (override with
+`config.endpoint`). Initialization prepares the batch queue and session; events
+are sent once you call the tracking methods below.
 
 If initialization fails, the SDK surfaces a clear error. A failure to initialize is a reportable failure in the proof spine, with reason `INITIALIZATION_FAILED` and likely owning subsystem iOS SDK.
 
 ## Emit a heartbeat
 
-Every Aether SDK emits periodic heartbeat events to confirm liveness and session continuity. The iOS SDK emits the first heartbeat on initialization and subsequent heartbeats at the configured interval.
+Every Aether SDK emits periodic heartbeats to confirm liveness. The iOS SDK sends the first heartbeat when `initialize(config:)` runs and then every 60 seconds. With `config.privacy.gdprMode` enabled, heartbeats start only once `analytics` consent is granted.
 
 The heartbeat includes session state, SDK version, and contract version. See [SDK Heartbeat](/docs/sdks/heartbeat.md) for the full heartbeat contract.
 
@@ -85,14 +89,15 @@ In a proof run, the heartbeat is verified by the proof iOS app's heartbeat contr
 
 ## Track a screen view
 
-The canonical screen view entry point is `observe(type, properties)` with a canonical screen view type.
+Use `screenView(_:properties:)`. Property values are wrapped in `AnyCodable`.
 
 ```swift
-Aether.observe("screen_view", [
-    "screen_name": "Home",
-    "screen_class": "HomeViewController"
+Aether.shared.screenView("Home", properties: [
+    "screen_class": AnyCodable("HomeViewController")
 ])
 ```
+
+For other canonical event types, use `Aether.shared.observe(_:properties:)`.
 
 The event type must be a canonical type from the event registry. Non-canonical types are ignored at ingestion. See [SDK Ingestion Contract](/docs/sdks/ingestion-contract.md) and [Event Contracts](/docs/sdks/event-contracts.md).
 
@@ -103,10 +108,11 @@ In a proof run, the tracked screen view is verified by the proof iOS app's track
 Attach an identity hint so the graph can associate events with a known user.
 
 ```swift
-Aether.identify("user_123", [
-    "email": "user@example.com",
-    "name": "Example User"
-])
+Aether.shared.hydrateIdentity(IdentityData(
+    userId: "user_123",
+    email: "user@example.com",
+    traits: ["name": AnyCodable("Example User")]
+))
 ```
 
 Identity hints are not identity resolution. They are hints the SDK sends so the backend can associate events. See [Tenant Setup](/docs/developer/tenant-setup.md) for identity merge rules.
@@ -137,9 +143,9 @@ In a proof run, ATT gating is verified on a physical device where ATT is enabled
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| SDK does not initialize | Missing or invalid tenant ID or API key | Check the API key and tenant ID. Confirm the SDK is initialized early in the app lifecycle. |
-| No heartbeat in the Aether UI | SDK did not emit a heartbeat, or the event did not reach ingestion | Check the SDK's health surface where applicable. Confirm the SDK is initialized. |
-| Screen view not in the Aether UI | Event type is non-canonical, or the event did not reach ingestion | Confirm the event type is canonical. Check the ingestion surface. |
+| SDK does not initialize | Missing or invalid API key | Check the API key issued for this app. Confirm the SDK is initialized early in the app lifecycle. |
+| No heartbeat in the Aether UI | SDK did not emit a heartbeat, or the event did not reach ingestion | Confirm the SDK is initialized. In GDPR mode, confirm `analytics` consent was granted. |
+| Screen view not in the Aether UI | Consent not granted, or the event did not reach ingestion | Confirm `analytics` consent is granted. Call `Aether.shared.flush()` and check the ingestion surface. |
 | Identity not associated | Identity hint not sent, or identity resolution not configured | Confirm the identify call fired. Check the tenant's identity merge rules. |
 | Fingerprinting gated incorrectly | ATT status or consent state not as documented | Check the ATT status and the analytics consent state. Review the privacy parity contract. |
 | Build fails with privacy manifest error | Privacy manifest missing or malformed | Confirm the privacy manifest is bundled via `Package.swift` resources. |

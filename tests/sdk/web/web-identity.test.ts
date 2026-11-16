@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { EventEnvelope } from '@aether/proof-contracts';
 import { identifyEventFixture } from '@aether/proof-fixtures';
 
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 describe('FPS-053: Web SDK Identity', () => {
   it('should set anonymous identity before login', () => {

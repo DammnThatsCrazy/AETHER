@@ -28,7 +28,7 @@ work order; **the highest level reached here is E4 (hosted `ci / verdict`); E5 t
 | Response | Bare frame (no `{data}` envelope); adapter returns it unmodified |
 | Meter / limit | Per-tenant burst RPM, plus a per-credential, per-capability cap (default 120 per minute, `ACCESS_KIT_CREDENTIAL_RPM`) on the same limiter. No plan/ACU gate (`/v1/experience360/*` matches no `SERVICE_CATALOG` pattern); usage is non-billable |
 | Retry | Pure read, single attempt in the adapter, no retry loop |
-| Transports | Node client, CLI, local MCP (`access_invoke_read`). Hosted MCP OAuth: **unsupported** (see gaps) |
+| Transports | Node client, CLI, local MCP and hosted MCP (`access_invoke_read`, plus the named `profile360_*` tools). The frames route is on the delegated-MCP OAuth read allowlist (fixture-tested; no live hosted login yet) |
 | Tests | `packages/access-kit/test/experience360.test.mjs`; `services/api/tests/unit/test_experience360_frames_http_contract.py` |
 
 ## Slot launch matrix (first slice)
@@ -40,12 +40,13 @@ Server vocabulary is preserved verbatim; the adapter never promotes a state.
 | Backed and testable | Profile360 `identity_spine`, `entity_identity`, `known_unknown_resolution`, `evidence_trace`, `evidence_and_limitations` (subject kind `entity`) | Recommended first slice |
 | Partial, safe degraded read | Profile360: 9 slots flagged partial | Readable; partial/unknown preserved |
 | Unbound | Profile360 `likely_next_states` | Server reports unknown; never complete |
-| Catalog-only / other surfaces | Agent360, Journey360, Execution360, Risk360 and the rest of the 18 surfaces | Allowlisted by the adapter, but not individually audited in W0 |
+| Catalog-only / other surfaces | Agent360, Journey360, Execution360, Risk360 and the rest of the 18 surfaces | Not offered by the adapter (narrowed to Profile360); not individually audited |
 | Denied | Slots whose authority domain the actor lacks (e.g. EDITOR → `tenant_operator` lacks `data_exchange`, so `evidence_*` are `suppressed`) | HTTP 200, per-slot `suppressed`, no `content` |
 
-The adapter allowlists all 18 surfaces rather than only Profile360 (the
-narrower W0 recommendation). Narrowing is a small schema change if the
-orchestrator wants it. A frame existing is not a claim that a surface is complete.
+The adapter now allows only Profile360, the W0 recommendation
+(`ACCESS_KIT_FRAME_SURFACES` in `packages/access-kit/src/experience360.mjs`).
+Adding a surface requires its own slot audit. A frame existing is not a claim
+that a surface is complete.
 
 ## Dependency ledger
 
@@ -59,10 +60,23 @@ orchestrator wants it. A frame existing is not a claim that a surface is complet
 | Source-linked docs | `mcp-api-cli-access-kit.md` links this package and needs review and restamp. |
 | W1 triage | Closed on the rebased base (`af3f0af62`). The 4 failures seen on `46cbb7141` were reduced to 1 by upstream work: `test_experience360_agent_outcomes_frame` asserted section provenance only, but Outcome360 now emits a claim-kind provenance entry, so the test now asserts section and claim provenance separately. `test_usage_summary_itself_is_not_metered` failed because no exclusion existed; `billing.usage.summary.read` is now excluded from interaction metering. Hosted `ci / verdict` was green on #852; the payment/spending-limit status was not checked. |
 | W2 server gaps | Fixed (see above). Server request bounds added: at most 64 slots (each 1 to 128 characters), 16 lens IDs, 256-character subject ID, `purpose`, and `authorizationContextRef`, and a 64-character `asOf`. |
-| W3 | Deferred by the user until development is merged to staging. Not attempted. |
+| W3 | Unblocked: development has been promoted through staging to main (#867). The certification script (`packages/access-kit/scripts/w3-certify.mjs`) and runbook (`docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md`) exist; the run itself waits for the staging hosted-MCP enablement and has not been executed. |
 | W4 | Closed with documented decisions in `access-kit-w4-limits-contract.md`: per-credential, per-capability cap (default 120 per minute, `ACCESS_KIT_CREDENTIAL_RPM`), read-only audit-versus-usage reconciliation, input bounds, single-attempt adapter, non-billable attribution. Frames are included on every plan and non-billable by decision (the service catalog is a priced registry); no spend budget applies while reads are non-billable. Reconciliation runs daily (`access_reconciliation` worker, `maintenance` role) and on demand (`GET /v1/billing/usage/access-reconciliation`). |
 | W5 | Owner gaps closed and tested (`access-kit-w5-action-owner-survey.md`): reviewer identity, expiry, create idempotency, atomic transitions, consent gate for end-user delivery, effect state, and compensation requests. No Access Kit action operation is declared; adding one is a separate opt-in decision that also needs W3 live proof. |
 | W6 | Docs and operator runbook added to `mcp-api-cli-access-kit.md`. A clean `npm pack` and `npm install` into an empty directory exposes `experience360.frame.get` and the `aether experience360 frame get` command, and `npm audit` on that install reports 0 vulnerabilities after the `zod` pin moved from 4.2.0 to 4.6.7 (both `package-lock.json` and `pnpm-lock.yaml` updated, `npm ci` and `pnpm install --frozen-lockfile` pass). aether-web has a per-slot frame display (`features/experience-frame`, mounted as the Campaign 360 "Frame" tab) that shows slot state, reason codes, limitations, evidence counts, and policy exactly as the server sent them, and never renders slot content. kyber-web gets no frame display by design: the frames route is bound to the authenticated tenant, while Kyber is the cross-tenant operator plane on workforce sessions (`require_kyber_operator`), so an operator view would need its own contract. Not done: remote MCP login conformance (needs a live tenant, deferred with W3). |
+
+## Design-partner branch (`access-kit-design-partner`, 2026-11-15)
+
+| Item | State |
+|---|---|
+| Adapter surface | Narrowed to `profile360`, the only surface audited for design-partner use; the generic frame read rejects other surfaces before any request. |
+| Named reads | `profile360.search` (`POST /v1/profile/resolve`, identifier in the body), `profile360.get`, `profile360.slot.get` (up to 8 slots) and `profile360.evidence.get`, over CLI, local and hosted MCP (named tools, also for delegated OAuth) and the Node client. |
+| Freshness | Ten Profile360 slots carry fresh/stale/unknown verdicts from per-tenant source watermarks advanced by the owning writers (value slots require both the computed-economics and AI-execution-fact watermarks) (sessions/communications 1h, risk 6h, relationships/delegations/value 24h, location 7d). |
+| Value | `value_summary` and `economic_value_context` join Outcome360 outcomes for the same-id human (`user`) subject of an entity request. |
+| Staging hosted MCP | Covered by the wake/sleep lifecycle (`customer_services.access-mcp`, 1 awake / 0 asleep, no autoscaling target); disabled until the staging repository, image and live apply policy exist. |
+| Host registration | Opt-in `enable_access_mcp_dcr`: Auth0 DCR and CIMD with a read-only third-party default grant; idle registrations pruned by `scripts/prune_auth0_mcp_clients.py`. |
+| Objective idempotency | Simultaneous first submissions now create one objective (conditional key claim). |
+| Readiness | `Access Kit (MCP / CLI / API)` scored 3/5 (pre-production) in `scripts/production_status.py`, with a matching `config/readiness/features/access-kit.yaml` record. |
 
 ## Evidence matrix
 
@@ -72,6 +86,6 @@ orchestrator wants it. A frame existing is not a claim that a surface is complet
 | E2 local focused | Access Kit `npm test`: 77 pass, 0 fail. API tests (Python 3.11): 343 pass, 0 fail in `-k "experience360 or economic360 or cross_360 or intelligence_projection or access_kit or middleware or route_polic or mcp"` |
 | E3 fixture integration | Mock-fetch parity across Node/CLI/MCP, with negative controls |
 | E4 hosted `ci / verdict` | Passed on #852 (26 checks); the backend suite ran 12,989 passed, 0 failed, 0 errors, and `make verification-disposition` passed 42 of 42 |
-| E5 staging | Not run: `development` has not been merged to `staging`. Deferred by the user |
+| E5 staging | Not run. The code reached `staging` with #867, but the Access Kit W3 run has not been executed; the hosted MCP needs the ordered staging enablement first |
 | E6 real tenant / provider | Not run, unknown |
 | E7 release | Not run |

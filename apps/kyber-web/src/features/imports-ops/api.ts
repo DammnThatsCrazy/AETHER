@@ -7,16 +7,16 @@
  * { data, status, timestamp } envelope.
  *
  * Rollup-safe imports: runtime const arrays via a plain import, types via
- * `import type`, both resolving to @aether/shared's built dist.
+ * `import type`, both resolving to @olympuslabs/aether-shared's built dist.
  */
 import { z } from 'zod';
 import { restClient } from '@kyber/lib/api';
-import type { ImportStatus, ImportSession } from '@aether/shared';
+import type { ImportStatus, ImportSession } from '@olympuslabs/aether-shared';
 
-// Runtime status tuple for `z.enum(...)`. Kyber bundles @aether/shared from its
+// Runtime status tuple for `z.enum(...)`. Kyber bundles @olympuslabs/aether-shared from its
 // CJS `dist` without the CJS→ESM interop that apps/aether-web configures via
 // `build.commonjsOptions` — so a runtime `import { importStatuses }` cannot be
-// rollup-bundled in this workspace (every other kyber file imports @aether/shared
+// rollup-bundled in this workspace (every other kyber file imports @olympuslabs/aether-shared
 // as `import type` only). We mirror the canonical list locally and bind it to the
 // shared ImportStatus union so any drift fails typecheck in both directions.
 const importStatuses = [
@@ -66,7 +66,7 @@ export const importSessionSchema = z.object({
 export type ImportSessionRecord = z.infer<typeof importSessionSchema>;
 
 // Re-export the shared contracts this operator feature is built around so callers
-// can lean on the canonical @aether/shared types.
+// can lean on the canonical @olympuslabs/aether-shared types.
 export type { ImportStatus, ImportSession };
 
 export const importCommitSchema = z.object({

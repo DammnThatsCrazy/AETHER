@@ -100,7 +100,7 @@ These are measurements, each tied to a ledger row.
   config that includes 93 TypeScript files under `tests/`, and no workflow,
   Makefile target, package script or suite registers it. Run by hand on
   2026-10-09 it executed 74 files (580 tests) green, 10 files failed to resolve
-  `@aether/web`, and 9 were skipped. This is a verification gap before it is
+  `@olympuslabs/aether-web`, and 9 were skipped. This is a verification gap before it is
   dead weight. Status: #741 registered them as the PR-lane suite
   `functionality-proof-ts` (84 files / 666 tests green, 9 skipped by
   `describe.skip`); the next step is to map each file's invariant to a proof
@@ -272,6 +272,10 @@ New capability flags are added default-off and must be read by code
 
 None is a profile. Staging turns them on through the release manifest's
 `task_environment`, not a new deployment posture.
+
+`AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS` (default 30, `0` disables) is a
+retention setting, not a flag. It only takes effect where the existing
+`AETHER_AGENT_BEHAVIOR_JOBS_ENABLED` worker runs, and that stays off by default.
 
 **Staging holds.** A push to `main` builds an immutable release and, through
 `deploy.yml`, rolls it out to staging only when the repository variable

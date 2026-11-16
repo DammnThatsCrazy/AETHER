@@ -9,7 +9,23 @@ export type AccessOperationId =
   | 'agents.behavior'
   | 'agents.decision'
   | 'experience360.frame.get'
+  | 'profile360.get'
+  | 'profile360.slot.get'
+  | 'profile360.evidence.get'
+  | 'profile360.search'
   | 'usage.summary';
+
+/** Exactly one identifier; it is sent in the request body, never the URL. */
+export type Profile360Identifier =
+  | { email: string } | { wallet: string } | { device: string }
+  | { session: string } | { social: string } | { customer: string };
+
+export interface Profile360ReadOptions {
+  /** Defaults to 'entity'. */
+  subject_kind?: 'profile' | 'entity' | 'agent' | 'anonymous_subject' | 'account_member' | 'cluster';
+  /** RFC 3339 point in time; freshness is evaluated only for current reads. */
+  as_of?: string;
+}
 
 export type AccessServerPermission = 'read' | 'agent:manage';
 
@@ -33,11 +49,8 @@ export interface AccessResult<T = Record<string, unknown>> {
   interaction: Record<string, unknown>;
 }
 
-export type Experience360SurfaceId =
-  | 'account360' | 'agent360' | 'campaign360' | 'commerce360' | 'communications360'
-  | 'episode360' | 'execution360' | 'identity360' | 'journey360' | 'location360'
-  | 'memory360' | 'profile360' | 'risk360' | 'signals360' | 'social360'
-  | 'support360' | 'value360' | 'workflow360';
+/** Surfaces the Access Kit exposes; others are catalogued but not yet audited for this adapter. */
+export type Experience360SurfaceId = 'profile360';
 
 /** Bounded input. There is no tenant, actor, policy, query, or paging field by design. */
 export interface Experience360FrameInput {
@@ -116,6 +129,16 @@ export interface AccessClient {
   experience360: {
     /** POST /v1/experience360/frames, a bounded read. Single attempt, no retry. */
     frame(input: Experience360FrameInput): Promise<AccessResult<Experience360Frame>>;
+  };
+  profile360: {
+    /** POST /v1/profile/resolve: one identifier to the canonical entity ID. */
+    search(identifier: Profile360Identifier): Promise<AccessResult<{ entity_id: string; subject: { kind: 'entity'; id: string } }>>;
+    /** Full Profile360 frame; evidence is included unless include_evidence is false. */
+    get(entityId: string, input?: Profile360ReadOptions & { include_evidence?: boolean }): Promise<AccessResult<Experience360Frame>>;
+    /** Up to 8 named slots with evidence. */
+    slots(entityId: string, slots: string[], input?: Profile360ReadOptions): Promise<AccessResult<Experience360Frame>>;
+    /** Evidence, provenance, freshness and reason codes per slot; slot content omitted. */
+    evidence(entityId: string, input?: Profile360ReadOptions & { slots?: string[] }): Promise<AccessResult>;
   };
   continuations: {
     /** A governed resource write. The API requires write permission and an idempotency key. */

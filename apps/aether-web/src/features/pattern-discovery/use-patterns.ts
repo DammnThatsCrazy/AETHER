@@ -3,7 +3,7 @@ import { useCapabilities, useQuery } from '@aether/ui';
 import { z } from 'zod';
 import type {
   PatternCurationAction, PatternKind, PatternLens, PatternStatus, PatternSurface, PatternVerdict,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import { restClient } from '@aether-app/lib/api/rest/client';
 
 /** Typed against the shared contract (packages/shared/pattern-discovery.ts);

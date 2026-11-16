@@ -2,7 +2,7 @@
 // Aether SDK — UTILITY FUNCTIONS
 // =============================================================================
 
-import type { DeviceContext, CampaignContext, PageContext } from '../types';
+import type { AutomationSignals, DeviceContext, CampaignContext, PageContext } from '../types';
 
 /** Generate a UUID v4 */
 export function generateId(): string {
@@ -51,6 +51,55 @@ export function anonymizeIP(ip: string): string {
   const parts = ip.split('.');
   parts[3] = '0';
   return parts.join('.');
+}
+
+// =============================================================================
+// AUTOMATION EVIDENCE (presence-only; no timing, movement or biometric signals)
+// =============================================================================
+
+let trustedInputSeen = false;
+let trustedInputProbeInstalled = false;
+
+/**
+ * Record whether any user-agent-generated (isTrusted) pointer, key or touch
+ * event has happened in this page. Presence only: no coordinates, timings or
+ * key values are read or kept. Idempotent; listeners are passive and remove
+ * themselves after the first trusted event.
+ */
+export function installTrustedInputProbe(): void {
+  if (trustedInputProbeInstalled || typeof window === 'undefined') return;
+  trustedInputProbeInstalled = true;
+  const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+  const onInput = (event: Event): void => {
+    if (!event.isTrusted) return;
+    trustedInputSeen = true;
+    for (const name of events) window.removeEventListener(name, onInput, true);
+  };
+  for (const name of events) {
+    window.addEventListener(name, onInput, { capture: true, passive: true });
+  }
+}
+
+/**
+ * Automation evidence for actor classification. ``webdriver`` is the W3C
+ * WebDriver flag (true when the browser is driven by WebDriver/automation).
+ * It indicates automation, never "AI agent", and never proves a human.
+ */
+export function getAutomationSignals(): AutomationSignals {
+  installTrustedInputProbe();
+  let webdriver = false;
+  try {
+    webdriver = typeof navigator !== 'undefined' && navigator.webdriver === true;
+  } catch {
+    webdriver = false;
+  }
+  return { webdriver, trustedInputSeen };
+}
+
+/** Test-only: reset the probe state. */
+export function __resetAutomationProbeForTests(): void {
+  trustedInputSeen = false;
+  trustedInputProbeInstalled = false;
 }
 
 /** Detect device context from browser environment */
@@ -114,6 +163,7 @@ export function getDeviceContext(): DeviceContext {
     language: navigator.language,
     cookieEnabled: navigator.cookieEnabled,
     online: navigator.onLine,
+    automation: getAutomationSignals(),
   };
 }
 
@@ -138,6 +188,27 @@ const DEFAULT_SENSITIVE_URL_PARAMS = [
   'password', 'secret', 'code', 'reset_token',
 ];
 
+/**
+ * Signed per-recipient email click token (`ae=v<ver>.<payload>.<sig>`). It is
+ * shipped only through the typed `clickToken` field. The bare `ae` name is too
+ * generic to strip by key, so only token-shaped values are removed.
+ */
+export const CLICK_TOKEN_PARAM = 'ae';
+const CLICK_TOKEN_SHAPE = /^v[0-9A-Za-z]{1,16}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{16,}$/;
+
+/** True when a value has the shape of a signed Aether click token. */
+export function isClickToken(value: string | null | undefined): value is string {
+  return typeof value === 'string' && CLICK_TOKEN_SHAPE.test(value);
+}
+
+function deleteClickToken(params: URLSearchParams): void {
+  if (params.getAll(CLICK_TOKEN_PARAM).some((v) => isClickToken(v))) {
+    const kept = params.getAll(CLICK_TOKEN_PARAM).filter((v) => !isClickToken(v));
+    params.delete(CLICK_TOKEN_PARAM);
+    for (const v of kept) params.append(CLICK_TOKEN_PARAM, v);
+  }
+}
+
 let sanitizationEnabled = true;
 let sensitiveUrlParams = new Set(DEFAULT_SENSITIVE_URL_PARAMS);
 
@@ -161,13 +232,15 @@ export function sanitizeSearch(search: string): string {
   for (const key of Array.from(params.keys())) {
     if (sensitiveUrlParams.has(key.toLowerCase())) params.delete(key);
   }
+  deleteClickToken(params);
   const encoded = params.toString();
   return encoded ? `?${encoded}` : '';
 }
 
 /**
  * Strip fragments and sensitive query params (aether_ref, aether_cid, click
- * IDs, token params) from a URL before it is transmitted anywhere.
+ * IDs, token params, signed `ae` click tokens) from a URL before it is
+ * transmitted anywhere.
  * Relative URLs are resolved against the current page origin when available.
  */
 export function sanitizeUrl(url: string | undefined | null): string {
@@ -180,6 +253,7 @@ export function sanitizeUrl(url: string | undefined | null): string {
     for (const key of Array.from(parsed.searchParams.keys())) {
       if (sensitiveUrlParams.has(key.toLowerCase())) parsed.searchParams.delete(key);
     }
+    deleteClickToken(parsed.searchParams);
     const result = parsed.toString();
     // Sensitive material embedded outside the query (e.g. malformed values
     // that parse into the path) cannot be retained safely.

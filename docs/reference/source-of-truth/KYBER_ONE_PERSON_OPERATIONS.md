@@ -29,11 +29,16 @@ Kyber/operator objective → backend dispatch → durable run record
 
 Objective submission binds a tenant-scoped idempotency key to the semantic
 request content. An exact retry returns the existing objective; reusing the key
-with changed goal, type, severity, priority, or payload returns a conflict. The
-current shared-store interface does not provide an atomic create-if-absent
-operation for the objective key, so simultaneous first submissions can still
-race and require a storage-level uniqueness follow-up before this is treated as
-cross-instance exactly-once creation.
+with changed goal, type, severity, priority, or payload returns a conflict.
+Before writing, the repository claims the key in `agent_objective_idempotency`
+with a conditional write (`atomic_update` over `get_versioned` /
+`set_if_unchanged`), so simultaneous first submissions across instances create
+one objective and one plan; the losing requests return the winner's objective,
+or a conflict if their content differs. If the winner stops between claiming
+and writing, a later caller takes over the write under a lease that expires
+after 30 seconds and is released if the write fails, so the key always
+recovers.
+Objectives created before claims existed are still found by scan.
 
 ## Worker execution bridge
 

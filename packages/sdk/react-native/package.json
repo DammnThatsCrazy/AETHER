@@ -1,5 +1,5 @@
 {
-  "name": "@aether/react-native",
+  "name": "@olympuslabs/aether-react-native",
   "version": "0.1.0-alpha.0",
   "description": "Aether SDK for React Native — Unified bridge to native iOS/Android analytics",
   "main": "dist/index.js",
@@ -15,7 +15,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/shared": "^0.1.0-alpha.0"
+    "@olympuslabs/aether-shared": "^0.1.0-alpha.0"
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.0.0",
@@ -38,17 +38,25 @@
     "dist",
     "android",
     "ios",
-    "aether-react-native.podspec"
+    "aether-react-native.podspec",
+    "LICENSE",
+    "NOTICE"
   ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DammnThatsCrazy/AETHER.git",
+    "directory": "packages/sdk/react-native"
+  },
+  "homepage": "https://github.com/DammnThatsCrazy/AETHER/tree/main/packages/sdk/react-native"
 }

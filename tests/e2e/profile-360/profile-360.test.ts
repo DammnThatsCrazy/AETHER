@@ -59,7 +59,7 @@ describe.skipIf(!API_KEY)('FPS-104: Profile 360', () => {
         platform_id: 'web',
         environment: 'staging',
         event_type: 'page',
-        sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+        sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
         identity: { anonymous_id: 'anon_profile_001', user_id: 'user_profile_001' },
         timestamp: new Date().toISOString(),
         properties: { url: 'https://example.com/profile-test', path: '/profile-test' },

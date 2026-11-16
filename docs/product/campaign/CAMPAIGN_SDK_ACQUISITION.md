@@ -8,10 +8,10 @@ status: experimental
 since_version: 0.1.0
 source_files: [packages/shared/acquisition-evidence.ts, packages/sdk/web/src/types.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/tracking/traffic-source-tracker.ts]
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:40b7cd21b1d10ed068e057f249964ceb67fd8f0be088df67205eea50ae96e8d7"
-  "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
-  "packages/sdk/web/src/types.ts": "sha256:ff3735a8abe9e88a71285646732366c2a071912089608ec84c87ed35aa7ab5cb"
-  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
+  "packages/sdk/web/src/index.ts": "sha256:53635bb48461322dc7e32dd0e79ba6a72f1ced80940f53fc23503a76a3d89913"
+  "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:b7951a75cfb47b19da22cae331399bb32a29e0545699cb8a49d63a1ee34fc3f9"
+  "packages/sdk/web/src/types.ts": "sha256:0b12cb075729098df014e453361ce3d42c47b016db643350bc8a44dfd03344a9"
+  "packages/shared/acquisition-evidence.ts": "sha256:e4e871496633b6b1712a313a0c6e99f29e61d50f6ba2c162579ca957f0468d4b"
 ---
 
 # Campaign SDK Acquisition Evidence
@@ -52,6 +52,7 @@ interface AcquisitionEvidence {
   referrerDomain?: string;
   landingPage?: string;
   referralToken?: string;     // opaque aether_ref value; verified server-side
+  clickToken?: string;        // opaque signed `ae` email click token; verified server-side
   entryMethod?: string;       // how the entry evidence was physically observed (web_referrer, android_install_referrer, ios_universal_link, ...)
   destinationDomain?: string; // host of the destination the user LANDED on (deep/universal link host); never the referrer
   destinationPathHash?: string; // one-way hash of the destination path when path privacy is configured
@@ -87,17 +88,18 @@ interface TrafficSourceData {
   utmTerm?: string | null;
   utmContent?: string | null;
   referralToken?: string | null;
+  clickToken?: string | null;
   clickIds: Record<string, string>;
   landingPage: string;
 }
 ```
 
-The tracker reads `referralToken` directly from the `aether_ref` query parameter and forwards it unchanged. `TrafficSourceData` intentionally has no classified channel, provider, product, or actor fields.
+The tracker reads `referralToken` directly from the `aether_ref` query parameter and forwards it unchanged. It reads `clickToken` from the `ae` query parameter only when the value has the signed `v<ver>.<payload>.<sig>` shape, so a tenant's own unrelated `ae` parameter is ignored. Both typed fields are the only carriers: the token is stripped from the transmitted landing page and page URLs. `TrafficSourceData` intentionally has no classified channel, provider, product, or actor fields.
 
 ## Shared helper
 
 ```typescript
-import { evidenceFromSearchParams, ACQUISITION_EVIDENCE_SCHEMA_VERSION } from '@aether/shared';
+import { evidenceFromSearchParams, ACQUISITION_EVIDENCE_SCHEMA_VERSION } from '@olympuslabs/aether-shared';
 
 // For integrations that need the shared schema-versioned representation:
 const evidence = evidenceFromSearchParams(new URLSearchParams(window.location.search));
@@ -123,4 +125,5 @@ The web SDK applies the same rule to `context.trafficSource`: it captures `aethe
 - `canonicalCampaignId` is validated server-side against tenant ownership; a forged UUID is rejected.
 - Click IDs are stored as evidence but do not trigger auto-resolution without a registered alias.
 - `referralToken` is opaque to the SDK. Its presence does not assert a campaign, AI provider, product, referring actor, or verification level. The server must verify the token before deriving any of those dimensions.
-- Never log `referralToken`, `externalCampaignId`, or `canonicalCampaignId` values in client-side error reporters.
+- `clickToken` is opaque to the SDK. The server verifies tenant, signature and expiry before attributing a visit to the email recipient, and never reassigns a visitor who is already bound to a different person (forwarded link).
+- Never log `referralToken`, `clickToken`, `externalCampaignId`, or `canonicalCampaignId` values in client-side error reporters.

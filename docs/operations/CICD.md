@@ -28,18 +28,22 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
+  - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
+  - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  ".github/workflows/": "sha256:00b5260da5d1d2100c337b7801de024e08e0690da8eca5702f5bdb2ee82fda66"
+  ".github/workflows/": "sha256:e4a0ee3d2401fad92bfe237e4ab65481c458786269be7aa253bf3dd6d1a061da"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
-  "config/staging_apply_iam_policy.yaml": "sha256:528cc930bd8cedf9f347f4f0630e50e61bf1360bdf5beeb8088c90485519b142"
+  "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:327097c1efc7b214e8b56ead967d30dbab9376854840c20a2d59372660f2b6d5"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
-  "infra/cicd/aether-cicd/README.md": "sha256:36a2b231349b26f17f945f32a223d35f482acc9fd82ccbcde4a728b1fa9e05a9"
+  "infra/cicd/aether-cicd/README.md": "sha256:e5ed5aba6b590ed3c78463a402d4a6b6da4adb9e68579f945aace9165b187f89"
   "infra/cicd/aether-cicd/main.py": "sha256:45ea58ecdc9250e8bedffcd9d9a369b1025c5dc7a1da23d38e0f6c1670494c0f"
   "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
-  "infra/cicd/aether-cicd/stages/": "sha256:03b622667b4a8365b54624fdeb5aff0550005e94e3858ce1acaf0917a4c20695"
+  "infra/cicd/aether-cicd/stages/": "sha256:1f2dfa70664b4aaf5135732225860b49e96419733d96558edafd3786c1c97d0a"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
@@ -468,7 +472,7 @@ enforced by any workflow in `.github/workflows/`.
 ### 6. Build
 
 - Docker images built and pushed to ECR (tagged with the commit SHA)
-- The shared `@aether/shared` workspace is compiled before the Aether and Kyber
+- The shared `@olympuslabs/aether-shared` workspace is compiled before the Aether and Kyber
   frontend builds so their local contract imports resolve deterministically
 - TypeScript packages compiled; `packages/sdk/web/dist/` populated
 - SDK artefacts staged for release (see SDK Release below)
@@ -476,7 +480,8 @@ enforced by any workflow in `.github/workflows/`.
 
 The customer-facing Access Kit MCP image follows its own opt-in release path:
 after Terraform provisions the dedicated immutable ECR repository in the
-canonical `production` state, a clean reviewed commit is built as
+target account's persistent state (`production`, or `staging` for staging
+certification), a clean reviewed commit is built as
 `linux/amd64` and pushed by
 `infra/aws/terraform/scripts/publish_access_mcp_image.sh`. The publisher checks
 the repository's encryption, tag immutability, and scan-on-push settings,
@@ -863,10 +868,11 @@ than publishing a mislabelled install.
 
 | Platform | Registry | Job | Version authority |
 | --- | --- | --- | --- |
-| Web (`packages/sdk/web`) | npm (`@aether/web`) | `publish-npm` | `packages/sdk/web/package.json` |
-| React Native (`packages/sdk/react-native`) | npm (`@aether/react-native`) | `publish-npm` | `packages/sdk/react-native/package.json` |
-| iOS (`packages/sdk/ios`) | CocoaPods (`AetherSDK`) | `publish-cocoapods` | `AetherSDK.podspec` |
-| Android (`packages/sdk/android`) | GitHub Packages, Maven (`com.aether:sdk-android`) | `publish-android` | `gradle.properties` |
+| Web (`packages/sdk/web`) | npm (`@olympuslabs/aether-web`) | `publish-npm` | `packages/sdk/web/package.json` |
+| Server (`packages/sdk/server`) | npm (`@olympuslabs/aether-server`) | `publish-npm` | `packages/sdk/server/package.json` |
+| React Native (`packages/sdk/react-native`) | npm (`@olympuslabs/aether-react-native`); its podspec and Gradle module ship inside the npm package | `publish-npm` | `packages/sdk/react-native/package.json` |
+| iOS (`packages/sdk/ios`) | Swift Package Manager via the `DammnThatsCrazy/aether-ios` mirror (bare version tags), and CocoaPods (`AetherSDK`, sourced from the mirror) | `publish-ios-mirror`, then `publish-cocoapods` | `AetherSDK.podspec` |
+| Android (`packages/sdk/android`) | Maven Central (`com.olympuslabsml:aether-android`, signed) | `publish-android` | `gradle.properties` |
 | Web CDN (`packages/sdk/web`) | `cdn.aether.network` | `publish-cdn` | `packages/sdk/web/package.json` |
 
 `publish-cdn` runs after `publish-npm`, because npm is the registry of record and

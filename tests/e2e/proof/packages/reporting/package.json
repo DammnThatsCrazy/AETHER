@@ -27,12 +27,12 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@aether/shared": "*",
+    "@olympuslabs/aether-shared": "*",
     "@aether/proof-contracts": "*",
     "@aether/proof-runner": "*"
   },
   "devDependencies": {
-    "@aether/shared": "*",
+    "@olympuslabs/aether-shared": "*",
     "@aether/proof-contracts": "*",
     "@aether/proof-runner": "*",
     "typescript": "^5.4.0",

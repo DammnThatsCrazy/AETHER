@@ -194,10 +194,17 @@ class TouchpointProjector(BaseProjector):
             or ctx.get("verifiedReferral")
             or event.get("_verified_referral")
         )
+        # Browser automation (W3C navigator.webdriver, captured by the web SDK)
+        # is evidence of a machine-driven browser: automation, never "agent"
+        # and never "human". Declared actor evidence still takes precedence.
+        device_ctx = ctx.get("device") if isinstance(ctx.get("device"), dict) else {}
+        automation = device_ctx.get("automation") if isinstance(device_ctx.get("automation"), dict) else {}
+        webdriver_flag = automation.get("webdriver") is True
         explicit_actor_type = (
             ctx.get("actorType")
             or props.get("actor_type")
             or ("agent" if ctx.get("agentId") else None)
+            or ("machine" if webdriver_flag else None)
         )
         classified = _source_classifier.classify(
             referrer=raw_referrer,
@@ -223,6 +230,11 @@ class TouchpointProjector(BaseProjector):
             declared_entry_method=(
                 acq_ev.get("entryMethod") or acq_ev.get("entry_method")
             ),
+            server_agent_evidence=(
+                (event.get("server_context") or {}).get("agent_verification")
+                if isinstance(event.get("server_context"), dict) else None
+            ),
+            actor_evidence=("actor:webdriver_flag",) if webdriver_flag else (),
         )
         destination_domain = (
             acq_ev.get("destinationDomain") or acq_ev.get("destination_domain")

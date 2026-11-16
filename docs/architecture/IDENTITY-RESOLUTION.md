@@ -31,20 +31,21 @@ reviewed_source_commits:
     reason: "Reviewed request-to-usage correlation in the batch handler. The request ID becomes metering correlation metadata and actual usage references are returned; source namespace, canonical identity, and resolution decisions are unchanged."
   - commit: "40af67902"
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
+  - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:2a587366dc8faa4cf6560a0c5c794b0a3f59b3d076bb313103c2c9f813916a76"
+  "services/api/identity/identity/": "sha256:f6f15747e96134201a275fb7343c3d511b8668ecd63932bf66d58870c3213e6d"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:7e042b4b53ff4926fcacbfa236ab0c997d9e9576654b16a2cc32cf25f9d8e6a1"
-  "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
+  "services/api/ingestion/ingestion/batch.py": "sha256:c5d2ead7250540a36dd23b7ab42297e4e1ed22d1c0b8972c5a670f5e4e6e1229"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
   "services/api/journeys/handoff/continuation_jobs.py": "sha256:13081b7ff46f57f7ae26c005163275d92cef3b7e7bf52959c02df345b0292630"
   "services/api/journeys/handoff/continuation_scope.py": "sha256:4805ff2560480a30d0e5452eefdd92dfc500cc6f84109ad10f5dc38de4e6ad08"
-  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
+  "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -206,7 +207,7 @@ returns only `late_binding_candidate` items by default, so the existing
 approve/merge routes cannot load an agent continuity item. A reviewer decides one through
 `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm|reject`
 (`agent:manage`). The decision records the reviewer, reason and time with
-`merge_performed: false`; it touches no source identity and resolves nothing. Agent 360 shows decided items as `continuity_decisions` (basis `reviewer_asserted`); no identity claim or binding is derived from them. Continuity and termination count only from facts with a
+`merge_performed: false`; it touches no source identity and resolves nothing. Agent 360 shows decided items as `continuity_decisions` (basis `reviewer_asserted`); no identity claim or binding is derived from them. An open item nobody decides is expired by the `agent_behavior_jobs` worker once it has not been reported for `AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS` (default 30). Expiry is not a decision: the item leaves the queue, nothing is merged or deleted, it can no longer be confirmed or rejected, and it reopens when the same evidence is reported again. Continuity and termination count only from facts with a
 validated deployment, and an inferred continuity is never a fact until
 reviewed.
 
@@ -513,7 +514,7 @@ Production routes are served under `/v1/identity/` by `services/api/identity/ide
 
 ```bash
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-  -X POST https://api.aether.io/v1/identity/resolve \
+  -X POST https://api.aether.network/v1/identity/resolve \
   -d '{"entity_id": "user-123", "signals": {...}}'
 ```
 

@@ -39,7 +39,7 @@ describe('FPS-021: SDK Heartbeat', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'sdk.heartbeat',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       session: { session_id: heartbeatFixture.sessionId },
       device: { device_id: 'dev_web_001', platform: 'web' },
       identity: { anonymous_id: 'anon_001' },
@@ -50,7 +50,7 @@ describe('FPS-021: SDK Heartbeat', () => {
     expect(envelope.workspace_id).toBe('proof-lab');
     expect(envelope.platform_id).toBe('web');
     expect(envelope.event_type).toBe('sdk.heartbeat');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('0.1.0-alpha.0');
     expect(envelope.timestamp).toBeTruthy();
     expect(envelope.session?.session_id).toBe('sess_test_001');
@@ -72,7 +72,7 @@ describe('FPS-021: SDK Heartbeat', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'sdk.heartbeat',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       session: { session_id: hb.sessionId },
       device: { device_id: 'dev_web_001', platform: 'web' },
       identity: { anonymous_id: 'anon_001' },

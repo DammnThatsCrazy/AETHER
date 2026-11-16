@@ -2,7 +2,7 @@
  * Pure models for exploration chrome (breadcrumbs, saved-view controls).
  */
 
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 import { isKnownSurface, surfaceCapability } from './registry';
 
 export interface Crumb {

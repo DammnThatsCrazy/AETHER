@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/shared": "*",
+    "@olympuslabs/aether-shared": "*",
     "@olympus/brand": "*",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.6.0"

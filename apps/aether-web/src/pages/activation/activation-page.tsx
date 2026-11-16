@@ -12,7 +12,7 @@ import {
   ErrorState,
   LoadingState,
 } from '@aether/ui';
-import type { SourcePlatform } from '@aether/shared';
+import { SDK_VERSION, type SourcePlatform } from '@olympuslabs/aether-shared';
 import {
   ACTIVATION_PLAN_TIERS,
   activationCapabilityState,
@@ -47,23 +47,23 @@ function isSourcePlatform(value: string): value is SourcePlatform {
 // (apps/docs, quickstart/*.mdx); this is a nudge, not a substitute.
 const SDK_QUICKSTART: Record<SourcePlatform, { install: string; init: string }> = {
   web: {
-    install: 'npm install @aether/web',
-    init: "import aether from '@aether/web';\n\naether.init({ apiKey: 'YOUR_WRITE_KEY' });\naether.track('signup_completed', { plan: 'pro' });",
+    install: `npm install @olympuslabs/aether-web@${SDK_VERSION}`,
+    init: "import aether from '@olympuslabs/aether-web';\n\naether.init({ apiKey: 'YOUR_WRITE_KEY' });\naether.track('signup_completed', { plan: 'pro' });",
   },
   'react-native': {
-    install: 'npm install @aether/react-native',
-    init: "import { AetherProvider } from '@aether/react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_WRITE_KEY' }}>\n  <App />\n</AetherProvider>",
+    install: `npm install @olympuslabs/aether-react-native@${SDK_VERSION}`,
+    init: "import { AetherProvider } from '@olympuslabs/aether-react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_WRITE_KEY' }}>\n  <App />\n</AetherProvider>",
   },
   server: {
-    install: 'npm install @aether/server',
-    init: "import { AetherServerSDK } from '@aether/server';\n\nconst aether = new AetherServerSDK({ writeKey: 'YOUR_WRITE_KEY' });\naether.track({ type: 'api_request_observed', properties: { method: 'GET', path: '/orders', statusCode: 200 } });",
+    install: `npm install @olympuslabs/aether-server@${SDK_VERSION}`,
+    init: "import { AetherServerSDK } from '@olympuslabs/aether-server';\n\nconst aether = new AetherServerSDK({ writeKey: 'YOUR_WRITE_KEY' });\naether.track({ type: 'api_request_observed', properties: { method: 'GET', path: '/orders', statusCode: 200 } });",
   },
   ios: {
-    install: "pod 'AetherSDK'",
+    install: `pod 'AetherSDK', '${SDK_VERSION}'`,
     init: "let config = AetherConfig(apiKey: \"YOUR_WRITE_KEY\")\nAether.shared.initialize(config: config)",
   },
   android: {
-    install: "implementation(\"com.aether:sdk:0.1.0-alpha.0\")",
+    install: `implementation("com.olympuslabsml:aether-android:${SDK_VERSION}")`,
     init: 'val config = AetherConfig(apiKey = "YOUR_WRITE_KEY")\nAether.initialize(application, config)',
   },
 };

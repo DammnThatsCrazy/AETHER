@@ -63,10 +63,10 @@ variable "enable_access_mcp_repository" {
   default     = false
   validation {
     condition = !var.enable_access_mcp_repository || (
-      var.deployment_profile == "production" &&
-      var.environment == "production"
+      (var.deployment_profile == "production" && var.environment == "production") ||
+      (var.deployment_profile == "staging" && var.environment == "staging")
     )
-    error_message = "The globally named aether-access-mcp ECR repository has one persistent owner: deployment_profile=production and environment=production."
+    error_message = "The aether-access-mcp ECR repository has one persistent owner per account: deployment_profile=production with environment=production, or deployment_profile=staging with environment=staging."
   }
 }
 
@@ -77,11 +77,13 @@ variable "enable_access_mcp" {
   validation {
     condition = !var.enable_access_mcp || (
       var.enable_access_mcp_repository &&
-      var.deployment_profile == "production" &&
-      var.environment == "production" &&
+      (
+        (var.deployment_profile == "production" && var.environment == "production") ||
+        (var.deployment_profile == "staging" && var.environment == "staging")
+      ) &&
       can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
     )
-    error_message = "enable_access_mcp requires enable_access_mcp_repository=true, deployment_profile=production, environment=production, and an immutable access_mcp_image_digest."
+    error_message = "enable_access_mcp requires enable_access_mcp_repository=true, the production or staging state owner, and an immutable access_mcp_image_digest."
   }
 }
 
@@ -92,6 +94,16 @@ variable "enable_access_mcp_oauth" {
   validation {
     condition     = !var.enable_access_mcp_oauth || (var.enable_access_mcp && var.auth0_domain != "")
     error_message = "enable_access_mcp_oauth requires the customer MCP service and an Auth0 domain."
+  }
+}
+
+variable "enable_access_mcp_dcr" {
+  type        = bool
+  description = "Opt in to MCP client self-registration (Auth0 Dynamic Client Registration and Client ID Metadata Documents). Registered hosts are third-party clients whose only access is a read-only default grant on the MCP audience. Requires enable_access_mcp_oauth."
+  default     = false
+  validation {
+    condition     = !var.enable_access_mcp_dcr || var.enable_access_mcp_oauth
+    error_message = "enable_access_mcp_dcr requires enable_access_mcp_oauth."
   }
 }
 
