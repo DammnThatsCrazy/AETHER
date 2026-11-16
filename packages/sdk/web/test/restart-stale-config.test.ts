@@ -86,4 +86,29 @@ describe('restart and late /v1/config responses', () => {
 
     expect(resolveCalls.filter((c) => c.key === 'pk_new' && c.body.user_id === 'old-user')).toHaveLength(0);
   });
+
+  it('resolves the same email again for the replacement install', async () => {
+    // Which keys received the email hash (init() also resolves, but without one).
+    const emailHashKeys: string[] = [];
+    (globalThis as any).fetch = vi.fn(async (url: string, init?: any) => {
+      if (String(url).endsWith('/sdk/identity/resolve') && JSON.parse(init.body).email_hash) {
+        emailHashKeys.push(init?.headers?.['x-api-key']);
+      }
+      return { ok: true, status: 200, json: async () => ({ resolved: false, data: null, accepted: 0, duplicates: 0, rejected: 0 }), text: async () => '{}' } as any;
+    });
+    const settle = () => new Promise((r) => setTimeout(r, 20));
+    // jsdom's TextEncoder and Node's WebCrypto come from different realms, so the
+    // real digest fails there; a stable hash arms the de-dupe the way a browser would.
+    vi.spyOn(aether as any, '_hashEmail').mockResolvedValue('a'.repeat(64));
+
+    aether.init(CONFIG('pk_old'));
+    aether.hydrateIdentity({ email: 'person@example.com' } as any);
+    await settle();
+    aether.destroy();
+    aether.init(CONFIG('pk_new'));
+    aether.hydrateIdentity({ email: 'person@example.com' } as any);
+    await settle();
+
+    expect(emailHashKeys).toEqual(['pk_old', 'pk_new']);
+  });
 });
