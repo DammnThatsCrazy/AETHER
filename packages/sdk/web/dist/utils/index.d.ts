@@ -1,4 +1,4 @@
-import type { DeviceContext, CampaignContext, PageContext } from '../types';
+import type { AutomationSignals, DeviceContext, CampaignContext, PageContext } from '../types';
 /** Generate a UUID v4 */
 export declare function generateId(): string;
 /** Get current ISO timestamp */
@@ -7,6 +7,21 @@ export declare function now(): string;
 export declare function sha256(input: string): Promise<string>;
 /** Anonymize an IP address (zero last octet for IPv4, last 80 bits for IPv6) */
 export declare function anonymizeIP(ip: string): string;
+/**
+ * Record whether any user-agent-generated (isTrusted) pointer, key or touch
+ * event has happened in this page. Presence only: no coordinates, timings or
+ * key values are read or kept. Idempotent; listeners are passive and remove
+ * themselves after the first trusted event.
+ */
+export declare function installTrustedInputProbe(): void;
+/**
+ * Automation evidence for actor classification. ``webdriver`` is the W3C
+ * WebDriver flag (true when the browser is driven by WebDriver/automation).
+ * It indicates automation, never "AI agent", and never proves a human.
+ */
+export declare function getAutomationSignals(): AutomationSignals;
+/** Test-only: reset the probe state. */
+export declare function __resetAutomationProbeForTests(): void;
 /** Detect device context from browser environment */
 export declare function getDeviceContext(): DeviceContext;
 /** Configure URL sanitization from AetherConfig (privacy-safe default: on). */

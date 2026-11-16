@@ -123,8 +123,29 @@ def test_known_ai_domains_normalize_provider_and_product(
     assert result.ai_provider == provider
     assert result.ai_product == product
     assert result.referral_mediation_type == "ai_mediated_human_referral"
-    assert result.actor_type == "human"
+    # A referrer domain is not actor evidence: the actor stays unknown.
+    assert result.actor_type == "unknown"
     assert result.attribution_eligible is True
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},
+        {"referrer": "https://news.example.com/a"},
+        {"utm_source": "newsletter", "utm_medium": "email"},
+        {"referrer": "https://chatgpt.com/"},
+    ],
+)
+def test_missing_actor_evidence_is_unknown_never_human(
+    classifier: SourceClassifier, kwargs: dict
+) -> None:
+    assert classifier.classify(**kwargs).actor_type == "unknown"
+
+
+def test_explicit_actor_evidence_is_kept(classifier: SourceClassifier) -> None:
+    assert classifier.classify(explicit_actor_type="human").actor_type == "human"
+    assert classifier.classify(explicit_actor_type="agent").actor_type == "agent"
 
 
 def test_ai_domain_matching_is_hostname_boundary_safe(classifier: SourceClassifier) -> None:
@@ -426,7 +447,54 @@ def test_machine_user_agent_is_nonhuman_machine_family(
     assert result.economic_class == "nonhuman"
     assert result.channel_family == "machine"
     assert result.traffic_origin == "external"
-    assert result.proof_level == "server_observed"
+    # A payload user-agent is a claim, not a server observation.
+    assert result.proof_level == "declared"
+    assert result.verification_level == "user_agent_claim"
+
+
+@pytest.mark.parametrize(
+    ("server_evidence", "proof", "verification", "max_conf", "min_conf"),
+    [
+        (None, "declared", "user_agent_claim", 0.5, 0.5),
+        ({"ua_signature": "chatgpt-user", "verification": "unverified"}, "declared", "user_agent_header", 0.7, 0.7),
+        ({"ua_signature": "chatgpt-user", "verification": "ip_mismatch"}, "declared", "user_agent_ip_mismatch", 0.3, 0.3),
+        ({"ua_signature": "chatgpt-user", "verification": "provider_ip_range"}, "platform_verified", "provider_ip_range", 1.0, 0.9),
+    ],
+)
+def test_declared_agent_user_agent_is_graded_by_server_verification(
+    classifier: SourceClassifier, server_evidence, proof, verification, max_conf, min_conf,
+) -> None:
+    result = classifier.classify(
+        user_agent="Mozilla/5.0 ChatGPT-User/1.0",
+        server_agent_evidence=server_evidence,
+    )
+    assert result.actor_type == "agent"
+    assert result.proof_level == proof
+    assert result.verification_level == verification
+    assert min_conf <= result.confidence <= max_conf
+
+
+def test_server_observed_header_wins_over_a_conflicting_payload_claim(
+    classifier: SourceClassifier,
+) -> None:
+    result = classifier.classify(
+        user_agent="Mozilla/5.0 ChatGPT-User/1.0",
+        server_agent_evidence={"ua_signature": "gptbot", "verification": "provider_ip_range"},
+    )
+    assert result.source_class == "machine_referral"
+    assert result.ai_product == "gptbot"
+    assert result.proof_level == "platform_verified"
+
+
+def test_server_header_declaration_is_used_when_payload_ua_is_absent(
+    classifier: SourceClassifier,
+) -> None:
+    result = classifier.classify(
+        server_agent_evidence={"ua_signature": "gptbot", "verification": "provider_ip_range"},
+    )
+    assert result.source_class == "machine_referral"
+    assert result.proof_level == "platform_verified"
+    assert result.attribution_eligible is False
 
 
 def test_agent_user_agent_is_agent_referral_class(
@@ -470,3 +538,11 @@ def test_source_class_outputs_are_registry_canonical(
         assert payload["entry_method"] == result.entry_method
         assert payload["proof_level"] == result.proof_level
         assert payload["conflicts"] == list(result.evidence_conflicts)
+
+
+def test_actor_evidence_is_appended_and_auditable(classifier: SourceClassifier) -> None:
+    result = classifier.classify(
+        explicit_actor_type="machine", actor_evidence=("actor:webdriver_flag",)
+    )
+    assert result.actor_type == "machine"
+    assert "actor:webdriver_flag" in result.evidence

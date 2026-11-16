@@ -41,7 +41,7 @@ source_hashes:
   "services/api/identity/identity/": "sha256:f6f15747e96134201a275fb7343c3d511b8668ecd63932bf66d58870c3213e6d"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:7e042b4b53ff4926fcacbfa236ab0c997d9e9576654b16a2cc32cf25f9d8e6a1"
-  "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
+  "services/api/ingestion/ingestion/batch.py": "sha256:c5d2ead7250540a36dd23b7ab42297e4e1ed22d1c0b8972c5a670f5e4e6e1229"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
   "services/api/journeys/handoff/continuation_jobs.py": "sha256:13081b7ff46f57f7ae26c005163275d92cef3b7e7bf52959c02df345b0292630"
   "services/api/journeys/handoff/continuation_scope.py": "sha256:4805ff2560480a30d0e5452eefdd92dfc500cc6f84109ad10f5dc38de4e6ad08"

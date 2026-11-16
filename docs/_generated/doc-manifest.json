@@ -127,7 +127,7 @@
     },
     {
       "path": "docs/architecture/AGENT-DETECTION-RELIABILITY.md",
-      "title": "Agent Detection Reliability — Current-State Assessment",
+      "title": "Agent Detection Reliability — Assessment and Remediation",
       "slug": "architecture/agent-detection-reliability",
       "section": "architecture",
       "visibility": "I",
@@ -138,7 +138,7 @@
       ],
       "status": "experimental",
       "since_version": "0.1.0",
-      "estimated_read_minutes": 8,
+      "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },

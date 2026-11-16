@@ -13,9 +13,9 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "services/api/connectors/integrations/connectors/adapters.py": "sha256:f308f8c9b61fb9516998ec4859ab1c3879bda32d8a596d620544961e8f933b9a"
-  "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
-  "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:0234e2146b1ec5626754f6bcd96a0013bb71d2c4fe766a20a4e9620d6fbbc60e"
-  "services/api/journeys/measurement/silver_adapters.py": "sha256:d69f12e7e527d0f3244b355bae6025dbd9dbae4f38ec35acc66ff505459fab70"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:f3c9238c6d6b5e81bdd008e0378878bc5273e171c2dec0aa5dae32828ad67369"
+  "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:9edfd1c1151cacb056c493c8a105cd09dbde12e7cb3bbd44e2b22b14d871704e"
+  "services/api/journeys/measurement/silver_adapters.py": "sha256:084dfd921dce491ec3eceb43d494a3afbb4e7bfdf580486b21b6c512e2266165"
 ---
 
 # Communications Intelligence — Repository Truth Matrix (Phase 0)

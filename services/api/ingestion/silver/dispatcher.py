@@ -472,6 +472,11 @@ def _emit_classification_metrics(rows: list[dict[str, Any]]) -> None:
         traffic_metrics.record_classification(
             str(source_class), str(row.get("proof_level") or "none")
         )
+        traffic_metrics.record_actor_detection(
+            str(row.get("actor_type") or "unknown"),
+            str(row.get("proof_level") or "none"),
+            str(row.get("verification_level") or "none"),
+        )
         if source_class == "direct_unknown":
             traffic_metrics.record_direct_unknown()
         conflicts = row.get("evidence_conflicts") or ()

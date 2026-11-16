@@ -1062,6 +1062,48 @@ async def _process_single_event(
 
 
 def _build_server_context(request: Request, tenant_id: str) -> Optional[dict]:
+    """Server-observed request context: network enrichment + agent verification.
+
+    Agent verification runs whether or not network enrichment is enabled: it is a
+    cheap header check, and only does an IP range lookup when the request's own
+    ``User-Agent`` header declares a known AI agent or crawler.
+    """
+    context = _build_network_context(request, tenant_id)
+    agent = _build_agent_verification(request)
+    if agent is not None:
+        context = dict(context or {})
+        context["agent_verification"] = agent
+    return context
+
+
+def _build_agent_verification(request: Request) -> Optional[dict]:
+    try:
+        from ingestion.ingestion.context_enricher import resolve_client_ip
+        from journeys.traffic.agent_verification import server_agent_evidence
+
+        headers = getattr(request, "headers", {}) or {}
+        user_agent = headers.get("User-Agent") or headers.get("user-agent")
+        if not user_agent:
+            return None
+        client = getattr(request, "client", None)
+        client_ip, _source = resolve_client_ip(
+            getattr(client, "host", None) if client else None,
+            headers.get("X-Forwarded-For"),
+            headers.get("CF-Connecting-IP"),
+        )
+        evidence = server_agent_evidence(user_agent, client_ip)
+        if evidence is not None:
+            metrics.increment(
+                "ingestion_agent_verification_total",
+                labels={"verification": evidence["verification"]},
+            )
+        return evidence
+    except Exception as exc:  # verification must never break ingestion
+        logger.warning("Agent verification failed (event continues): %s", exc)
+        return None
+
+
+def _build_network_context(request: Request, tenant_id: str) -> Optional[dict]:
     """Server-derived network context (flag-gated, default off — zero cost).
 
     Computed once per batch; the raw IP never leaves the enricher. Enrichment

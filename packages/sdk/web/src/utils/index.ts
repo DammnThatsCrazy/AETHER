@@ -2,7 +2,7 @@
 // Aether SDK — UTILITY FUNCTIONS
 // =============================================================================
 
-import type { DeviceContext, CampaignContext, PageContext } from '../types';
+import type { AutomationSignals, DeviceContext, CampaignContext, PageContext } from '../types';
 
 /** Generate a UUID v4 */
 export function generateId(): string {
@@ -51,6 +51,55 @@ export function anonymizeIP(ip: string): string {
   const parts = ip.split('.');
   parts[3] = '0';
   return parts.join('.');
+}
+
+// =============================================================================
+// AUTOMATION EVIDENCE (presence-only; no timing, movement or biometric signals)
+// =============================================================================
+
+let trustedInputSeen = false;
+let trustedInputProbeInstalled = false;
+
+/**
+ * Record whether any user-agent-generated (isTrusted) pointer, key or touch
+ * event has happened in this page. Presence only: no coordinates, timings or
+ * key values are read or kept. Idempotent; listeners are passive and remove
+ * themselves after the first trusted event.
+ */
+export function installTrustedInputProbe(): void {
+  if (trustedInputProbeInstalled || typeof window === 'undefined') return;
+  trustedInputProbeInstalled = true;
+  const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+  const onInput = (event: Event): void => {
+    if (!event.isTrusted) return;
+    trustedInputSeen = true;
+    for (const name of events) window.removeEventListener(name, onInput, true);
+  };
+  for (const name of events) {
+    window.addEventListener(name, onInput, { capture: true, passive: true });
+  }
+}
+
+/**
+ * Automation evidence for actor classification. ``webdriver`` is the W3C
+ * WebDriver flag (true when the browser is driven by WebDriver/automation).
+ * It indicates automation, never "AI agent", and never proves a human.
+ */
+export function getAutomationSignals(): AutomationSignals {
+  installTrustedInputProbe();
+  let webdriver = false;
+  try {
+    webdriver = typeof navigator !== 'undefined' && navigator.webdriver === true;
+  } catch {
+    webdriver = false;
+  }
+  return { webdriver, trustedInputSeen };
+}
+
+/** Test-only: reset the probe state. */
+export function __resetAutomationProbeForTests(): void {
+  trustedInputSeen = false;
+  trustedInputProbeInstalled = false;
 }
 
 /** Detect device context from browser environment */
@@ -114,6 +163,7 @@ export function getDeviceContext(): DeviceContext {
     language: navigator.language,
     cookieEnabled: navigator.cookieEnabled,
     online: navigator.onLine,
+    automation: getAutomationSignals(),
   };
 }
 

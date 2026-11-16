@@ -15,7 +15,7 @@ source_hashes:
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py": "sha256:3f3951246bed211847eabf45fd2dc2e6bac882f9fad2c6375a595c7d2149f0db"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py": "sha256:ff433ea1c35069666694aee0f0a2a6cef369cf97b0f77ad5c9eb578f6913caea"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py": "sha256:33c4eb1dab69dd4a98201761df37c8de1a6a3006f190937920751135308fc2fa"
-  "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:f3c9238c6d6b5e81bdd008e0378878bc5273e171c2dec0aa5dae32828ad67369"
   "services/api/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
 ---
 

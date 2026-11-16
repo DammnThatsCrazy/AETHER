@@ -40,6 +40,7 @@ METRIC_NAMES: tuple[str, ...] = (
     "reclassification_failure_total",
     "machine_excluded_total",
     "shadow_divergence_total",
+    "actor_detection_total",
 )
 
 
@@ -48,6 +49,23 @@ def record_classification(source_class: str, proof_level: str) -> None:
     """One counted classification, split by source_class and proof_level."""
     metrics.increment("classification_total", labels={"source_class": source_class})
     metrics.increment("classification_total", labels={"proof_level": proof_level})
+
+
+def record_actor_detection(actor_type: str, proof_level: str, verification_level: str) -> None:
+    """Detection reliability: every classified touchpoint by actor and evidence.
+
+    The share of ``actor_type="unknown"`` is the measurable detection gap; the
+    proof/verification split shows how much agent traffic is verified versus
+    merely declared. All three labels are bounded classifier vocabulary.
+    """
+    metrics.increment(
+        "actor_detection_total",
+        labels={
+            "actor_type": actor_type,
+            "proof_level": proof_level,
+            "verification_level": verification_level,
+        },
+    )
 
 
 def record_direct_unknown() -> None:
@@ -152,6 +170,7 @@ def traffic_metrics_summary() -> dict:
 
 __all__ = [
     "METRIC_NAMES",
+    "record_actor_detection",
     "record_classification",
     "record_direct_unknown",
     "record_evidence_conflict",

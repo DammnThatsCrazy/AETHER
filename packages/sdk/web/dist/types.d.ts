@@ -575,6 +575,14 @@ export interface DeviceContext {
     language: string;
     cookieEnabled: boolean;
     online: boolean;
+    /** Automation evidence (presence-only). See getAutomationSignals(). */
+    automation?: AutomationSignals;
+}
+export interface AutomationSignals {
+    /** W3C navigator.webdriver: browser is controlled by automation. */
+    webdriver: boolean;
+    /** A trusted (browser-generated) pointer, key or touch event occurred on this page. */
+    trustedInputSeen: boolean;
 }
 export interface CampaignContext {
     source?: string;

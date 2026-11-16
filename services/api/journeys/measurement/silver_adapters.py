@@ -57,7 +57,7 @@ def adapt_campaign_touchpoint(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_campaign_touchpoint_facts") | {
         "activity_family": family,
         "activity_type": tp_type,
-        "actor_type": row.get("actor_type") or "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "channel": row.get("channel"),
         "source": row.get("source"),
         "medium": row.get("medium"),
@@ -112,7 +112,7 @@ def adapt_web3_transaction(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_web3_transaction_facts") | {
         "activity_family": "web3",
         "activity_type": event_type,
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "profile_id": row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
         "wallet_address": row.get("from_address"),
@@ -182,7 +182,7 @@ def adapt_identity_evidence(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_identity_evidence_facts") | {
         "activity_family": "web2",
         "activity_type": activity_type,
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "profile_id": row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
         "device_id": row.get("device_id"),
@@ -204,7 +204,7 @@ def adapt_outcome(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_outcome_facts") | {
         "activity_family": "outcome",
         "activity_type": outcome_type,
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "profile_id": row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
         "activity_status": status,
@@ -224,7 +224,7 @@ def adapt_revenue(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_revenue_facts") | {
         "activity_family": "commerce",
         "activity_type": revenue_type,
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "profile_id": row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
         "activity_status": "confirmed",
@@ -245,7 +245,7 @@ def adapt_exposure(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_exposure_facts") | {
         "activity_family": "campaign",
         "activity_type": "recommendation_exposure",
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "profile_id": row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
         "campaign_id": row.get("campaign_id"),
@@ -263,7 +263,7 @@ def adapt_account_activity(row: dict[str, Any]) -> dict[str, Any]:
     return _base(row, silver_table="silver_account_activity_facts") | {
         "activity_family": "web2",
         "activity_type": activity_type,
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "profile_id": row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
         "account_id": row.get("workspace_id"),
@@ -339,7 +339,7 @@ def adapt_canonical_conversion(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "activity_family": "commerce",
         "activity_type": f"conversion_{row.get('conversion_type', 'custom')}",
-        "actor_type": "human",
+        "actor_type": row.get("actor_type") or "unknown",
         "tenant_id": row.get("tenant_id"),
         "profile_id": row.get("profile_id"),
         "cluster_id": row.get("cluster_id"),
