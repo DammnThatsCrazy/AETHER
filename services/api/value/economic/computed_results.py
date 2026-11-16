@@ -44,6 +44,7 @@ from shared.computation.context import ComputationContext
 from shared.computation.result import CanonicalResult
 from shared.computation.runtime import new_run_id
 from shared.logger.logger import get_logger, metrics
+from shared.freshness.source_watermarks import advances_watermark
 
 logger = get_logger("aether.service.economic.computed_results")
 
@@ -133,6 +134,10 @@ def _result_to_row(result: CanonicalResult, *, run_id: Optional[str]) -> dict[st
     return payload
 
 
+# The processing boundary: a materialization whose results are all unchanged
+# (already_recorded, no insert or supersession) still proves the tenant's
+# economics are current, so the watermark advances here too.
+@advances_watermark("economic_facts")
 async def persist_computed_results(
     results: ResultSet,
     *,

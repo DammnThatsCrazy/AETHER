@@ -122,3 +122,15 @@ def test_lifecycle_wake_and_sleep_plans_pass_the_mcp_inputs():
 
 def test_repository_matrix_promote_inputs_are_valid():
     MODULE.access_mcp_promote_inputs("staging")
+
+
+def test_every_job_calling_the_helper_installs_pyyaml_first():
+    """A clean setup-python job has no PyYAML; the helper imports yaml."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/staging-lifecycle.yml").read_text())
+    for name, job in workflow["jobs"].items():
+        runs = [step.get("run", "") for step in job.get("steps", [])]
+        uses_helper = [i for i, run in enumerate(runs) if "staging_customer_services" in run]
+        if not uses_helper:
+            continue
+        installs = [i for i, run in enumerate(runs) if "pip install" in run and "pyyaml" in run]
+        assert installs and min(installs) < min(uses_helper), name

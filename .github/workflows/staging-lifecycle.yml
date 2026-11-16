@@ -714,6 +714,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      # scripts/release/staging_customer_services.py (the Access Kit MCP plan
+      # inputs) reads config/runtime_deployment.yaml.
+      - name: Install wake-plan helper dependencies
+        run: python -m pip install --disable-pip-version-check pyyaml
+
       # The wake plan must pin the SAME backend image digest the approved release
       # manifest binds, so applying the plan is itself the delivery of the exact
       # immutable artifact rather than of whatever tag happens to be current.
