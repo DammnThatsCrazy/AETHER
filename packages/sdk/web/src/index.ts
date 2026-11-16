@@ -610,6 +610,10 @@ class AetherSDK implements AetherSDKInterface {
     this.journeyVisibilityHandler = null;
     this.spaTrackingTeardown?.();
     this.spaTrackingTeardown = null;
+    // Per-install de-dupe caches: a restarted SDK (new key or site) must
+    // resolve the same email again and record its own first route checkpoint.
+    this._lastEmailHash = undefined;
+    this.lastRouteCheckpointPath = null;
     this.currentJourney = null;
     this.lastJourneyPauseAt = null;
     this.initialized = false;
