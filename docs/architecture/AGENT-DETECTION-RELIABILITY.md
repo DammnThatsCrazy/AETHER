@@ -13,7 +13,7 @@ estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
   "packages/sdk/server/src/agentic.ts": "sha256:da675cdd08068013c1700c8e65943b55a31950c3399b2efb8b67cb08af4107db"
-  "packages/sdk/web/src/utils/index.ts": "sha256:d3a7e25ac23db1dbc7eab37c74e8970bb69b8a9524c6ef5c6fabc438447dfc4d"
+  "packages/sdk/web/src/utils/index.ts": "sha256:a1da760041144bbad82374aa89923c3068d289b4c76f45262f4ee0f287f68a93"
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
   "services/api/actions/agent_lineage/engine.py": "sha256:7892db12bd711f33c57ab75829afd018a9866c610856249a0d1cf8b135fac1c5"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
