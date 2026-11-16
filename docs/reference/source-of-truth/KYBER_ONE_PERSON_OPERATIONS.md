@@ -35,7 +35,9 @@ with a conditional write (`atomic_update` over `get_versioned` /
 `set_if_unchanged`), so simultaneous first submissions across instances create
 one objective and one plan; the losing requests return the winner's objective,
 or a conflict if their content differs. If the winner stops between claiming
-and writing, the first caller after 30 seconds takes over the write once.
+and writing, a later caller takes over the write under a lease that expires
+after 30 seconds and is released if the write fails, so the key always
+recovers.
 Objectives created before claims existed are still found by scan.
 
 ## Worker execution bridge

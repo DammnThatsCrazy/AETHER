@@ -1152,8 +1152,12 @@ run "access_mcp_service_on_staging_requires_repository" {
   expect_failures = [var.enable_access_mcp]
 }
 
-run "access_mcp_repository_is_allowed_on_staging" {
+run "access_mcp_repository_on_staging_must_match_lifecycle_matrix" {
   command = plan
+
+  # Staging may own the repository, but only when customer_services.access-mcp
+  # declares repository: true, so wake/sleep plans keep it. The matrix declares
+  # false, so this plan must fail the agreement guard.
 
   variables {
     deployment_profile           = "staging"
@@ -1167,13 +1171,7 @@ run "access_mcp_repository_is_allowed_on_staging" {
     enable_access_mcp_repository = true
   }
 
-  assert {
-    condition = alltrue([
-      contains(keys(module.ecr.repository_urls), "aether-access-mcp"),
-      length(module.access_mcp) == 0,
-    ])
-    error_message = "Staging owns its account's aether-access-mcp repository; provisioning it must not start the service."
-  }
+  expect_failures = [output.access_mcp_service_name]
 }
 
 run "access_mcp_service_on_staging_must_match_lifecycle_matrix" {

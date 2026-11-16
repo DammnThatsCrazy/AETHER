@@ -15,11 +15,12 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit Auth0 client work. The linked root main.tf change is comment-only; the Native CLI application is an Auth0 module resource and does not alter deployment profile topology or runtime resource selection, so this profile guide needed no body change."
   - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
   "config/aws_price_book.yaml": "sha256:428e6099d0a5d2d985c8675b6f382a30403ef9690464f75dff192cc60199ba19"
   "config/capability_overlays.yaml": "sha256:aab4be2180c27275e54164100963b8c3fda947fbcceecb99114bc6412f923407"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:072313f747f4cb1f6f695112090b7e8942c691d94731908f68987da6e03e03d7"
+  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/main.tf": "sha256:381b92359daeb6abb711ad61f1b2093c9c7d85cbd421e7c652e6c16c788a84c8"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"

@@ -95,3 +95,59 @@ async def test_stale_claim_without_objective_is_finished_once():
     assert {r["objective_id"] for r in results} == {"obj_orphan"}
     assert len(await repo.objectives.find(tenant_id="t1")) == 1
     assert len(await repo.plans.find(tenant_id="t1")) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_takeover_releases_its_lease_so_the_key_recovers():
+    """A takeover whose write fails must not leave the key stuck forever."""
+    repo = _repo("lease")
+    objective = {
+        "objective_id": "obj_orphan2", "tenant_id": "t1", "type": "ops", "goal": "g",
+        "severity": "low", "priority": 1, "payload": {"a": 1}, "opened_by": "u",
+        "idempotency_key": "k1", "status": "queued",
+        "created_at": "2026-01-01T00:00:00+00:00", "updated_at": "2026-01-01T00:00:00+00:00",
+        "paused_at": None, "cancelled_at": None,
+    }
+    old = (datetime.now(timezone.utc) - timedelta(seconds=rr.OBJECTIVE_CLAIM_STALE_SECONDS + 5)).isoformat()
+    await repo.objective_claims.set(rr.objective_claim_key("t1", "k1"), {
+        "tenant_id": "t1", "idempotency_key": "k1",
+        "fingerprint": rr.objective_request_fingerprint("t1", "g", "ops", "low", 1, {"a": 1}),
+        "objective": objective, "claimed_at": old,
+    })
+
+    original_set = repo.objectives.set
+    failures = {"left": 1}
+
+    async def flaky_set(key, value, ttl_seconds=0):
+        if failures["left"]:
+            failures["left"] -= 1
+            raise RuntimeError("store unavailable")
+        return await original_set(key, value, ttl_seconds)
+
+    repo.objectives.set = flaky_set
+    with pytest.raises(RuntimeError):
+        await _create(repo)
+    recovered = await _create(repo)
+    assert recovered["objective_id"] == "obj_orphan2"
+    assert await repo.objectives.get("obj_orphan2") is not None
+
+
+@pytest.mark.asyncio
+async def test_expired_lease_from_a_dead_repairer_is_taken_over():
+    repo = _repo("dead-lease")
+    old = (datetime.now(timezone.utc) - timedelta(seconds=rr.OBJECTIVE_CLAIM_STALE_SECONDS + 5)).isoformat()
+    objective = {
+        "objective_id": "obj_orphan3", "tenant_id": "t1", "type": "ops", "goal": "g",
+        "severity": "low", "priority": 1, "payload": {"a": 1}, "opened_by": "u",
+        "idempotency_key": "k1", "status": "queued", "created_at": old, "updated_at": old,
+        "paused_at": None, "cancelled_at": None,
+    }
+    await repo.objective_claims.set(rr.objective_claim_key("t1", "k1"), {
+        "tenant_id": "t1", "idempotency_key": "k1",
+        "fingerprint": rr.objective_request_fingerprint("t1", "g", "ops", "low", 1, {"a": 1}),
+        "objective": objective, "claimed_at": old,
+        "repair_token": "repair_dead", "repair_started_at": old,
+    })
+    result = await _create(repo)
+    assert result["objective_id"] == "obj_orphan3"
+    assert await repo.objectives.get("obj_orphan3") is not None

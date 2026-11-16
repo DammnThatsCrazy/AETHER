@@ -4814,7 +4814,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 },
                 "economic_value_context": {
                     "maxAgeSeconds": 86400,
-                    "watermarkAuthorities": ("economic_facts",)
+                    "watermarkAuthorities": ("ai_execution_facts", "economic_facts")
                 },
                 "location_temporal": {
                     "maxAgeSeconds": 604800,
@@ -4842,7 +4842,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 },
                 "value_summary": {
                     "maxAgeSeconds": 86400,
-                    "watermarkAuthorities": ("economic_facts",)
+                    "watermarkAuthorities": ("ai_execution_facts", "economic_facts")
                 }
             }
         },

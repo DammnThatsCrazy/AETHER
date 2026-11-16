@@ -25,9 +25,13 @@ output "access_mcp_service_name" {
   # disagrees with it.
   precondition {
     condition = !local.staging || (
-      var.enable_access_mcp == try(local.access_mcp_runtime.enabled, false)
+      var.enable_access_mcp == try(local.access_mcp_runtime.enabled, false) &&
+      var.enable_access_mcp_repository == try(local.access_mcp_runtime.repository, false) &&
+      var.enable_access_mcp_oauth == try(local.access_mcp_runtime.oauth, false) &&
+      var.enable_access_mcp_dcr == try(local.access_mcp_runtime.dcr, false) &&
+      (!var.enable_access_mcp || var.access_mcp_image_digest == try(local.access_mcp_runtime.image_digest, ""))
     )
-    error_message = "In staging, enable_access_mcp must equal config/runtime_deployment.yaml profiles.staging.customer_services.access-mcp.enabled, which drives the lifecycle service inventory."
+    error_message = "In staging, the Access Kit MCP inputs (enable_access_mcp, enable_access_mcp_repository, enable_access_mcp_oauth, enable_access_mcp_dcr and the image digest) must equal config/runtime_deployment.yaml profiles.staging.customer_services.access-mcp, which the lifecycle passes to every wake and sleep plan."
   }
 }
 

@@ -3,12 +3,13 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { readConfig, STEPS } from '../scripts/w3-certify.mjs';
+import { readConfig, slotsExposingData, STEPS } from '../scripts/w3-certify.mjs';
 
 const script = fileURLToPath(new URL('../scripts/w3-certify.mjs', import.meta.url));
 const good = {
   AETHER_API_URL: 'https://api.staging.example.test',
   AETHER_W3_TENANT_A_KEY: 'key-a',
+  AETHER_W3_TENANT_A_ADMIN_KEY: 'admin-a',
   AETHER_W3_TENANT_B_KEY: 'key-b',
   AETHER_W3_PUBLISHABLE_KEY: 'pk_test',
   AETHER_W3_SITE_ID: 'site-1',
@@ -38,4 +39,26 @@ test('a run without credentials exits non-zero before any request', () => {
   const result = spawnSync(process.execPath, [script], { encoding: 'utf8', env: { PATH: process.env.PATH } });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Missing required environment/);
+});
+
+test('reconciliation uses the separate admin key; access checks keep the read key', () => {
+  const config = readConfig(good);
+  assert.equal(config.keyA, 'key-a');
+  assert.equal(config.adminKeyA, 'admin-a');
+  const { AETHER_W3_TENANT_A_ADMIN_KEY: _omit, ...withoutAdmin } = good;
+  assert.throws(() => readConfig(withoutAdmin), /AETHER_W3_TENANT_A_ADMIN_KEY/);
+});
+
+test('cross-tenant leak check flags data in any slot state, including degraded', () => {
+  const frame = {
+    slots: [
+      { id: 'identity_spine', state: 'suppressed' },
+      { id: 'risk_summary', state: 'degraded', content: { level: 'high' } },
+      { id: 'relationships', state: 'unknown', evidenceRefs: ['ev-1'] },
+      { id: 'value_summary', state: 'partial', claims: [{ id: 'c1' }] },
+      { id: 'communications', state: 'unknown', content: null, evidenceRefs: [], claims: [] },
+    ],
+  };
+  assert.deepEqual(slotsExposingData(frame), ['risk_summary', 'relationships', 'value_summary']);
+  assert.deepEqual(slotsExposingData({ slots: [{ id: 'a', state: 'suppressed' }] }), []);
 });

@@ -14,7 +14,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from shared.common.common import BadRequestError, ConflictError
 from shared.logger.logger import metrics
@@ -339,17 +339,36 @@ class AgentRuntimeRepository:
             if not _claim_is_stale(claim):
                 # The owner is still writing; its objective is the answer.
                 return claimed
-            # The owner stopped between claiming and writing. Exactly one
-            # caller takes over its write; the others return the objective.
+            # The owner stopped between claiming and writing. One caller at a
+            # time takes over its write under an expiring lease; the others
+            # return the objective. A lease whose holder also stopped expires
+            # after the same stale window, so the key always recovers.
             repair_token = new_id("repair")
-            taken = await self.objective_claims.atomic_update(
-                claim_key,
-                lambda current: current if (current or {}).get("repair_token")
-                else {**(current or claim), "repair_token": repair_token},
-            )
+            repair_at = utc_now()
+
+            def _take_lease(current: Optional[dict[str, Any]]) -> dict[str, Any]:
+                record = current or claim
+                held = record.get("repair_token")
+                if held and not _claim_is_stale({"claimed_at": record.get("repair_started_at")}):
+                    return record
+                return {**record, "repair_token": repair_token, "repair_started_at": repair_at}
+
+            taken = await self.objective_claims.atomic_update(claim_key, _take_lease)
             if taken.get("repair_token") != repair_token:
                 return claimed
-            objective = claimed
+            try:
+                return await self._write_new_objective(claimed, opened_by, request_id)
+            except Exception:
+                # Release the lease so the next request can retry at once.
+                await self.objective_claims.atomic_update(
+                    claim_key,
+                    lambda current: (
+                        {k: v for k, v in current.items() if k not in {"repair_token", "repair_started_at"}}
+                        if current and current.get("repair_token") == repair_token
+                        else current or claim
+                    ),
+                )
+                raise
         return await self._write_new_objective(objective, opened_by, request_id)
 
     async def _write_new_objective(

@@ -27,20 +27,22 @@ reviewed_source_commits:
   - {'commit': 'b8530123', 'reason': 'Reviewed atomic objective idempotency claims in services/api/actions/agent/runtime_repository.py. Retry and changed-content conflict semantics are unchanged; simultaneous first submissions now create one objective. No change to this document is needed.'}
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; the freshness behavior is documented here.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
+  - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  "services/api/actions/": "sha256:292215f6974c08152016b366ea82d09342e5faa5bb1abc4ff175fb3100364303"
+  "services/api/actions/": "sha256:91cfc3c62393b72637056fc1608f98044dbd48be04e598c2566c8c56c0ca0f63"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:801f3896e6e1e1a8074a09ad8661ab795bb0863ab9c1e78d0be5dfaba4b69710"
-  "services/api/ingestion/": "sha256:940e01ce2e35358fac3e5f10e4f766671beb3e43e0bfb91aeca3e32811bedc1f"
-  "services/api/intelligence/": "sha256:ceaf746bac10efd25d1dec58d25027f0f3c55af93efac0969875f703ca45ad37"
-  "services/api/journeys/": "sha256:5b0ab70a719050ab69dfde2605ca5b35375e5360c5b4c4ddd0437ee9b1cf8a6f"
+  "services/api/ingestion/": "sha256:0852d3dad00e16c4516ab4328faf5ba8b8b351d35bbd2163c8e84f6437fb0249"
+  "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
+  "services/api/journeys/": "sha256:159e97a5ab4eeca5aadd6f797cffd9e36a824b5f519d82eb96adc601ded570fb"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
-  "services/api/value/": "sha256:0d0d0f6725363c849628c40905857fd06fbe65fd499a56956b7779a9033b2210"
+  "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification

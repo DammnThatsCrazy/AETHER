@@ -15,13 +15,14 @@ reviewed_source_commits:
   - {'commit': 'b8530123', 'reason': 'Reviewed atomic objective idempotency claims in services/api/actions/agent/runtime_repository.py. Retry and changed-content conflict semantics are unchanged; simultaneous first submissions now create one objective. No change to this document is needed.'}
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; this document needs no other change.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:0f5968d9a03c8924c2f35571a670e2e35077cccd2c934a73332214d833f3504d"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:988f8838869a01d7e1613a38d42d1d3105ba1828b14d54db331c4a80a95fe473"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:683c8355a25835c0564e9755f2ddfc29384afe77cbacf0cd82927a02393fa534"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
-  "services/api/actions/agent/": "sha256:6d608038ac937c6cfa42a24c9cfd90c3f5de6755da05639c4d8ca76faadd2970"
+  "services/api/actions/agent/": "sha256:0d421f72931f0897dbd3e3e6f7a3cb58b539480fe6ecbb23c7316f6edb81a5b3"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"

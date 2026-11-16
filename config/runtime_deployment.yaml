@@ -79,10 +79,19 @@ profiles:
     # lifecycle workflow adds the service to its exact inventory only when true.
     # Enable it only after the staging aether-access-mcp repository exists and
     # an immutable image digest is published (see STAGING-WAKE-SLEEP.md).
+    # The lifecycle's wake and sleep plans pass every field below to the
+    # promotion workflow, so a provisioned repository or enabled service keeps
+    # its reviewed configuration across wake/sleep. Order of enablement:
+    # repository: true -> publish image -> image_digest -> enabled: true ->
+    # oauth: true -> (optional) dcr: true.
     customer_services:
       access-mcp:
         enabled: false
         desired_count: 1
+        repository: false
+        image_digest: ""
+        oauth: false
+        dcr: false
     services:
       api:
         roles: [api]

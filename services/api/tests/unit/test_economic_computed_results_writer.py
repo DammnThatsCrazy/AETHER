@@ -243,3 +243,29 @@ async def test_journey_economics_undefined_denominator_is_null_not_zero(monkeypa
     assert row["roas"] is None
     assert row["cpa_usd"] is None
     assert row["aov_usd"] is None
+
+
+@pytest.mark.asyncio
+async def test_unchanged_rematerialization_still_advances_economic_freshness():
+    """A no-op materialization (all already_recorded) proves current economics."""
+    from datetime import datetime, timedelta, timezone
+
+    from shared.freshness import source_watermarks as wm
+    from shared.store import InMemoryStore
+
+    wm.reset_for_tests(InMemoryStore("test_watermarks_econ"))
+    try:
+        repo = ComputedResultsRepository()
+        metrics = _metrics()
+        await persist_computed_results(metrics, tenant_id="t-econ", repo=repo, run_id="run-1")
+        old = datetime.now(timezone.utc) - timedelta(days=2)
+        wm.reset_for_tests(InMemoryStore("test_watermarks_econ_2"))
+        await wm.advance_source_watermark("t-econ", "economic_facts", at=old, force=True)
+        wm._last_advanced.clear()
+
+        second = await persist_computed_results(metrics, tenant_id="t-econ", repo=repo, run_id="run-2")
+        assert second["recorded"] == 0 and second["already_recorded"] > 0
+        read = await wm.read_source_watermarks("t-econ", ["economic_facts"])
+        assert datetime.fromisoformat(read["economic_facts"]) > old + timedelta(days=1)
+    finally:
+        wm.reset_for_tests(None)

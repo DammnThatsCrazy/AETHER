@@ -5206,12 +5206,14 @@
           "value_summary": {
             "maxAgeSeconds": 86400,
             "watermarkAuthorities": [
+              "ai_execution_facts",
               "economic_facts"
             ]
           },
           "economic_value_context": {
             "maxAgeSeconds": 86400,
             "watermarkAuthorities": [
+              "ai_execution_facts",
               "economic_facts"
             ]
           },

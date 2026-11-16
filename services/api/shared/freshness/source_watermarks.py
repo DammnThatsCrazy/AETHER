@@ -29,6 +29,7 @@ logger = get_logger("aether.freshness.watermarks")
 WATERMARKED_AUTHORITIES = frozenset(
     {
         "agent_access",
+        "ai_execution_facts",
         "analytics_events",
         "communication_facts",
         "economic_facts",
@@ -155,7 +156,10 @@ def _find_tenant(args: tuple, kwargs: dict, result: Any) -> Optional[str]:
     tenant = kwargs.get("tenant_id")
     if isinstance(tenant, str) and tenant:
         return tenant
-    for candidate in (result, *args[1:], *kwargs.values()):
+    results = list(result) if isinstance(result, (tuple, list)) else [result]
+    # All positional arguments: a repository ``self`` carries no tenant_id, and
+    # module-level writers take the record as their first argument.
+    for candidate in (*results, *args, *kwargs.values()):
         tenant = _tenant_of(candidate)
         if tenant:
             return tenant

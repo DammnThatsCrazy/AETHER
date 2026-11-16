@@ -62,6 +62,52 @@ def enabled_customer_services(
     return enabled
 
 
+_DIGEST_PREFIX = "sha256:"
+
+
+def access_mcp_promote_inputs(
+    profile: str, runtime: dict[str, Any] | None = None,
+) -> list[tuple[str, str]]:
+    """Promotion-workflow inputs that reproduce the declared staging MCP state.
+
+    The lifecycle's wake and sleep plans pass these so an enabled (or merely
+    provisioned) MCP repository and service survive every plan instead of
+    failing Terraform's agreement precondition or being planned away.
+    """
+    data = runtime if runtime is not None else _load()
+    entry = (((data.get("profiles") or {}).get(profile) or {}).get("customer_services") or {}).get(
+        "access-mcp"
+    ) or {}
+    enabled = bool(entry.get("enabled", False))
+    repository = bool(entry.get("repository", False))
+    digest = str(entry.get("image_digest") or "")
+    oauth = bool(entry.get("oauth", False))
+    dcr = bool(entry.get("dcr", False))
+    for name in ("enabled", "repository", "oauth", "dcr"):
+        if name in entry and not isinstance(entry[name], bool):
+            raise ValueError(f"customer service access-mcp {name} must be a boolean")
+    if digest and not (
+        digest.startswith(_DIGEST_PREFIX)
+        and len(digest) == len(_DIGEST_PREFIX) + 64
+        and all(c in "0123456789abcdef" for c in digest[len(_DIGEST_PREFIX):])
+    ):
+        raise ValueError("customer service access-mcp image_digest must be an immutable sha256 digest")
+    if enabled and not (repository and digest):
+        raise ValueError("access-mcp enabled requires repository: true and an image_digest")
+    if oauth and not enabled:
+        raise ValueError("access-mcp oauth requires enabled: true")
+    if dcr and not oauth:
+        raise ValueError("access-mcp dcr requires oauth: true")
+    flag = lambda value: "true" if value else "false"  # noqa: E731
+    return [
+        ("enable_access_mcp_repository", flag(repository)),
+        ("enable_access_mcp", flag(enabled)),
+        ("enable_access_mcp_oauth", flag(oauth)),
+        ("enable_access_mcp_dcr", flag(dcr)),
+        ("access_mcp_image_digest", digest),
+    ]
+
+
 def ecs_service_name(cluster_or_prefix: str, key: str) -> str:
     """``AETHER-staging`` + ``access-mcp`` -> ``AETHER-staging-access-mcp``."""
     return f"{cluster_or_prefix}-{key}"
@@ -70,9 +116,20 @@ def ecs_service_name(cluster_or_prefix: str, key: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", default="staging")
-    parser.add_argument("--cluster", required=True, help="ECS cluster / name prefix, e.g. AETHER-staging")
+    parser.add_argument("--cluster", help="ECS cluster / name prefix, e.g. AETHER-staging")
+    parser.add_argument(
+        "--promote-inputs", action="store_true",
+        help="print `-f name=value` workflow inputs, one token per line, for the staging MCP state",
+    )
     args = parser.parse_args(argv)
     try:
+        if args.promote_inputs:
+            for name, value in access_mcp_promote_inputs(args.profile):
+                print("-f")
+                print(f"{name}={value}")
+            return 0
+        if not args.cluster:
+            parser.error("--cluster is required unless --promote-inputs is given")
         services = enabled_customer_services(args.profile)
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)
