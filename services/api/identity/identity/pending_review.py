@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import asyncio
 import json
+from datetime import timedelta
 from typing import Any
 
 from repositories.repos import BaseRepository
 from shared.common.common import utc_now
+from shared.temporal.instant import coerce_utc_lenient
 
 _ACTION_LOCK: asyncio.Lock | None = None
 _ACTION_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
@@ -146,6 +148,13 @@ class PendingIdentityReviewRepository:
             # creating another queue item or changing its disposition.
             existing["last_seen_at"] = now
             existing["seen_count"] = int(existing.get("seen_count", 1)) + 1
+            if existing.get("status") == AGENT_CONTINUITY_EXPIRED:
+                # Expiry only means "not seen for a while". Seeing the same
+                # evidence again puts the item back in front of a reviewer.
+                existing["status"] = "open"
+                existing["reason_codes"] = sorted(
+                    set(existing.get("reason_codes") or []) - {"agent_continuity_expired"})
+                existing.pop("expired_at", None)
             if existing.get("status") == "open":
                 existing["evidence"] = safe_evidence
             return await self._store.update(record_id, existing)
@@ -324,6 +333,51 @@ class PendingIdentityReviewRepository:
             return None
         return await self.get(tenant_id, record_id, entry_type="agent_continuity_candidate")
 
+    async def expire_stale_agent_continuity(
+        self, tenant_id: str, *, older_than_days: int, limit: int = 500,
+    ) -> int:
+        """Expire open agent continuity items not seen for ``older_than_days``.
+
+        Age is measured from ``last_seen_at`` (``created_at`` for older rows),
+        so an item that keeps being reported stays open. Each transition is
+        compare-and-set from ``open``, so a reviewer decision made at the same
+        time wins. Expired items leave the review queue; nothing is merged or
+        deleted, and a new observation reopens the item. Returns the number
+        expired, at most ``limit`` per call.
+        """
+        if older_than_days <= 0:
+            return 0
+        cutoff = utc_now() - timedelta(days=older_than_days)
+        rows = await self._store.find_many(
+            filters={"tenant_id": tenant_id, "entry_type": "agent_continuity_candidate",
+                     "status": "open"},
+            limit=limit, sort_by="created_at", sort_order="asc",
+        )
+        expired = 0
+        for row in rows:
+            if row.get("tenant_id") != tenant_id or row.get("status") != "open":
+                continue
+            seen = coerce_utc_lenient(row.get("last_seen_at") or row.get("created_at"))
+            if seen is None or seen >= cutoff:
+                continue
+            applied = await self._store.compare_and_set_status(
+                tenant_id=tenant_id,
+                record_id=str(row.get("id")),
+                expected_status="open",
+                patch={
+                    "status": AGENT_CONTINUITY_EXPIRED,
+                    "reason_codes": sorted({*(row.get("reason_codes") or []),
+                                            "agent_continuity_expired"}),
+                    "expired_at": utc_now().isoformat(),
+                },
+            )
+            expired += int(bool(applied))
+        return expired
+
+
+#: Status of an agent continuity item nobody reviewed within the retention
+#: window. Not a reviewer decision: it leaves the queue and reopens if seen again.
+AGENT_CONTINUITY_EXPIRED = "expired"
 
 #: Reviewer outcomes for ``agent_continuity_candidate`` items. Neither merges.
 AGENT_CONTINUITY_DECISIONS = frozenset({"confirmed", "rejected"})

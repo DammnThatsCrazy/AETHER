@@ -273,6 +273,10 @@ New capability flags are added default-off and must be read by code
 None is a profile. Staging turns them on through the release manifest's
 `task_environment`, not a new deployment posture.
 
+`AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS` (default 30, `0` disables) is a
+retention setting, not a flag. It only takes effect where the existing
+`AETHER_AGENT_BEHAVIOR_JOBS_ENABLED` worker runs, and that stays off by default.
+
 **Staging holds.** A push to `main` builds an immutable release and, through
 `deploy.yml`, rolls it out to staging only when the repository variable
 `STAGING_RUNTIME_ENABLED` is `true`. The weekday timer deploys the newest release

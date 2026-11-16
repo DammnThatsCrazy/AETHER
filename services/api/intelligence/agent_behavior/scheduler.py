@@ -34,6 +34,7 @@ class PassReport:
     assessments_persisted: int = 0
     skipped_no_facts: int = 0
     skipped_truncated_snapshots: int = 0
+    continuity_reviews_expired: int = 0
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -142,7 +143,8 @@ async def run_agent(tenant_id: str, agent_ref: str, window: tuple[str, str], rep
     report.assessments_persisted += 1
 
 
-async def run_once(now: Optional[datetime] = None, agents: Optional[list[tuple[str, str]]] = None) -> PassReport:
+async def run_once(now: Optional[datetime] = None, agents: Optional[list[tuple[str, str]]] = None,
+                   tenants: Optional[list[str]] = None) -> PassReport:
     window = last_complete_day(now)
     report = PassReport(window=window)
     for tenant_id, agent_ref in (agents if agents is not None else await active_agents()):
@@ -155,7 +157,42 @@ async def run_once(now: Optional[datetime] = None, agents: Optional[list[tuple[s
             report.errors.append(f"{tenant_id}:{agent_ref}:{type(exc).__name__}")
             metrics.increment("agent_behavior_job_errors_total")
     metrics.increment("agent_behavior_job_snapshots_total", value=report.snapshots_recorded)
+    await expire_continuity_reviews(report, tenants=tenants)
     return report
+
+
+async def _deployment_tenants() -> list[str]:
+    from actions.agent.deployments import get_deployment_repository
+
+    return sorted({r["tenant_id"] for r in await get_deployment_repository().list_all()
+                   if r.get("tenant_id")})
+
+
+async def expire_continuity_reviews(report: PassReport, *, tenants: Optional[list[str]] = None,
+                                    expiry_days: Optional[int] = None) -> None:
+    """Expire stale agent continuity review items for every deployment tenant.
+
+    Runs once per pass. Every tenant with a registered deployment is visited,
+    not only the agents in this pass's batch, and one tenant failing does not
+    stop the rest."""
+    from config.settings import settings
+    from identity.identity.pending_review import PendingIdentityReviewRepository
+
+    days = settings.external_agent_telemetry.continuity_review_expiry_days if expiry_days is None else expiry_days
+    if days <= 0:
+        return
+    repo = PendingIdentityReviewRepository()
+    for tenant_id in (tenants if tenants is not None else await _deployment_tenants()):
+        try:
+            report.continuity_reviews_expired += await repo.expire_stale_agent_continuity(
+                tenant_id, older_than_days=days)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - one tenant must not stop the pass
+            report.errors.append(f"{tenant_id}:continuity_expiry:{type(exc).__name__}")
+            metrics.increment("agent_behavior_job_errors_total")
+    if report.continuity_reviews_expired:
+        metrics.increment("agent_continuity_reviews_expired_total", value=report.continuity_reviews_expired)
 
 
 async def run_agent_behavior_loop(interval_seconds: Optional[float] = None) -> None:

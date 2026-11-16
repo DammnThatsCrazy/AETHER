@@ -52,7 +52,7 @@ source_hashes:
   "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:2536c1ddf856b7674a693bfc142c2dafec74499bd5430dda22d564365d7a0cf0"
+  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
   "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
