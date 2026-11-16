@@ -28,6 +28,7 @@ reviewed_source_commits:
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; the freshness behavior is documented here.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
+  - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
   "services/api/actions/": "sha256:91cfc3c62393b72637056fc1608f98044dbd48be04e598c2566c8c56c0ca0f63"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -41,7 +42,7 @@ source_hashes:
   "services/api/journeys/": "sha256:159e97a5ab4eeca5aadd6f797cffd9e36a824b5f519d82eb96adc601ded570fb"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
-  "services/api/value/": "sha256:0d0d0f6725363c849628c40905857fd06fbe65fd499a56956b7779a9033b2210"
+  "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification

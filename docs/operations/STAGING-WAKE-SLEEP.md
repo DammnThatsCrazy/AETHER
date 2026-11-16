@@ -51,7 +51,7 @@ source_hashes:
   ".github/workflows/pilot-staging.yml": "sha256:36ebc8a80d84008b4b55c2fd562b28aa67f6a02e08478de9e4a4cbd77897a07a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:b48c4f2b4edfc25be0b4de2aba35213dca689af9684e13d34856ee76c77e08b1"
-  ".github/workflows/staging-lifecycle.yml": "sha256:f582dad0aedd260808db8bcdb26f52c0cec51145c6d439c852afd7447be8393b"
+  ".github/workflows/staging-lifecycle.yml": "sha256:c0e9550d8465d09c1a82a81f68e43e6d7b5109685a81dbbc8777a03c630a9b24"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"

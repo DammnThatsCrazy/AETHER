@@ -55,6 +55,7 @@ reviewed_source_commits:
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
   - {'commit': '55078498', 'reason': 'Reviewed 55078498: Terraform plan tests now encode staging as the second Access Kit MCP owner (repository allowed, service gated by repository and the lifecycle-matrix precondition). Test-only change; the staging MCP description here already matches.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
+  - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -62,7 +63,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:5438ebb42b66a0d798a3488b24c463e17725337b4c19e8ec2ca522c563217be7"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:f582dad0aedd260808db8bcdb26f52c0cec51145c6d439c852afd7447be8393b"
+  ".github/workflows/staging-lifecycle.yml": "sha256:c0e9550d8465d09c1a82a81f68e43e6d7b5109685a81dbbc8777a03c630a9b24"
   ".github/workflows/staging-state-reconcile.yml": "sha256:3da807f71996e7b397bc4a593fafd27d3818c3d4f0d7a2fa37b5619674209d48"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
