@@ -12,8 +12,8 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/sdk/web/src/index.ts": "sha256:53635bb48461322dc7e32dd0e79ba6a72f1ced80940f53fc23503a76a3d89913"
-  "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
-  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
+  "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:b7951a75cfb47b19da22cae331399bb32a29e0545699cb8a49d63a1ee34fc3f9"
+  "packages/shared/acquisition-evidence.ts": "sha256:e4e871496633b6b1712a313a0c6e99f29e61d50f6ba2c162579ca957f0468d4b"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -473,6 +473,8 @@ The SDK automatically captures on init:
 - All UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`)
 - 12 click IDs (`gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`)
 - The opaque `aether_ref` value as `referralToken`
+- A signed per-recipient email click token (`ae=v<ver>.<payload>.<sig>`) as
+  `clickToken`. Values without that shape are ignored and left in the URL.
 - Landing page URL
 
 **SPA persistence:** Traffic source data is cached in `sessionStorage` on first detection. Subsequent SPA navigations return the original source data instead of losing it when `document.referrer` clears.
@@ -482,8 +484,10 @@ events as `context.trafficSource`; it does not emit a separate
 `context.acquisitionEvidence` field. `referralToken` is forwarded unchanged in
 that raw context and is interpreted only after server-side verification — the
 typed field is its ONLY carrier: the captured landing page URL is sanitized
-(fragments and sensitive query params such as `aether_ref` and click IDs
-stripped) so the token never travels inside a URL. The schema-versioned
+(fragments and sensitive query params such as `aether_ref`, signed `ae` click
+tokens and click IDs stripped) so the token never travels inside a URL.
+`clickToken` is verified server-side, where it attributes the visit to the email
+recipient unless the visitor is already a different known person. The schema-versioned
 `AcquisitionEvidence` helper from `@olympuslabs/aether-shared` (schema v3, including
 `entryMethod`, `destinationDomain`, and first-touch fields) remains available
 to custom integrations through

@@ -188,6 +188,27 @@ const DEFAULT_SENSITIVE_URL_PARAMS = [
   'password', 'secret', 'code', 'reset_token',
 ];
 
+/**
+ * Signed per-recipient email click token (`ae=v<ver>.<payload>.<sig>`). It is
+ * shipped only through the typed `clickToken` field. The bare `ae` name is too
+ * generic to strip by key, so only token-shaped values are removed.
+ */
+export const CLICK_TOKEN_PARAM = 'ae';
+const CLICK_TOKEN_SHAPE = /^v[0-9A-Za-z]{1,16}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{16,}$/;
+
+/** True when a value has the shape of a signed Aether click token. */
+export function isClickToken(value: string | null | undefined): value is string {
+  return typeof value === 'string' && CLICK_TOKEN_SHAPE.test(value);
+}
+
+function deleteClickToken(params: URLSearchParams): void {
+  if (params.getAll(CLICK_TOKEN_PARAM).some((v) => isClickToken(v))) {
+    const kept = params.getAll(CLICK_TOKEN_PARAM).filter((v) => !isClickToken(v));
+    params.delete(CLICK_TOKEN_PARAM);
+    for (const v of kept) params.append(CLICK_TOKEN_PARAM, v);
+  }
+}
+
 let sanitizationEnabled = true;
 let sensitiveUrlParams = new Set(DEFAULT_SENSITIVE_URL_PARAMS);
 
@@ -211,13 +232,15 @@ export function sanitizeSearch(search: string): string {
   for (const key of Array.from(params.keys())) {
     if (sensitiveUrlParams.has(key.toLowerCase())) params.delete(key);
   }
+  deleteClickToken(params);
   const encoded = params.toString();
   return encoded ? `?${encoded}` : '';
 }
 
 /**
  * Strip fragments and sensitive query params (aether_ref, aether_cid, click
- * IDs, token params) from a URL before it is transmitted anywhere.
+ * IDs, token params, signed `ae` click tokens) from a URL before it is
+ * transmitted anywhere.
  * Relative URLs are resolved against the current page origin when available.
  */
 export function sanitizeUrl(url: string | undefined | null): string {
@@ -230,6 +253,7 @@ export function sanitizeUrl(url: string | undefined | null): string {
     for (const key of Array.from(parsed.searchParams.keys())) {
       if (sensitiveUrlParams.has(key.toLowerCase())) parsed.searchParams.delete(key);
     }
+    deleteClickToken(parsed.searchParams);
     const result = parsed.toString();
     // Sensitive material embedded outside the query (e.g. malformed values
     // that parse into the path) cannot be retained safely.
