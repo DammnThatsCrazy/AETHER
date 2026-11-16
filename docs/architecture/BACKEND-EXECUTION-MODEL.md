@@ -19,7 +19,7 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:2536c1ddf856b7674a693bfc142c2dafec74499bd5430dda22d564365d7a0cf0"
+  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
   "services/api/main.py": "sha256:a70c70ae4201523e1162a5b93f95f5a8785f5d9f1a214d8fbd0d0be4f45ce8e3"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
   "services/api/workers/runtime/roles.py": "sha256:976796e657b941759e2aceeb1658cb89866c615fc95023bf334de29ae1369181"
@@ -271,7 +271,9 @@ depending on an operator manually draining a queue:
   as a stored behavior snapshot, compares the two latest stored windows for
   drift, and persists a deterministic Risk360 assessment when the behavior
   evidence yields signals. Derived, rebuildable writes only; one failing agent
-  never stops a pass. Not `required`: a stalled pass leaves the last snapshots.
+  never stops a pass. Not `required`: a stalled pass leaves the last snapshots. Each
+  pass also expires open `agent_continuity_candidate` review items not reported
+  for `AETHER_AGENT_CONTINUITY_REVIEW_EXPIRY_DAYS` (default 30, `0` disables).
 
 Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
 and continues rather than killing the supervised loop). The `/v1/ready`
