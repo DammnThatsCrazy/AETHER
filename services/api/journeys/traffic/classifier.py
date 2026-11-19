@@ -463,23 +463,29 @@ class SourceClassifier:
         product = self._clean_token(evidence.get("product")) or None
         signer = str(evidence.get("signature_agent") or "")
         signer_host = signer.split("://", 1)[-1] if signer else "unknown"
-        signals = (f"web_bot_auth:{signer_host}", "agent_verification:web_bot_auth")
+        # A signature is verifiable wherever it was observed; a forwarded one is
+        # labelled so it stays distinguishable from Aether's own observation.
+        verification = (
+            "web_bot_auth_forwarded" if evidence.get("observed_by") == "tenant_server" else "web_bot_auth"
+        )
+        confidence = 0.97 if verification == "web_bot_auth_forwarded" else 0.99
+        signals = (f"web_bot_auth:{signer_host}", f"agent_verification:{verification}")
         if evidence.get("actor_type") == "machine":
             return self._result(
-                provider or "web_bot_auth", "machine", "AI Crawler", 0.99,
+                provider or "web_bot_auth", "machine", "AI Crawler", confidence,
                 source_class="machine_referral", mediation="crawler_discovery",
                 ai_provider=provider, ai_product=product, actor_type="machine",
-                journey_role="excluded", verification="web_bot_auth",
+                journey_role="excluded", verification=verification,
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                 attribution_eligible=False, traffic_origin="external",
                 entry_method="web_referrer" if domain else "unknown",
                 proof_level="platform_verified", evidence=signals,
             )
         return self._result(
-            provider or "web_bot_auth", "agent_referral", "Agent Referral", 0.99,
+            provider or "web_bot_auth", "agent_referral", "Agent Referral", confidence,
             source_class="agent_referral", mediation="agent_mediated_referral",
             ai_provider=provider, ai_product=product, actor_type="agent",
-            journey_role="handoff", verification="web_bot_auth",
+            journey_role="handoff", verification=verification,
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
             entry_method="web_referrer" if domain else "unknown",
             proof_level="platform_verified", evidence=signals,
@@ -516,9 +522,19 @@ class SourceClassifier:
         if not ua:
             return None
 
+        forwarded = server.get("observed_by") == "tenant_server"
+
         def grade(signature: str, verified_conf: float) -> tuple[str, str, float]:
             if header_signature != signature:
                 return "declared", "user_agent_claim", 0.5
+            if forwarded:
+                # Observed by the customer's server and forwarded, not seen by
+                # Aether: one step below Aether's own observation.
+                if server_state == "provider_ip_range":
+                    return "server_observed", "provider_ip_range_forwarded", 0.85
+                if server_state == "ip_mismatch":
+                    return "declared", "user_agent_ip_mismatch_forwarded", 0.3
+                return "declared", "user_agent_header_forwarded", 0.65
             if server_state == "provider_ip_range":
                 return "platform_verified", "provider_ip_range", verified_conf
             if server_state == "ip_mismatch":

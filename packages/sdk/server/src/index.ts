@@ -75,6 +75,8 @@ export {
   buildRiskSignal,
 } from './agentic';
 export type { AgentEventEnvelope } from './agentic';
+export { captureRequestEvidence } from './request-evidence';
+export type { CaptureRequestEvidenceOptions, RequestEvidence } from './request-evidence';
 
 
 /** True inside an AWS Lambda execution environment. */

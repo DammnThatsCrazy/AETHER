@@ -12,6 +12,10 @@ from aether_agentic.agentic import (
     build_tool_invocation,
 )
 from aether_agentic.ingestion import BatchHealth, parse_batch_health
+from aether_agentic.request_evidence import (
+    capture_request_evidence,
+    capture_request_evidence_from_wsgi,
+)
 
 __all__ = [
     "build_agent_event",
@@ -25,4 +29,6 @@ __all__ = [
     "AGENT_DEPLOYMENT_CONSENT_MODES",
     "BatchHealth",
     "parse_batch_health",
+    "capture_request_evidence",
+    "capture_request_evidence_from_wsgi",
 ]

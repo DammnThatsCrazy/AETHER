@@ -205,7 +205,14 @@ class TouchpointProjector(BaseProjector):
         # is a self-declared bot (automation, unverified). Invalid, expired or
         # replayed signatures prove nothing and are kept only as evidence.
         server_ctx = event.get("server_context") if isinstance(event.get("server_context"), dict) else {}
-        web_bot_auth = server_ctx.get("web_bot_auth") if isinstance(server_ctx.get("web_bot_auth"), dict) else None
+        # Evidence Aether observed itself wins; evidence the tenant's server
+        # observed and forwarded (server SDK captureRequestEvidence) is used
+        # only when Aether saw nothing, and stays marked observed_by=tenant_server.
+        forwarded = server_ctx.get("forwarded_request") if isinstance(server_ctx.get("forwarded_request"), dict) else {}
+        agent_verification = server_ctx.get("agent_verification") or forwarded.get("agent_verification")
+        web_bot_auth = server_ctx.get("web_bot_auth") or forwarded.get("web_bot_auth")
+        if not isinstance(web_bot_auth, dict):
+            web_bot_auth = None
         wba_state = str((web_bot_auth or {}).get("verification") or "")
         explicit_actor_type = (
             ctx.get("actorType")
@@ -244,7 +251,7 @@ class TouchpointProjector(BaseProjector):
             declared_entry_method=(
                 acq_ev.get("entryMethod") or acq_ev.get("entry_method")
             ),
-            server_agent_evidence=server_ctx.get("agent_verification"),
+            server_agent_evidence=agent_verification if isinstance(agent_verification, dict) else None,
             web_bot_auth_evidence=web_bot_auth,
             actor_evidence=actor_evidence,
         )

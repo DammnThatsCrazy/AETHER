@@ -6,27 +6,30 @@ visibility: I
 audience: [architect, dev-senior, exec]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/agent_verification.py, services/api/journeys/traffic/web_bot_auth.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/metrics.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/silver_adapters.py, packages/sdk/web/src/utils/index.ts, packages/sdk/web/src/types.ts, packages/sdk/server/src/agentic.ts, services/api/actions/agent/attestation.py, services/api/actions/agent_lineage/engine.py, services/api/actions/agent_lineage/evidence.py, services/api/config/settings.py]
+source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/agent_verification.py, services/api/journeys/traffic/web_bot_auth.py, services/api/journeys/traffic/forwarded_evidence.py, packages/sdk/server/src/request-evidence.ts, packages/sdk/python/aether_agentic/request_evidence.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/metrics.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/silver_adapters.py, packages/sdk/web/src/utils/index.ts, packages/sdk/web/src/types.ts, packages/sdk/server/src/agentic.ts, services/api/actions/agent/attestation.py, services/api/actions/agent_lineage/engine.py, services/api/actions/agent_lineage/evidence.py, services/api/config/settings.py]
 related: [operations/agent-layer-production, plans/public-agent-registry]
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
+  "packages/sdk/python/aether_agentic/request_evidence.py": "sha256:8bd81e418df925af9ce8f6cc0eb8cdaa63dcb51c90ebfc284419f937f4fc7f98"
   "packages/sdk/server/src/agentic.ts": "sha256:da675cdd08068013c1700c8e65943b55a31950c3399b2efb8b67cb08af4107db"
+  "packages/sdk/server/src/request-evidence.ts": "sha256:0c6673b18f400d3e73e36d004650d8a915e38652839aab168a638263a20fcdf9"
   "packages/sdk/web/src/types.ts": "sha256:0b12cb075729098df014e453361ce3d42c47b016db643350bc8a44dfd03344a9"
   "packages/sdk/web/src/utils/index.ts": "sha256:69d575c70eba14c95cd7f0b82659bf7db7c8c3151dbb63d05fefcb4b137412ce"
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
   "services/api/actions/agent_lineage/engine.py": "sha256:7892db12bd711f33c57ab75829afd018a9866c610856249a0d1cf8b135fac1c5"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
   "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
-  "services/api/ingestion/ingestion/batch.py": "sha256:b8b7ba5c77308028d1c0255aa62c4471038790b350c71c4074b261829906e347"
+  "services/api/ingestion/ingestion/batch.py": "sha256:34c3d2b48091ac2784d468859313f2fc75b46fbc4c1768398b7a501173e595ac"
   "services/api/ingestion/silver/dispatcher.py": "sha256:f1ac1e82dd95a777fdc182b5f5c1451548c9cf3208b5bd0651d99f299910a4fb"
-  "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:2053471c02d109ce1dab831cd591b745149b681cffa32ecc1b1646a9a8002e91"
+  "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:f40726a0962d373a01453a71bfe8ae678fabe51ba38fd639b6adecd4c87bac1e"
   "services/api/journeys/measurement/engine/attribution_engine.py": "sha256:a4d7048ab540db38e948daf17c411ec610887107934d42253d0be9a2c7f252c9"
   "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:5cb88fcdb807f9dc52e1cf6e3966d81f6b9f4509a5cdc1517300bed6ce1179df"
   "services/api/journeys/measurement/silver_adapters.py": "sha256:084dfd921dce491ec3eceb43d494a3afbb4e7bfdf580486b21b6c512e2266165"
   "services/api/journeys/traffic/agent_verification.py": "sha256:06839e165b37e38db25690424e427419978585ac4105ff836b6adf2bc0171341"
-  "services/api/journeys/traffic/classifier.py": "sha256:3b715e4fd25d6acb06c9dc864df8094788b78bd9d941807ddf3b8c8c6fea1666"
+  "services/api/journeys/traffic/classifier.py": "sha256:e22f7ee78d10de2cd7a134020eaba6c23c4089f4c000b2872e39ee9d6370dd60"
+  "services/api/journeys/traffic/forwarded_evidence.py": "sha256:cfed0417980530581d6b1c7697e3459b0c3a397775214916ee480cc51ef9758d"
   "services/api/journeys/traffic/metrics.py": "sha256:6f6a97826153619931bf04d7c3c865c2896d976b4cb834c14444989ed4ac1cc4"
   "services/api/journeys/traffic/referral_links.py": "sha256:a50ba8985185c48e664b906c06b7a753457f4daf7731d3cf6c5433f9937bf7c5"
   "services/api/journeys/traffic/web_bot_auth.py": "sha256:adc124afaa9894d0ae67064ab4bd72e1a9a279ba81d5b04a759b7f71e6c3bf20"
@@ -43,10 +46,11 @@ evidence allows. "Reliable" here means two things: what we label, we label
 correctly and at the right strength; and what we cannot see, we record as
 `unknown` instead of guessing.
 
-**Status:** Phase 1 (§3) and the first Phase 2 item, Web Bot Auth (§4), are
-implemented. Six paths are at medium or better; agents that hide in a real
-browser are verified when they sign and otherwise stay `unknown`; three paths
-are not yet covered, and §6 lists what closes each gap. This page is an
+**Status:** Phase 1 (§3) and two Phase 2 items, Web Bot Auth (§4.1) and
+server-forwarded request evidence (§4.2), are implemented. Seven paths are at
+medium or better; agents that hide in a real browser are verified when they sign
+and otherwise stay `unknown`; mobile and MCP / A2A are not yet covered, and §6
+lists what closes each gap. This page is an
 engineering assessment, not a readiness claim; see `scripts/production_status.py`.
 
 ## 1. Reliability by path
@@ -59,8 +63,8 @@ engineering assessment, not a readiness claim; see `scripts/production_status.py
 | Declared AI user-agents (GPTBot, ChatGPT-User, PerplexityBot, …) | Low–medium, overclaimed | **High** where the provider publishes IP ranges; **medium** otherwise | Server checks the real header + client IP against published ranges; unverifiable claims are labelled `declared` |
 | Undetected actors (all web / mobile traffic) | Counted as **human** | **Correctly `unknown`**, and measured | No more human default anywhere in the touchpoint, attribution, adapter or journey path |
 | Browser automation (WebDriver-driven browsers) | None | **Medium** (inferred) | Web SDK reports `navigator.webdriver`; classified `machine`, never `agent` or `human` |
-| Agent in a real browser without WebDriver (CDP, extensions, computer-use) | None | **High** when the agent signs with Web Bot Auth and Aether holds its keys (ChatGPT today); otherwise `unknown` | RFC 9421 signature verified on `/v1/batch` and verified-link redirects (§4); unsigned agents have no honest client signal |
-| Agent that does not run JavaScript, on an SDK-only site | None | **None** — invisible | Needs a server-side integration (§6) |
+| Agent in a real browser without WebDriver (CDP, extensions, computer-use) | None | **High** when the agent signs with Web Bot Auth and Aether holds its keys (ChatGPT today); otherwise `unknown` | RFC 9421 signature verified on `/v1/batch` and verified-link redirects (§4.1); unsigned agents have no honest client signal |
+| Agent that does not run JavaScript | None | **High** for Web Bot Auth signers and **medium–high** for range-verified agents, when the customer forwards request evidence from the server SDK; invisible on browser-SDK-only sites | `captureRequestEvidence` → verified at ingestion, graded as observed by the tenant's server (§4.2) |
 | Mobile SDKs | None | **None** — recorded `unknown` | No actor evidence captured yet (§6) |
 | MCP client identity, A2A Agent Cards | None | **None** | Phase 2 (§6) |
 
@@ -141,7 +145,9 @@ biometric is collected. The projector maps `webdriver: true` to
 `agentId` takes precedence. `webdriver: false` and `trustedInputSeen: true` are
 **not** treated as evidence of a human: automation can produce trusted events.
 
-## 4. Phase 2 — Web Bot Auth (implemented)
+## 4. Phase 2 — implemented
+
+### 4.1 Web Bot Auth
 
 Signing agents (draft-meunier-web-bot-auth-architecture) attach an RFC 9421
 HTTP Message Signature to their requests, made with an Ed25519 key published at
@@ -175,13 +181,45 @@ verify them.
 Only the verdict, signer origin and key id are stored; never header values or
 signatures.
 
+### 4.2 Server-forwarded request evidence
+
+Agents that never run JavaScript (fetchers, API clients, most crawlers) do not
+trigger the browser SDK. The server SDKs capture what the customer's server saw
+on the incoming request: `captureRequestEvidence(req)` (Node: `IncomingMessage`
+or Fetch `Request`) and `capture_request_evidence(...)` /
+`capture_request_evidence_from_wsgi(environ)` (Python). The result travels as
+`context.requestEvidence`: user-agent, client IP, method, host, path, query and
+the three signature headers; never bodies, cookies or authorization headers.
+
+At ingestion `batch._apply_forwarded_request_evidence` verifies it
+(`journeys/traffic/forwarded_evidence.py`), writes verdicts to
+`server_context.forwarded_request`, and **always removes the raw evidence**, so
+client IPs and signature headers are never stored. A signature's validity is
+checked at the forwarded `receivedAt`, which must lie within 24 hours before
+ingestion and no more than 60 s after.
+
+The evidence was observed by the tenant's server, not Aether, so it is graded
+one step lower, and Aether's own observation of the same request wins:
+
+| Forwarded evidence | `proof_level` | `verification_level` | Confidence |
+|---|---|---|---|
+| Declared agent UA, IP in provider range | `server_observed` | `provider_ip_range_forwarded` | 0.85 |
+| Declared agent UA, no range to check | `declared` | `user_agent_header_forwarded` | 0.65 |
+| Declared agent UA, IP outside range | `declared` | `user_agent_ip_mismatch_forwarded` | 0.3 |
+| Web Bot Auth signature verified | `platform_verified` | `web_bot_auth_forwarded` | 0.97 |
+
+A signature stays cryptographically verifiable wherever it was observed: it
+binds the signer to the customer's host and a short validity window.
+
 ## 5. What we can claim now
 
 - **Can claim:** agents reported through the server SDK are attributed, with
   cryptographic proof for signing deployments. Declared OpenAI and Perplexity
   agents and crawlers are verified against the providers' published ranges.
   Agents that sign with Web Bot Auth (ChatGPT today) are verified even in a
-  normal browser. WebDriver-driven browsers are flagged as automation. Aether
+  normal browser. Agents that never run JavaScript are verified when the
+  customer forwards request evidence from the server SDK. WebDriver-driven
+  browsers are flagged as automation. Aether
   never counts an actor as human without evidence, and reports how much traffic
   is unresolved.
 - **Cannot claim:** that Aether detects agents that hide (unsigned, no
@@ -193,7 +231,6 @@ signatures.
 |---|---|---|
 | Strong path off by default | `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED` is explicitly off in `config/release/feature_flags/staging.yaml` and `production.yaml`. It gates the deployment and lineage routes and jobs, the Agent 360 / Profile 360 deployment sections, and attestation-key registration, so enabling it is a release decision; then show unsigned agent events as `source_reported` in Agent 360 | High for instrumented agents |
 | More Web Bot Auth signers | Add signers to `refresh_web_bot_auth_directories.py` as they publish key directories | High per signer |
-| Non-JS agents on SDK-only sites | Server SDK request-evidence helper (forward the real request's user-agent and signature headers from the customer's server) | Medium–high |
 | Mobile | App-attestation and accessibility-automation evidence in the mobile SDKs | Medium (inferred) |
 | MCP / A2A agents | Capture MCP OAuth `client_id` / authorized party; ingest signed A2A Agent Cards | High |
 | Providers without published ranges | Add providers to `refresh_agent_provider_ranges.py` as they publish ranges; reverse-DNS verification where documented | High per provider |

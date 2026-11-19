@@ -2618,6 +2618,30 @@ export interface JourneyContext {
   confidenceSignals?: string[];
 }
 
+/**
+ * Evidence about an incoming request, captured by a server SDK on the
+ * customer's server (captureRequestEvidence) and forwarded with an event.
+ * Ingestion verifies it (provider IP ranges, Web Bot Auth signatures) and
+ * removes it before storage: the raw IP and headers are never persisted.
+ */
+export interface RequestEvidence {
+  /** ISO-8601 time the customer's server received the request. */
+  receivedAt: string;
+  userAgent?: string;
+  /** Client IP as the customer's server resolved it. Not stored by Aether. */
+  clientIp?: string;
+  method?: string;
+  /** host[:port] the request was addressed to. */
+  authority?: string;
+  path?: string;
+  query?: string;
+  scheme?: string;
+  /** Raw HTTP Message Signature headers (RFC 9421), if present. */
+  signature?: string;
+  signatureInput?: string;
+  signatureAgent?: string;
+}
+
 export interface EventContext {
   library: LibraryContext;
   page?: PageContext;
@@ -2653,6 +2677,8 @@ export interface EventContext {
   /** Active delegation grant covering this action, if any. */
   delegationId?: string;
   delegationScope?: string[];
+  /** Server SDK: evidence about the request being handled (verified, then dropped at ingestion). */
+  requestEvidence?: RequestEvidence;
 
   /** Identity-stitching metadata. */
   identityConfidence?: number;          // 0..1
