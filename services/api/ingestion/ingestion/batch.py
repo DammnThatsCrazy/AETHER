@@ -1062,7 +1062,8 @@ async def _process_single_event(
 
 
 def _build_server_context(request: Request, tenant_id: str) -> Optional[dict]:
-    """Server-observed request context: network enrichment + agent verification.
+    """Server-observed request context: network enrichment + agent verification
+    (declared user-agent vs. published IP ranges, and Web Bot Auth signatures).
 
     Agent verification runs whether or not network enrichment is enabled: it is a
     cheap header check, and only does an IP range lookup when the request's own
@@ -1073,7 +1074,28 @@ def _build_server_context(request: Request, tenant_id: str) -> Optional[dict]:
     if agent is not None:
         context = dict(context or {})
         context["agent_verification"] = agent
+    signed = _build_web_bot_auth(request)
+    if signed is not None:
+        context = dict(context or {})
+        context["web_bot_auth"] = signed
     return context
+
+
+def _build_web_bot_auth(request: Request) -> Optional[dict]:
+    """Verify a Web Bot Auth (RFC 9421) signature on the request, if present."""
+    try:
+        from journeys.traffic.web_bot_auth import verify_starlette_request
+
+        evidence = verify_starlette_request(request)
+        if evidence is not None:
+            metrics.increment(
+                "ingestion_web_bot_auth_total",
+                labels={"verification": evidence["verification"]},
+            )
+        return evidence
+    except Exception as exc:  # verification must never break ingestion
+        logger.warning("Web Bot Auth verification failed (event continues): %s", exc)
+        return None
 
 
 def _build_agent_verification(request: Request) -> Optional[dict]:

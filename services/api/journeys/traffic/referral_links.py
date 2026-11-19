@@ -158,6 +158,24 @@ def _classify_redirect_user_agent(user_agent: str) -> tuple[str, bool]:
     return "browser", False
 
 
+def _apply_web_bot_auth(
+    ua_class: str, is_machine: bool, evidence: Optional[dict[str, Any]]
+) -> tuple[str, bool]:
+    """A verified Web Bot Auth signature outranks the user-agent string.
+
+    A verified signing *agent* keeps its handoff (its session on the destination
+    is attributable agent activity); a verified signing crawler is a machine.
+    A signer Aether holds no keys for is recorded but proves nothing.
+    """
+    state = (evidence or {}).get("verification")
+    if state == "web_bot_auth_verified":
+        actor = (evidence or {}).get("actor_type") or "agent"
+        return f"web_bot_auth_{actor}", actor == "machine"
+    if state == "web_bot_auth_unknown_signer":
+        return "web_bot_auth_unknown_signer", is_machine
+    return ua_class, is_machine
+
+
 def public_referral_link(record: dict[str, Any]) -> dict[str, Any]:
     """Return the API-safe representation of a stored link.
 
@@ -659,6 +677,7 @@ class VerifiedReferralLinkRepository:
         *,
         environment: Optional[str] = None,
         user_agent: str = "",
+        web_bot_auth: Optional[dict[str, Any]] = None,
     ) -> Optional[dict[str, Any]]:
         """Resolve a public redirect token and record an immutable link use.
 
@@ -675,6 +694,7 @@ class VerifiedReferralLinkRepository:
         now = _now()
         environment = _clean_ai_dimension(environment)
         ua_class, is_machine = _classify_redirect_user_agent(user_agent)
+        ua_class, is_machine = _apply_web_bot_auth(ua_class, is_machine, web_bot_auth)
 
         pool = await _pool()
         if pool is None:
