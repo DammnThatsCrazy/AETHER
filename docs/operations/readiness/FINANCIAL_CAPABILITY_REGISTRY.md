@@ -29,7 +29,7 @@ source_hashes:
   "config/route_registry.yaml": "sha256:39bd08a8cb61c64a831c476e7db4142fcacc1031f6313cca0970d1ecdf115170"
   "config/service_classification.yaml": "sha256:2930c567acb0fc9dec5efa133b896c4b1d6eaf1bc63c84ec9e98486d2f6a4a14"
   "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
-  "docs/_generated/financial-capability-matrix.json": "sha256:9fe22542e9acddb2d8af224de1666086d25e8d7b0cbf2bf4ac7dc2f53b72bb27"
+  "docs/_generated/financial-capability-matrix.json": "sha256:a196f631b28740f20ae01eb021c0e4214a85511a33c98d66fa062bd5ec05655c"
   "scripts/validate_financial_capability_registry.py": "sha256:fb11972329f20b9e8eea683c83393ae8cc66e3af9a003723da5ac75f85cd2241"
   "services/api/connectors/integrations/providers/payment_rails/base.py": "sha256:482176b335f65d66e9375ddd8e2e43b7f2ccc9aa5f5e5f23cf9c4658a2247093"
   "services/api/shared/certification/capability_records.py": "sha256:f1aa839e3b693dae77e44816c3fac6c21b8207f3c2a980957621dcd34701ed1b"

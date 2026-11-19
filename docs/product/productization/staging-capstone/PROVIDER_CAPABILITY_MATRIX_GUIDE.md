@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
-  "docs/_generated/financial-capability-matrix.json": "sha256:9fe22542e9acddb2d8af224de1666086d25e8d7b0cbf2bf4ac7dc2f53b72bb27"
+  "docs/_generated/financial-capability-matrix.json": "sha256:a196f631b28740f20ae01eb021c0e4214a85511a33c98d66fa062bd5ec05655c"
   "services/api/shared/certification/capability_records.py": "sha256:f1aa839e3b693dae77e44816c3fac6c21b8207f3c2a980957621dcd34701ed1b"
   "services/api/shared/certification/descriptor.py": "sha256:9b4a90d83b4304d4cf5be2a98df1db3abd971841b91565bc10cd4f17b0c0a198"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
