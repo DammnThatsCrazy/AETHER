@@ -37,9 +37,9 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:1c705295bbe2d36266a88595ced35c8e06d8a5c8adb0fc62fb22438b861a2abf"
+  "services/api/ingestion/": "sha256:ff017eb1a32c6747cb99f5bd437a281be0615e55a6869389e6a9d7d66b926b87"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:637344aac6d7de7d6295112e07943016bfa77b2b014f84ffee6a1e25fac158ed"
+  "services/api/journeys/": "sha256:78a5fc3f3a3668ddf3ce0f76db0dcccd24ec610d318cab2836b62e18000dd94c"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
@@ -967,6 +967,16 @@ classifier grades it by what the ingestion server verified
 | Header, client IP inside the provider's published range | `platform_verified` | `provider_ip_range` | 0.95–0.98 |
 
 The raw IP is used only for the range check and is never stored.
+
+**Web Bot Auth.** A request carrying an RFC 9421 HTTP Message Signature tagged
+`web-bot-auth` is verified on `/v1/batch` and verified-link redirects against
+the reviewed key snapshot `journeys/traffic/web_bot_auth_directories.json`
+(refreshed by `scripts/refresh_web_bot_auth_directories.py`; no request-time
+key fetch). A verified signature outranks any user-agent claim and classifies
+the touchpoint as `platform_verified` / `web_bot_auth` (confidence 0.99), even
+for a normal browser user-agent. A signer with no keys in the snapshot is
+self-declared automation (`machine`, unverified); invalid, expired or replayed
+signatures prove nothing and are kept only as evidence.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's
