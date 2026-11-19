@@ -251,6 +251,18 @@ async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None
     # override the source identity's current canonical owner.
     if source.canonical_entity_id:
         resolution_event["_source_canonical_entity_id"] = source.canonical_entity_id
+    # Private worker-only field: the recipient email hash from a sealed,
+    # consented, first-device email click (never from client input).
+    try:
+        from journeys.comms.click_token import identity_signals_for_click
+
+        click_signals = await identity_signals_for_click(payload, tenant_id=tenant_id)
+    except Exception as exc:  # correlation must never block identity resolution
+        logger.warning("click_identity_signals_failed tenant=%s: %s", tenant_id, exc)
+        click_signals = []
+    if click_signals:
+        resolution_event["_server_alias_signals"] = click_signals
+        metrics.increment("identity_signed_click_signal_total")
     decision = await resolver.resolve_event(resolution_event, tenant_id)
     canonical_entity_id = str(getattr(decision, "canonical_entity_id", "") or "")
     outcome = str(getattr(getattr(decision, "decision", None), "value", ""))

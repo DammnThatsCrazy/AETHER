@@ -24,6 +24,7 @@ graph edges, or merge records. The repository layer enforces this.
 from __future__ import annotations
 
 import os
+import re
 import asyncio
 import uuid
 from dataclasses import dataclass, field
@@ -425,6 +426,7 @@ class IdentityResolutionService:
     ) -> IdentityResolutionDecision:
         event_id = event.get("event_id", "")
         consent_snapshot = _extract_consent(event)
+        server_alias_sources: dict[tuple[IdentitySignalType, str], str] = {}
 
         # Recompute path: caller provides pre-hashed signals to bypass
         # extract/normalize/hash/persist steps (observations already in DB).
@@ -468,6 +470,28 @@ class IdentityResolutionService:
                 if h:
                     hashed_signals.append((sig.type, h, display))
                     self._metrics.record_signal_observation(sig.type.value)
+
+            # ── 4a. Server-derived alias signals (identity worker only) ──────
+            # A verified, consented, first-device email click carries the
+            # recipient's tenant-scoped email hash. It joins the same
+            # suppression, consent and merge-policy path as an observed email.
+            for item in _server_alias_signals(event):
+                hashed_signals.append(
+                    (IdentitySignalType.EMAIL_HASH, item["hash"], item["display"])
+                )
+                server_alias_sources[(IdentitySignalType.EMAIL_HASH, item["hash"])] = item["source"]
+                await self._repo.create_signal_observation(
+                    tenant_id=tenant_id,
+                    source_event_id=event_id,
+                    source_platform=None,
+                    source_sdk=None,
+                    signal_type=IdentitySignalType.EMAIL_HASH,
+                    signal_value_hash=item["hash"],
+                    raw_value_redacted=item["display"],
+                    observed_at=event.get("timestamp") or utc_now().isoformat(),
+                    consent_snapshot=consent_snapshot,
+                    context={"source": item["source"]},
+                )
 
             # ── 4. Persist signal observations ────────────────────────────────
             for sig in raw_signals:
@@ -1114,7 +1138,10 @@ class IdentityResolutionService:
                     alias_type=sig_type,
                     alias_value_hash=sig_hash,
                     alias_display_value_redacted=display,
-                    source=signal.source if signal else "recompute",
+                    source=(
+                        signal.source if signal
+                        else server_alias_sources.get((sig_type, sig_hash), "recompute")
+                    ),
                     source_event_id=event_id,
                     source_platform=signal.source_platform if signal else None,
                     confidence=policy_result.confidence,
@@ -2854,6 +2881,31 @@ def _blocked_reason_category(reason_codes: list[str]) -> str:
     if REASON_CONSENT_BLOCKS_LINK in reason_codes:
         return "consent"
     return "other"
+
+
+_SERVER_ALIAS_HASH = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _server_alias_signals(event: dict) -> list[dict[str, str]]:
+    """Validated ``_server_alias_signals`` (private, worker-supplied only).
+
+    Public resolve routes build their event dicts field by field, so this key
+    can only arrive from the identity ingestion worker. Only tenant-scoped
+    email hashes are accepted.
+    """
+    items = event.get("_server_alias_signals")
+    if not isinstance(items, list):
+        return []
+    accepted: list[dict[str, str]] = []
+    for item in items[:4]:
+        if not isinstance(item, dict) or item.get("type") != IdentitySignalType.EMAIL_HASH.value:
+            continue
+        value = str(item.get("hash") or "")
+        if not _SERVER_ALIAS_HASH.match(value):
+            continue
+        source = str(item.get("source") or "server")[:64]
+        accepted.append({"hash": value, "display": f"email:{source}", "source": source})
+    return accepted
 
 
 def _extract_consent(event: dict) -> Optional[dict]:

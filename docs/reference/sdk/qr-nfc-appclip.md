@@ -26,8 +26,8 @@ SDK **observes evidence and names the entry method; the backend classifies.**
 - The host app owns the scan/read (e.g. `AVCaptureSession` / `VNBarcode…`,
   `CoreNFC`, `NfcAdapter`) and hands the SDK the already-decoded URL/URI string.
 
-The SDK then parses `aether_ref` / UTM / click IDs, sanitizes the URL (the
-opaque `aether_ref` token and click IDs never appear in transmitted URL
+The SDK then parses `aether_ref` / signed `ae` click tokens / UTM / click IDs,
+sanitizes the URL (the opaque tokens and click IDs never appear in transmitted URL
 strings), sets `destinationDomain`, and persists first/latest-touch evidence —
 identical to the deep-link path.
 
@@ -92,8 +92,8 @@ touch persistence happen natively.
 - **One parser.** QR/NFC/App Clip reuse the deep-link evidence parser — there is
   no second, divergent code path.
 - **URL sanitization.** Transmitted URLs are stripped of the `aether_ref` token,
-  click IDs, and fragments; the token only ever travels inside
-  `evidence.referralToken`.
+  signed `ae` click tokens, click IDs, and fragments; the tokens only ever travel
+  inside `evidence.referralToken` / `evidence.clickToken`.
 - **No typed-URL inference.** Attribution is based solely on the decoded payload
   the host app supplies. The SDK never observes or reconstructs manually typed
   URLs.

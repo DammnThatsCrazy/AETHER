@@ -1622,6 +1622,7 @@ object Aether : DefaultLifecycleObserver {
                 evidence.optString(evidenceKey).takeIf { it.isNotEmpty() }?.let { props[propKey] = it }
             }
             evidence.optString("referralToken").takeIf { it.isNotEmpty() }?.let { props["referralToken"] = it }
+            evidence.optString("clickToken").takeIf { it.isNotEmpty() }?.let { props["clickToken"] = it }
             evidence.optJSONObject("clickIds")?.let { props["clickIds"] = it }
 
             enqueueEvent("app_install_attributed", props)

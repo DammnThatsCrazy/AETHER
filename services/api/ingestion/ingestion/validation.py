@@ -341,8 +341,7 @@ def build_normalized_payload(
     received_at: str,
 ) -> dict[str, Any]:
     """Build the only payload eligible for Bronze/outbox persistence."""
-    return sanitize_acquisition_payload(
-        {
+    payload = {
             "event_id": sdk_event.id,
             "tenant_id": tenant_id,
             "event_type": sdk_event.type,
@@ -361,7 +360,13 @@ def build_normalized_payload(
             "schema_version": SCHEMA_VERSION,
             "source": "sdk",
         }
-    )
+    # A signed email click token is verified here, against the authenticated
+    # tenant, and replaced by a seal bound to this event; the reusable link
+    # token itself never crosses the persistence boundary.
+    from journeys.comms.click_token import seal_click_token_in_payload
+
+    seal_click_token_in_payload(payload)
+    return sanitize_acquisition_payload(payload)
 
 
 def format_rejection(result: EventValidationResult, sdk_event: Any) -> str:

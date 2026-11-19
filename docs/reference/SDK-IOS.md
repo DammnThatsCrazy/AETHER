@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:95527d29b9b08f5e3c753cc497f31d7168f229da345b57aa9701383ac52e6f7e"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:c4e06ef133b2b170fbb1f57136e6e64b6b121afc685020dc46be5c0a13bb4a37"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -272,6 +272,13 @@ The SDK captures **12 ad platform click IDs** and all UTM parameters from deep l
 **Supported click IDs:** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
 
 **Campaign context fields:** `source`, `medium`, `campaign`, `content`, `term`, `clickIds` (dictionary), `referrerDomain`
+
+**Email click tokens:** a signed per-recipient click token in the `ae`
+parameter (`v<ver>.<payload>.<sig>`) is captured as
+`acquisitionEvidence.clickToken` and stripped from every transmitted URL. An
+`ae` value without that shape is the app's own parameter and is left alone. The
+backend verifies the token and decides whether the visit belongs to the email
+recipient (see `docs/product/comms/COMMS_GENERIC_WEBHOOK.md`).
 
 Every attribution entry point runs through one canonical funnel: URL+timestamp
 dedup → canonical acquisition-evidence parse (shared `AcquisitionEvidence`

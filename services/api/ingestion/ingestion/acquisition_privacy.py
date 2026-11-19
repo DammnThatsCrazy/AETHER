@@ -1,6 +1,6 @@
 """Privacy boundary for persisted SDK acquisition evidence.
 
-Verified referral tokens are bearer credentials. They may exist in memory
+Verified referral tokens and signed email click tokens are bearer credentials. They may exist in memory
 long enough to be verified, but Bronze and the transactional outbox persist
 only their SHA-256 digest. Legacy/raw referrers are reduced to an origin plus a
 one-way path fingerprint before durable ingestion.
@@ -27,6 +27,11 @@ def sanitize_acquisition_payload(payload: dict[str, Any]) -> dict[str, Any]:
     sanitized = copy.deepcopy(payload)
     digests: list[str] = []
     _sanitize_mapping(sanitized, digests)
+    # Signed email click tokens are sealed per event at the ingestion boundary;
+    # any raw token that still reaches persistence is dropped.
+    from journeys.comms.click_token import scrub_click_token
+
+    scrub_click_token(sanitized)
 
     if digests:
         context = sanitized.get("context")

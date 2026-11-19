@@ -949,6 +949,20 @@ public final class Aether: NSObject {
         "irclickid", "aff_id"
     ]
 
+    /// Query parameter carrying a signed per-recipient email click token.
+    static let clickTokenParam = "ae"
+
+    /// True when `value` has the signed `v<ver>.<payload>.<sig>` click-token
+    /// shape. The bare `ae` name is too generic to strip by key, so a host
+    /// app's own unrelated `ae` parameter is never captured or removed.
+    static func isClickToken(_ value: String?) -> Bool {
+        guard let value = value, !value.isEmpty else { return false }
+        return value.range(
+            of: "^v[0-9A-Za-z]{1,16}\\.[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_-]{16,}$",
+            options: .regularExpression
+        ) != nil
+    }
+
     private static let eventConsentPurpose: [AetherEventType: String] = [
 // @generated-start aether-consent-purposes/ios-map
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
@@ -2225,8 +2239,9 @@ public final class Aether: NSObject {
         let evidence: [String: AnyCodable]
         /// Click IDs preserved for CampaignInfo/audit.
         let clickIds: [String: String]
-        /// URL with the opaque `aether_ref` token stripped — the token only
-        /// travels inside evidence.referralToken, never in raw URL strings.
+        /// URL with the opaque `aether_ref` token and any signed `ae` click
+        /// token stripped — they only travel inside evidence.referralToken /
+        /// evidence.clickToken, never in raw URL strings.
         let sanitizedURL: String
     }
 
@@ -2265,6 +2280,10 @@ public final class Aether: NSObject {
             } else if name == "aether_cid", let value = item.value, !value.isEmpty {
                 // Explicit Aether campaign UUID — always validated server-side.
                 evidence["canonicalCampaignId"] = AnyCodable(value)
+            } else if item.name == Self.clickTokenParam, Self.isClickToken(item.value) {
+                // Signed per-recipient email click token: opaque here, verified
+                // and attributed server-side; never left in a transmitted URL.
+                evidence["clickToken"] = AnyCodable(item.value ?? "")
             }
         }
         if !clickIds.isEmpty {
@@ -2287,7 +2306,10 @@ public final class Aether: NSObject {
         // Strip the opaque referral token from the transmitted URL string.
         var sanitizedComponents = components
         if let items = components?.queryItems {
-            let kept = items.filter { $0.name.lowercased() != "aether_ref" }
+            let kept = items.filter { item in
+                item.name.lowercased() != "aether_ref"
+                    && !(item.name == Self.clickTokenParam && Self.isClickToken(item.value))
+            }
             sanitizedComponents?.queryItems = kept.isEmpty ? nil : kept
         }
         let sanitizedURL = sanitizedComponents?.url?.absoluteString ?? url.absoluteString

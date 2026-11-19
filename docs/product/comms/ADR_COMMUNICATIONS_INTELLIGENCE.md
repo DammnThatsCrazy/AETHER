@@ -11,7 +11,7 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR dispatcher diff: CommerceFlowProjector handles cart and checkout events only. Communication projector fan-out and canonical activity ownership described by these ADRs are unchanged."
 source_hashes:
-  "services/api/ingestion/silver/dispatcher.py": "sha256:df81a0d87faceb8a721ed17c095976038c5ac2efded64c9bcd274efe23b86005"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:f1ac1e82dd95a777fdc182b5f5c1451548c9cf3208b5bd0651d99f299910a4fb"
   "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
   "services/api/journeys/comms/projector.py": "sha256:e6ebefb5b7e4926236a9b24bf032ae28a4144a895b319e527683757b45b2aef5"
 ---
@@ -181,11 +181,11 @@ post-click session = strong evidence; transactional email = excluded from
 acquisition attribution; unsubscribe/complaint = negative outcomes, never
 positive credit. Implemented as `CommsAttributionPolicy` consumed by the
 existing attribution engine — no second engine.
-A signed per-recipient click token (`ae`) verified at Silver dispatch
-attributes the landing touchpoint to the recipient as `signed_click` (0.9). If
-the visitor is already bound to a different entity, it is recorded as
-`forwarded_link` (0.4) and never reassigns identity. A link without a token
-carries no recipient.
+A signed per-recipient click token (`ae`) attributes the landing touchpoint to
+the recipient as `signed_click` (0.9) only with identity-stitching consent and
+on the first device that opens the link. A second device, or a visitor already
+bound to a different entity, is recorded as `forwarded_link` (0.4) and never
+reassigns identity. A link without a token carries no recipient.
 
 **Enforcement.** `tests/unit/comms/test_comms_attribution_policy.py`.
 
@@ -214,7 +214,8 @@ redacted display forms (`j***@e***.com`) are stored for UI. Full message
 bodies and attachments are never stored by default — only structural metadata
 and evidence references (`raw_evidence_ref`). DSR deletion tombstones comms
 facts by profile and removes derived classifications; aggregates survive only
-where legally permitted. Click tokens carry no raw PII.
+where legally permitted. Click tokens carry no raw PII and are never persisted:
+ingestion verifies them and stores only a seal bound to the one event.
 
 **Enforcement.** `tests/unit/comms/test_comms_mailbox.py::TestPrivacy` +
 `tests/unit/comms/test_comms_projector.py::TestNoRawPII`.

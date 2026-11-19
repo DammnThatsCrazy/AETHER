@@ -572,4 +572,18 @@ final class AetherSDKTests: XCTestCase {
         XCTAssertFalse(sdk.isFeatureEnabled("flag_absent_everywhere"))
         XCTAssertTrue(sdk.isFeatureEnabled("flag_absent_everywhere", default: true))
     }
+
+    func testSignedClickTokenIsCapturedAndStrippedButPlainAeIsKept() throws {
+        let token = "v1.eyJ0IjoidGVuYW50LWEifQ.abcdefghijklmnopqrstuvwxyz012345"
+        let url = try XCTUnwrap(URL(string: "https://shop.example.com/sale?utm_source=email&ae=\(token)"))
+        let parsed = Aether.shared.parseAcquisitionEvidence(from: url, entryMethod: "deep_link")
+        XCTAssertEqual(parsed.evidence["clickToken"]?.value as? String, token)
+        XCTAssertFalse(parsed.sanitizedURL.contains(token))
+        XCTAssertTrue(parsed.sanitizedURL.contains("utm_source=email"))
+
+        let plain = try XCTUnwrap(URL(string: "https://shop.example.com/checkout?ae=express"))
+        let plainParsed = Aether.shared.parseAcquisitionEvidence(from: plain, entryMethod: "deep_link")
+        XCTAssertNil(plainParsed.evidence["clickToken"])
+        XCTAssertTrue(plainParsed.sanitizedURL.contains("ae=express"))
+    }
 }

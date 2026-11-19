@@ -36,10 +36,10 @@ source_hashes:
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
-  "services/api/identity/": "sha256:801f3896e6e1e1a8074a09ad8661ab795bb0863ab9c1e78d0be5dfaba4b69710"
-  "services/api/ingestion/": "sha256:da08cefeaf461b65f81aacc62aab001aa52050320c8f08ee005d90120d99c763"
+  "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
+  "services/api/ingestion/": "sha256:1c705295bbe2d36266a88595ced35c8e06d8a5c8adb0fc62fb22438b861a2abf"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:b59b72d7771de8029a0fa1c84d69e48dc1dddd39f7d33e177e5171b4d6342616"
+  "services/api/journeys/": "sha256:9eaf419a31db907f9887bde040d0d4bb1a9ed8fea9a7dfba96fce1c93dfc62bf"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
@@ -4447,15 +4447,19 @@ Communications tenant surface (`/v1/comms/*`):
   (tenant-bound, expiring, key-versioned, no raw PII; a supplied
   `recipient_email` is hashed to a tenant-scoped alias) for the sender to
   append to each recipient's links as `?ae=<token>`.
-  `POST /v1/comms/click-tokens/verify` returns the correlation evidence for one
-  token. The same verification runs automatically at ingestion: the web SDK
-  forwards `ae` as `context.trafficSource.clickToken`, and the Silver dispatcher
-  stamps campaign/message/link lineage on the landing touchpoint. It attributes
-  an anonymous visit to the recipient (`identity_resolution_method="signed_click"`,
-  confidence 0.9) only when the alias maps to exactly one tenant-owned entity.
-  A visitor already bound to a different entity is recorded as `forwarded_link`
-  (0.4) and their identity is never reassigned. The token is removed from stored
-  URLs either way.
+  `POST /v1/comms/click-tokens/tag-links` does the rewriting instead: given one
+  message body (`html` and/or `text`), the tenant's own `allowed_hosts`, and up
+  to 500 recipients, it returns one copy per recipient (in request order, no
+  email echoed) with every link to those hosts tagged, plus the deterministic
+  `link_id` for each URL. `POST /v1/comms/click-tokens/verify` returns the
+  correlation evidence for one token. At ingestion the token is verified
+  against the authenticated tenant and persisted only as a seal bound to that
+  event. The Silver dispatcher stamps campaign/message/link lineage on the
+  landing touchpoint and, with identity-stitching consent and on the first
+  device that opens the link, attributes the visit to the recipient
+  (`signed_click`, 0.9) and links the visitor to the recipient's email alias in
+  identity resolution. A second device, or a visitor already known as someone
+  else, is recorded as `forwarded_link` (0.4) and never reassigned.
 - `GET /v1/comms/entitlement` — the tenant's comms plan entitlement, current
   connection usage, and quota state (`allowed` / `quota_approaching` /
   `quota_reached` / `upgrade_required`).
