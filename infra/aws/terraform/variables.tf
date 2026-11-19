@@ -113,6 +113,12 @@ variable "enable_access_continuations" {
   default     = false
 }
 
+variable "enable_agent_deployment_registry" {
+  type        = bool
+  description = "Run the agent deployment registry (signed agent events and attestation-key registration) on production-profile tasks. On by default, matching config/release/feature_flags/production.yaml; staging is driven by the release manifest."
+  default     = true
+}
+
 variable "access_mcp_image_digest" {
   type        = string
   description = "Immutable sha256 digest of the image in the aether-access-mcp ECR repository; required only when enable_access_mcp is true."

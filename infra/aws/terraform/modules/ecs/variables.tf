@@ -243,6 +243,12 @@ variable "enable_access_continuations" {
   default     = false
 }
 
+variable "enable_agent_deployment_registry" {
+  type        = bool
+  description = "Set AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true on API and worker tasks for non-staging profiles (staging gets it from the release manifest's task_environment)."
+  default     = false
+}
+
 variable "mcp_service_assertion_secret_arn" {
   type        = string
   description = "Secrets Manager version ARN of the private MCP-to-API HMAC key; mounted only into the API task."

@@ -545,3 +545,64 @@ def test_a_self_grant_over_an_owned_agent_is_not_proof_and_keeps_the_owner():
     assert _row(engine, "a", "human:owner")["attribution_class"] == "verified"
     assert _row(engine, "a", "human:attacker")["attribution_class"] == "unresolved"
 
+
+
+def test_mcp_oauth_subject_becomes_a_principal_claim_resolved_only_by_binding():
+    """Verified MCP OAuth client -> hashed subject claim -> resolver (binding required)."""
+    import hashlib
+
+    from ingestion.silver.projectors.agent_execution_projector import AgentExecutionProjector
+
+    subject_hash = hashlib.sha256(b"user-42").hexdigest()
+    namespace = "mcp_oauth:https://auth.example"
+
+    def project(protocol):
+        result = AgentExecutionProjector().project({
+            "messageId": f"e-mcp-{protocol.get('verification')}", "tenantId": T,
+            "type": "agent_tool_invocation_observed", "timestamp": "2026-10-01T10:00:00Z",
+            "validated_agent_deployment": {"agentId": "mcp-agent", "deploymentId": "dep-1"},
+            "properties": {"toolName": "search"}, "context": {},
+            "server_context": {"agent_protocol": protocol},
+        })
+        return result.rows[0]
+
+    verified = project({
+        "protocol": "mcp", "verification": "mcp_oauth_client",
+        "oauth_issuer": "https://auth.example", "principal_subject_hash": subject_hash,
+    })
+    assert verified["reported_principal_ref"] == subject_hash
+    assert verified["reported_principal_namespace"] == namespace
+    assert verified["canonical_principal_entity_id"] is None
+
+    declared = project({"protocol": "mcp", "verification": "mcp_client_info_declared",
+                        "principal_subject_hash": subject_hash})
+    assert declared["reported_principal_ref"] is None
+
+    engine = LineageEngine(T)
+    engine.ingest([verified])
+    engine.resolve()
+    assert _row(engine, "mcp-agent", UNATTRIBUTED)["attribution_class"] == "unresolved"
+
+    engine.upsert_binding(PrincipalBinding(
+        tenant_id=T, kind="claim", principal_entity_id="human:u42", namespace=namespace,
+        claim_ref=subject_hash, evidence_class="DETERMINISTIC_BINDING",
+    ))
+    engine.resolve()
+    assert ("human:u42", "mcp-agent") in engine.rows()
+
+
+def test_node_exposes_execution_verification_mix():
+    engine = LineageEngine(T)
+    engine.ingest([
+        _fact("signed", execution_verification_state="attested"),
+        _fact("mixed", execution_verification_state="deployment_verified"),
+        _fact("mixed", event="agent_task_finished", execution_verification_state="source_reported"),
+        _fact("unsigned", execution_verification_state="source_reported"),
+    ])
+    result = engine.resolve()
+    nodes = {n["agent_entity_id"]: n for n in result.nodes_upserted}
+    assert nodes["signed"]["strongest_execution_verification"] == "attested"
+    assert nodes["signed"]["has_source_reported_facts"] is False
+    assert nodes["mixed"]["strongest_execution_verification"] == "deployment_verified"
+    assert nodes["mixed"]["has_source_reported_facts"] is True
+    assert nodes["unsigned"]["execution_verification_states"] == ["source_reported"]
