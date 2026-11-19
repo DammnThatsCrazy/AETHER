@@ -17,7 +17,7 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
   "services/api/journeys/comms/repository.py": "sha256:d004eebae56513405edd97c485121aca171786de9e85a5fce808cdabc997a2cf"
-  "services/api/journeys/comms/routes.py": "sha256:bf32c18e74d492942664ddcfe7d6d479761dcdb22e2f144bac0cd9c91011deda"
+  "services/api/journeys/comms/routes.py": "sha256:066307201b72fe9acb8bd4a1a639e90cd911ea69ded2ed7a26094a2873dc0f4b"
   "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
   "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
   "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
@@ -212,7 +212,19 @@ each returned copy to its recipient. Only `http(s)` links to those hosts are
 tagged — a token is recipient-correlated and must never reach a third-party
 site. Links with ESP merge tags, `mailto:`, `tel:` and anchors are left alone.
 `link_id` is deterministic per URL, so every recipient's copy of a link shares
-one id. Recipient emails are hashed to tenant-scoped aliases and never echoed.
+one id. Recipient emails are hashed to tenant-scoped aliases and never echoed;
+each tagged copy returns its `recipient_alias_id` and `external_message_id` so
+the sender can report delivery without the address. Suppressed recipients
+(unsubscribe, complaint, provider suppression) come back with
+`status: "suppressed"` and no copy — no token is minted for them — and the
+ledger check fails closed.
+
+**Sending.** Aether never sends the message (ADR-C1). The reference sender in
+`packages/sdk/examples/campaign-sender-python` calls `tag-links` in batches of
+500, delivers each copy through the tenant's own SMTP server, keeps a local
+send-once ledger keyed by `--send-id`, and reports `email_sent` /
+`email_dropped` back through `POST /v1/comms/webhook` (signed when the tenant
+has a webhook secret) using the returned alias.
 
 Tokens are HMAC-signed, key-versioned (`COMMS_CLICK_TOKEN_KEYS`,
 `COMMS_CLICK_TOKEN_ACTIVE_VERSION`), expiring, tenant-bound, and contain no
