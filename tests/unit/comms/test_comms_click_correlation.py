@@ -512,34 +512,41 @@ class TestResolverServerSignals:
 
 @pytest.mark.asyncio
 class TestUniqueEntityResolution:
+    class Repo:
+        def __init__(self, holders, merged=None, subjects=None):
+            self.holders, self.merged, self.subjects = holders, merged or {}, subjects or {}
+
+        async def find_subjects_by_alias(self, *_a):
+            return list(self.holders)
+
+        async def resolve_surviving_canonical_entity_id(self, _tenant, entity_id):
+            return self.merged.get(entity_id, entity_id)
+
+        async def get_subject_by_canonical_entity_id(self, _tenant, entity_id):
+            return self.subjects.get(entity_id)
+
     async def test_ambiguous_alias_is_rejected(self):
         from journeys.comms.identity_bridge import resolve_unique_tenant_entity_for_alias
 
-        class Aliases:
-            async def find_subjects_by_alias(self, *_a):
-                return ["e1", "e2"]
-
         assert await resolve_unique_tenant_entity_for_alias(
-            TENANT, "email_hash", "a" * 64, alias_repository=Aliases(), entity_repository=object()
+            TENANT, "email_hash", "a" * 64, alias_repository=self.Repo(["e1", "e2"])
         ) is None
 
-    async def test_other_tenant_entity_is_rejected(self):
+    async def test_holders_merged_into_one_survivor_are_unique(self):
         from journeys.comms.identity_bridge import resolve_unique_tenant_entity_for_alias
 
-        class Aliases:
-            async def find_subjects_by_alias(self, *_a):
-                return ["e1"]
-
-        class Entities:
-            def __init__(self, tenant):
-                self.tenant = tenant
-
-            async def find_by_id(self, entity_id):
-                return {"entity_id": entity_id, "tenant_id": self.tenant}
-
+        repo = self.Repo(["e1", "e2"], merged={"e2": "e1"})
         assert await resolve_unique_tenant_entity_for_alias(
-            TENANT, "email_hash", "a" * 64, alias_repository=Aliases(), entity_repository=Entities("tenant-b")
-        ) is None
-        assert await resolve_unique_tenant_entity_for_alias(
-            TENANT, "email_hash", "a" * 64, alias_repository=Aliases(), entity_repository=Entities(TENANT)
+            TENANT, "email_hash", "a" * 64, alias_repository=repo
         ) == "e1"
+
+    async def test_foreign_or_merged_subject_is_rejected(self):
+        from journeys.comms.identity_bridge import resolve_unique_tenant_entity_for_alias
+
+        foreign = self.Repo(["e1"], subjects={"e1": {"tenant_id": "tenant-b", "status": "active"}})
+        merged = self.Repo(["e1"], subjects={"e1": {"tenant_id": TENANT, "status": "merged"}})
+        active = self.Repo(["e1"], subjects={"e1": {"tenant_id": TENANT, "status": "active"}})
+        for repo, expected in ((foreign, None), (merged, None), (active, "e1")):
+            assert await resolve_unique_tenant_entity_for_alias(
+                TENANT, "email_hash", "a" * 64, alias_repository=repo
+            ) == expected
