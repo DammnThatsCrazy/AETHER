@@ -446,7 +446,11 @@ class VenueDerivativesAdapter(DerivativesAdapter):
             adapter_version=self.adapter_version,
             supported_operations=list(self.capabilities),
             unsupported_operations=[],
-            required_credentials=["read_only_api_key"],
+            # Public-wallet venues read on-chain account activity by address:
+            # the account comes from a verified tenant link, not a credential.
+            required_credentials=(
+                [] if self.authentication_model == "public_wallet_address" else ["read_only_api_key"]
+            ),
             required_endpoints=[self.rest_base_url] if self.rest_base_url else [],
             pagination_model="cursor",
             streaming_model="websocket" if self.has_websocket else "polling",

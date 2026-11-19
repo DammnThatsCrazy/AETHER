@@ -34,15 +34,15 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
-  "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
+  "services/api/governance/": "sha256:337d8f8574864a1099f943e8942629570672fea3bb7db229c30ff9fa243b8a83"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:c3822e11664785f3e53c4c05c11dd824d45265a29330b72781f8f5dd79499cf5"
-  "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:ac23224e05cbaaa5b88c5fd0872d27262e9d690a28ff1659257e1474868ec527"
+  "services/api/intelligence/": "sha256:6db7e7250adc8f8fcfcf147072d67d50d23304a0b2806d742b79aa974ee801dc"
+  "services/api/journeys/": "sha256:98031587f1c140c469787aee3ba3f737a58ceffdc23c0c0b7e75985c0a5fa80c"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
-  "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
+  "services/api/value/": "sha256:1c5aceacc350054ca9f1cdb05861ecbc923b5ec37640af70a7c586d1d7421b70"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5497,6 +5497,39 @@ Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venu
 | POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1] as strings). Stores nothing (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
 | POST | `/v1/prediction-markets/observations` | `write` | Normalize and store the observation, tenant-scoped and immutable. Resubmitting the market's latest observation is an idempotent retry (`created: false`); any other content is a new occurrence, including a quote that returns to an earlier value (0.40 → 0.60 → 0.40 stores three rows), so latest and `as_of` reads follow the observed sequence. `received_at` is strictly increasing per market |
 | GET | `/v1/prediction-markets/markets/{venue}/{market_ref}` | `read` | Latest stored observation for the tenant, with server-assigned `received_at`. Optional `as_of` (timezone-aware ISO-8601) returns the latest observation received at or before that instant. `404` when none exists |
+
+The market normalizers behind these routes now live in the derivatives plane
+(`value/derivatives/event_contracts.py`), where event contracts are
+derivatives instruments: a condition with outcome tokens, the outcome bought as
+the position side, and a venue-reported resolution state. Kalshi records are
+read from the current `last_price_dollars` / `volume_fp` fields, with the older
+integer-cent `last_price` still accepted.
+
+## Venue account links
+
+Gated by `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` (default off; `503` while off).
+A link binds one tenant subject to one read-only venue account and scopes that
+account's fills and positions to the tenant. Every link needs a consent
+receipt; no secret is stored.
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/derivatives/account-links` | `derivatives:read` | Active links for the tenant; filter by `venue` or `subject_id`; `include_revoked=true` adds revoked rows |
+| POST | `/v1/derivatives/account-links/wallet` | `derivatives:connect` | Link a wallet. `proof_evidence_id` must be active `wallet_ownership_verified` evidence of this tenant whose address, chain namespace, and bound subject match the request; otherwise `400` with a machine-readable reason (`wallet_proof_subject_mismatch`, `wallet_proof_address_mismatch`, ...) |
+| POST | `/v1/derivatives/account-links/tenant-push` | `derivatives:connect` | Record that the tenant already holds this account's activity for its own subject |
+| POST | `/v1/derivatives/account-links/{link_id}/revoke` | `derivatives:connect` | Revoke a link; later propagation runs exclude the account. `404` for another tenant's link |
+
+## Propagation & Diffusion lens
+
+Gated by `AETHER_PROPAGATION_LENS_ENABLED` (default off; `503` while off).
+Requires `analytics` and `derivatives:read`. Read-only: computes over the
+caller's own linked subjects and never writes graph truth. Responses follow
+`packages/shared/contracts/propagation-run.schema.json`.
+
+| Method | Path | Summary |
+|---|---|---|
+| POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` adds a bounded read-only pull of public-wallet venues (Hyperliquid, Polymarket) for linked accounts |
+| POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
 

@@ -20,7 +20,7 @@ source_hashes:
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
   "services/api/actions/agent_lineage/engine.py": "sha256:7892db12bd711f33c57ab75829afd018a9866c610856249a0d1cf8b135fac1c5"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
-  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
+  "services/api/config/settings.py": "sha256:80931a86ffe4e0b07546770e71e69ff05a1007779bcc8e2033b63c7e3a466ae2"
   "services/api/ingestion/ingestion/batch.py": "sha256:34c3d2b48091ac2784d468859313f2fc75b46fbc4c1768398b7a501173e595ac"
   "services/api/ingestion/silver/dispatcher.py": "sha256:f1ac1e82dd95a777fdc182b5f5c1451548c9cf3208b5bd0651d99f299910a4fb"
   "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:f40726a0962d373a01453a71bfe8ae678fabe51ba38fd639b6adecd4c87bac1e"

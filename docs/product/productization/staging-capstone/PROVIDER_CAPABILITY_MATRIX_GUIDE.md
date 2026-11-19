@@ -15,12 +15,12 @@ source_files:
   - docs/_generated/financial-capability-matrix.json
 canonical_owner: platform@aether
 source_hashes:
-  "docs/_generated/adapter-certification-matrix.json": "sha256:30c99f26bb77d405851ce92caa915c358988e140e290808a21d538f594fdc7de"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
   "docs/_generated/financial-capability-matrix.json": "sha256:9fe22542e9acddb2d8af224de1666086d25e8d7b0cbf2bf4ac7dc2f53b72bb27"
   "services/api/shared/certification/capability_records.py": "sha256:f1aa839e3b693dae77e44816c3fac6c21b8207f3c2a980957621dcd34701ed1b"
   "services/api/shared/certification/descriptor.py": "sha256:9b4a90d83b4304d4cf5be2a98df1db3abd971841b91565bc10cd4f17b0c0a198"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
-  "services/api/shared/certification/registry.py": "sha256:b0dc79cd4c3af7688f1b5b8400900e66ad1cbb474d8f94327882e623942d1085"
+  "services/api/shared/certification/registry.py": "sha256:d7c2255829f0ccd7e5551e8a3590222e7bc6008e63046f51d8581c0d47b4300f"
 ---
 
 # Provider Capability Matrix Guide
@@ -122,7 +122,7 @@ absence, and certification gates fail on it.
 
 No first-release provider is live: communications (braze, customerio, hubspot, iterable,
 klaviyo, mailchimp, postmark, sendgrid), derivatives (drift, dydx, gmx,
-hyperliquid), interop (axelar, chainlink_ccip, debridge, hyperlane, ibc,
+hyperliquid, polymarket), interop (axelar, chainlink_ccip, debridge, hyperlane, ibc,
 layerzero, wormhole), payments (bridge, coinbase, moonpay, privy,
 stripe_onramp), prediction_market (kalshi, polymarket), stablecoin_chain (evm,
 svm). The generated matrix (`docs/_generated/adapter-certification-matrix.json`)

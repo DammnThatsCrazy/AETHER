@@ -41,9 +41,9 @@ produces is written back as canonical truth.
 | Exposure | Evidence that user B could have observed user A before B acted. Four channels: social relationship facts (`FOLLOWS`, `INTERACTS_WITH`, `MUTUAL_SOCIAL_CONNECTION`, `COMMUNITY_ASSOCIATION`, ...), on-chain links (`PAYS`), tenant in-app exposure events (Silver `exposure` family carrying the exposed-to subject), and promoted Relationship360 facts (`REFERRED_BY`, `COLLABORATES_WITH`, `COMMUNICATES_WITH`, ...). Each exposure keeps its evidence refs and validity window. |
 | Adoption | A user's **first** position in an instrument, on the **same side** as the seed, within the exposure window. For perps the side is long or short. For event contracts the instrument is the condition and the side is the outcome bought. Adding to a held position never counts; only the first flat-to-open epoch from the position engine counts. |
 | Seed | The earliest adopter in a tenant/instrument/side group within the run window. |
-| Propagation path | An ordered chain of adopters where each hop is backed by an exposure that precedes the later adoption and falls inside the window. Multi-hop composition is certified only through predicates the governed registry marks `PROPAGATION_ELIGIBLE` or `PATH_COMPOSABLE`, via `decompose_influence_propagation`. |
+| Propagation path | An ordered chain of adopters where each hop is backed by an exposure that precedes the later adoption and falls inside the window. Each hop is an observed fact. The path also carries the governed influence coverage from `decompose_influence_propagation`, and `certified_depth` is the longest prefix whose predicates the registry allows to carry influence (`PROPAGATION_ELIGIBLE` / `PATH_COMPOSABLE`). In-app exposures have no graph edge, so their paths carry no influence coverage. |
 | Diffusion episode | All adoptions of one tenant/instrument/side group within the run window, with their paths. Episodes reference the existing `EpisodeRecord` vocabulary; no new episode store. |
-| Propagation radius | The maximum certified hop depth from the seed inside an episode. Breadth, reach, velocity, and repetition are reported separately, never folded into one score. |
+| Propagation radius | The maximum observed hop depth from a root inside an episode; `certified_radius` is the maximum certified depth. Breadth, reach, velocity, lag, and repeated exposure are reported separately, never folded into one score. With no exposure evidence at all, radius is unknown (`null`), not zero. |
 
 ## Classification and claim types
 
@@ -54,10 +54,11 @@ Each episode is labelled `organic`, `viral`, `coordinated`, or
   among linked users in the same tenant with no qualifying exposure, for the
   same instrument, side, and window. Lift above the configured threshold with
   enough exposed users is `viral`; otherwise `organic`.
-- **Coordination.** Adoptions that land within a tight lockstep window, or
-  share an on-chain funding source, mark the episode `coordinated`. This reuses
-  the pattern-discovery sequence/temporal detector semantics rather than a new
-  detector.
+- **Coordination.** At least `lockstep_min_entities` distinct adopters inside
+  one `lockstep_window_seconds` window, or adopter pairs linked by on-chain
+  `PAYS` who entered within that window, mark the episode `coordinated`. The
+  defaults (60 seconds, 5 entities, 2.0 lift) are pattern discovery's
+  `DetectorConfig` defaults, so lockstep means the same thing in both places.
 - **Insufficient data.** Too few linked users, no unexposed comparison group,
   or missing evidence never become a zero; the episode says why.
 
@@ -93,6 +94,27 @@ reserved and withheld until incrementality evidence exists.
 - Registry states for `social360` and `relationship360` stay `in_flight`.
   This slice adds code, fixtures, and live public-endpoint captures. It does
   not claim provider-backed, staging-proven, or production readiness.
+
+## Implementation map
+
+| Piece | Location |
+|---|---|
+| Event contracts and normalizers | `services/api/value/derivatives/event_contracts.py` |
+| Polymarket account adapter | `services/api/value/derivatives/adapters/polymarket.py` |
+| Venue account links | `services/api/value/derivatives/account_links.py`, `/v1/derivatives/account-links` |
+| Propagation computation | `services/api/intelligence/propagation/` (`adoption`, `exposure`, `engine`, `sources`, `service`, `routes`) |
+| Contract | `packages/shared/contracts/propagation-run.schema.json`, `packages/shared/propagation-contract.ts` |
+| Live captures | `scripts/capture_venue_fixtures.py` → `services/api/tests/fixtures/provider_payloads/derivatives/` |
+
+## Follow-ups
+
+- Fill the reserved Social360 `social_contagion` / `propagation` and Risk360
+  `financial_contagion` slots from propagation runs once those providers are
+  live; today the computation is served by its own route.
+- Wire the derivatives entitlement guard and usage meter for propagation runs.
+- A tenant-linked staging rehearsal (account links on, propagation lens on).
+- Persist runs for saved investigations and recomputation on identity or
+  relationship corrections.
 
 ## Not in this slice
 

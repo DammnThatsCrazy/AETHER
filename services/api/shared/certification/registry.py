@@ -161,7 +161,7 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
     descriptors: list[AdapterCertificationDescriptor] = []
 
     # Registered read-only venue adapters carry an honest ImplementationStatus.
-    # VENUE_ADAPTERS holds the real Hyperliquid/dYdX/GMX/Drift adapters (keyed by
+    # VENUE_ADAPTERS holds the real Hyperliquid/dYdX/GMX/Drift/Polymarket adapters (keyed by
     # adapter_id) and wins over the simulator-only DERIVATIVES_ADAPTERS.
     registered: dict[str, Any] = {}
     try:
@@ -193,6 +193,8 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
         "dydx": {"capabilities": [], "streaming_model": "none", "pagination_model": "none"},
         "gmx": {"capabilities": [], "streaming_model": "none", "pagination_model": "none"},
         "drift": {"capabilities": [], "streaming_model": "none", "pagination_model": "none"},
+        # Account-level event-contract reads by public wallet (Data API v2).
+        "polymarket": {"capabilities": [], "streaming_model": "none", "pagination_model": "cursor"},
     }
 
     for token, spec in specs.items():
@@ -219,7 +221,12 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
                 adapter=adapter_name,
                 adapter_version="0.1.0",
                 supported_operations=capabilities,
-                required_credentials=["read_only_api_key"] if capabilities else [],
+                required_credentials=(
+                    ["read_only_api_key"]
+                    if capabilities
+                    and getattr(adapter, "authentication_model", "") != "public_wallet_address"
+                    else []
+                ),
                 pagination_model=spec["pagination_model"],
                 streaming_model=spec["streaming_model"],
                 implementation_state=state,
