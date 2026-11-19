@@ -30,16 +30,16 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  "services/api/actions/": "sha256:91cfc3c62393b72637056fc1608f98044dbd48be04e598c2566c8c56c0ca0f63"
+  "services/api/actions/": "sha256:f56cc32e5aea69b1f386c121eb3881952540a1cd92ce65c94bd4d77cf7410ce6"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:337d8f8574864a1099f943e8942629570672fea3bb7db229c30ff9fa243b8a83"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:c3822e11664785f3e53c4c05c11dd824d45265a29330b72781f8f5dd79499cf5"
+  "services/api/ingestion/": "sha256:9b49cba43135c6cec7c75775ed4e0143c3472fdcebdb64cf974edeb956fb8228"
   "services/api/intelligence/": "sha256:d3743b13cc80df4fcfbc2bb8fc3056ee880ab1e7a0c768108d252a22a3903913"
-  "services/api/journeys/": "sha256:98031587f1c140c469787aee3ba3f737a58ceffdc23c0c0b7e75985c0a5fa80c"
+  "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:1c5aceacc350054ca9f1cdb05861ecbc923b5ec37640af70a7c586d1d7421b70"
@@ -987,6 +987,21 @@ forwarded `receivedAt`), stores only the verdicts under
 Forwarded evidence is graded one step below Aether's own observation
 (`provider_ip_range_forwarded` → `server_observed`; `web_bot_auth_forwarded` →
 `platform_verified`), and Aether's own observation of a request wins.
+
+**Agent protocol identity (MCP / A2A).** Server SDK events may carry
+`context.agentProtocol` (from `captureMcpClientIdentity` /
+`captureA2aCallerIdentity`). Ingestion grades it into
+`server_context.agent_protocol` and removes the raw block: an MCP OAuth client
+or A2A caller authenticated by the tenant's server is `server_observed`
+(`mcp_oauth_client` 0.85, `a2a_authenticated` 0.8,
+`a2a_authenticated_signed_card` 0.9); MCP `clientInfo` or an Agent Card alone is
+`declared` (0.6). Tokens are never accepted; the OAuth subject arrives as a
+SHA-256 hash.
+
+**Mobile automation evidence.** The iOS and Android SDKs send
+`context.device.automation.{testHarness, emulator}`. `testHarness: true`
+classifies the touchpoint as `machine` (evidence `actor:mobile_test_harness`);
+`emulator` is recorded as evidence only. Accessibility state is never collected.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's
@@ -4471,7 +4486,11 @@ Communications tenant surface (`/v1/comms/*`):
   message body (`html` and/or `text`), the tenant's own `allowed_hosts`, and up
   to 500 recipients, it returns one copy per recipient (in request order, no
   email echoed) with every link to those hosts tagged, plus the deterministic
-  `link_id` for each URL. `POST /v1/comms/click-tokens/verify` returns the
+  `link_id` for each URL. Each tagged copy also returns its tenant-scoped
+  `recipient_alias_id` and `external_message_id`; suppressed recipients come
+  back as `status: "suppressed"` with no copy (fail closed). Aether does not
+  send the message; `packages/sdk/examples/campaign-sender-python` is the
+  reference sender. `POST /v1/comms/click-tokens/verify` returns the
   correlation evidence for one token. At ingestion the token is verified
   against the authenticated tenant and persisted only as a seal bound to that
   event. The Silver dispatcher stamps campaign/message/link lineage on the
@@ -5530,6 +5549,7 @@ caller's own linked subjects and never writes graph truth. Responses follow
 |---|---|---|
 | POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` adds a bounded read-only pull of public-wallet venues (Hyperliquid, Polymarket) for linked accounts |
 | POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
+
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
 
