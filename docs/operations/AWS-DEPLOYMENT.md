@@ -56,6 +56,7 @@ reviewed_source_commits:
   - {'commit': '55078498', 'reason': 'Reviewed 55078498: Terraform plan tests now encode staging as the second Access Kit MCP owner (repository allowed, service gated by repository and the lifecycle-matrix precondition). Test-only change; the staging MCP description here already matches.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
+  - {'commit': '61cd0dd6', 'reason': 'Reviewed 61cd0dd6: staging customer_services.access-mcp.repository is now true (the staging aether-access-mcp ECR repository is provisioned on the next reviewed apply; the service stays disabled), and staging plan tests pass the declared flag. Only the staging enablement status changes; cost impact is one ECR repository.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -83,7 +84,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:4301e32316ed81751c062e1248cb4eead3f9402499cac62baae9a327bdb0de0d"
+  "infra/aws/terraform/": "sha256:835d0513125411fd9b39bbb9564f397475cc0121846f15271279959da9c23add"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"

@@ -29,18 +29,19 @@ reviewed_source_commits:
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
   - {'commit': '55078498', 'reason': 'Reviewed 55078498: Terraform plan tests now encode staging as the second Access Kit MCP owner (repository allowed, service gated by repository and the lifecycle-matrix precondition). Test-only change; the staging MCP description here already matches.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
+  - {'commit': '61cd0dd6', 'reason': 'Reviewed 61cd0dd6: staging customer_services.access-mcp.repository is now true (the staging aether-access-mcp ECR repository is provisioned on the next reviewed apply; the service stays disabled), and staging plan tests pass the declared flag. Only the staging enablement status changes; cost impact is one ECR repository.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
+  "config/runtime_deployment.yaml": "sha256:a06f7a35966acf7aa9447d19b0d3ca7d39ef45db3ab28922ba8f4c074ab7fa8b"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:7d1aa3e9fd042bbb27d8173ea690f41747eee0ea91c5ddcab6c85a5edd688ea6"
   "infra/aws/terraform/main.tf": "sha256:9c3b2da81aa622e042ca64d8a79f8533dd5dd84e5e0264b3ce91c09e145b54f6"
   "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
   "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
   "infra/aws/terraform/profiles/production.tfvars": "sha256:85f0417ff14534587c2210d4164adc3e9e775170f01495f62c2884c6f308c36c"
-  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:aae0494fb45074b48bcd2210fa3aeae1b5db2af09f83a06e592cc3767d3af95d"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:e7300d4e975841afd52d25e2f30091c06b9f3ae337029a2d2bb9ea05afc1bc67"
   "infra/aws/terraform/variables.tf": "sha256:31ca49080dae2836f264e19fa6dc62597eecf4b115ca20fe58b21dee32f5f571"
 ---
 

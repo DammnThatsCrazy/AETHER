@@ -56,7 +56,7 @@ source_hashes:
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
+  "config/runtime_deployment.yaml": "sha256:a06f7a35966acf7aa9447d19b0d3ca7d39ef45db3ab28922ba8f4c074ab7fa8b"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -129,7 +129,8 @@ each wake and sleep plan (`staging_customer_services.py --promote-inputs`), so
 the applied MCP state survives every wake and sleep:
 
 1. Set `repository: true` and plan and apply staging (which passes
-   `enable_access_mcp_repository=true`).
+   `enable_access_mcp_repository=true`). *Declared in the runtime matrix; the
+   repository exists once the next reviewed staging apply runs.*
 2. Publish an image with **Publish Access Kit MCP image** (`target: staging`,
    from `main` or `staging`), using the staging environment's
    `AWS_ACCESS_MCP_PUBLISH_ROLE_ARN`.
