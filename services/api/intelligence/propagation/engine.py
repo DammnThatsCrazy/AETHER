@@ -71,16 +71,13 @@ LIMITATIONS: tuple[str, ...] = (
 
 
 def _parse(value: Optional[str]) -> Optional[datetime]:
+    """Strict instant parse: an ISO string without an explicit offset is unknown."""
     if not value:
         return None
-    text = str(value).strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    from shared.temporal.instant import try_parse_instant
+
+    parsed, _error = try_parse_instant(str(value))
+    return parsed
 
 
 def _digest(value: Any) -> str:

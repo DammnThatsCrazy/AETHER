@@ -281,3 +281,12 @@ def test_subject_summary_lists_roles_and_paths():
     assert seed["seeded_episodes"] == 1 and seed["inbound_paths"] == []
     absent = subject_summary(result, "u9")
     assert absent["episodes"] == [] and absent["seeded_episodes"] == 0
+
+
+def test_offsetless_exposure_time_is_unknown_not_assumed_utc():
+    naive = ExposureRef("x1", T, "u1", "u2", ExposureChannel.SOCIAL, "FOLLOWS", "2026-10-01T00:00:00",
+                        evidence_refs=("e",))
+    result = compute_propagation(query(), [adopt("u1", 0), adopt("u2", 30)], [naive], POP, computed_at=at(0))
+    episode = result.episodes[0]
+    assert episode.metrics.exposed_adopters == 0
+    assert "exposure_time_unknown" in episode.metrics.unknown_reasons
