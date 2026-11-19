@@ -47,6 +47,9 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
             // Base64url P-256 public key; the native health agent then verifies the
             // manifests it fetches (fail-closed). Absent => applied unverified.
             manifestPublicKey = if (config.hasKey("manifestPublicKey")) config.getString("manifestPublicKey") else null,
+            // Site a publishable key is bound to; the native SDK sends it as
+            // X-Aether-Site on every request.
+            siteId = if (config.hasKey("siteId")) config.getString("siteId") else null,
             onJourneyResumed = { anonymousId, userId ->
                 reactContext.runOnUiQueueThread {
                     sendEvent("AetherJourneyResumed", Arguments.createMap().apply {

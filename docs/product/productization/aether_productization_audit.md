@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:34645c3d56ea9fde425c2fd76036e67fe8b274c5b4c1997599279a6c96a9f17d"
+  "scripts/production_status.py": "sha256:4e4658d9938ab38b36a0cc38a8f7431baebf6092f6abc46fe46b15ce4d5abac4"
 ---
 
 # AETHER Productization Audit
@@ -195,7 +195,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | Area | Score |
 |------|-------|
 | backend/API | 4 |
-| SDKs | 4 |
+| SDKs | 3 |
 | identity resolution | 4 |
 | Profile 360 | 5 |
 | Neptune relationships (H2H/H2A/A2H/A2A) | 4 |
@@ -227,8 +227,17 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | pattern discovery | 2 |
 | Access Kit (MCP / CLI / API) | 3 |
 
-**Overall: ~3.66/5 — pre-production** (canonical live figure from
+**Overall: ~3.62/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
+The 2026-11-19 pass lowered **SDKs from 4 to 3** and split it into a per-platform
+L0–L7 ladder (`SDK PLATFORM READINESS` in `make production-status`). Web, React,
+React Native, iOS, Android and Server are each at **L3 (release pipeline)**: built,
+tested, install-documented and wired into the dry-run-capable publish workflow.
+None is published to a public registry (L4) and no install has been observed
+sending a real event (L6), so "release-ready" was not true of any of them.
+Onboarding already issues each its correct key class (L5: site-bound
+publishable keys for every client SDK, bound by app ID on native, and a secret
+key for Server), which the ladder reports without counting it past the unmet L4.
 The 2026-11-14 pass added **pattern discovery at 2/5 (partial/pilot)**: a
 complete, flag-gated discovery plane (schema-on-read extraction, segmented and
 seasonal baselines, 13 detectors, a lifecycle that surfaces patterns

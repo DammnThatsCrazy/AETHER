@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:59c1bd5ad02e9ef86cd83e47640752e84ef503261b3a261694fa11447d712f1c"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:92c6809c5c0533fdfd9fcd9d134214cec31f685e6e6e9a13225cadc3aeb11a51"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -50,10 +50,24 @@ import com.aether.sdk.AetherConfig
 class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        Aether.initialize(this, AetherConfig(apiKey = "your-api-key"))
+        Aether.initialize(
+            this,
+            AetherConfig(
+                apiKey = "pk_live_...",   // publishable key from onboarding
+                siteId = "site_..."       // the site the key is bound to
+            )
+        )
     }
 }
 ```
+
+Onboarding issues the publishable key and site id together, binding the site to
+your application ID. The key ships inside the APK and can be read out of it, so
+the backend accepts it only on requests that declare its site (`X-Aether-Site`,
+sent on every request when `siteId` is set). A publishable key reaches
+`/v1/batch`, the SDK manifest, the health heartbeat and the deferred-attribution
+resolve. Canonical consent receipts and identity resolution
+(`autoResumeJourney`) need a secret key, so send those from your backend.
 
 ## Core API
 
@@ -181,20 +195,16 @@ base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
 by an accept-all path. Present each explicit opt-in purpose as a separate
 consent choice in your UI.
 
-The Android runtime exposes `canonicalConsentPurposes` (8 purposes, listed
-below) with `explicitOptInPurposes = ["credit", "location"]`; the extended
-purposes `financial_activity`, `economic_observability`, and
-`cross_chain_observability` are used by the event gating map and stamped into
-per-event `context.consent` for web ConsentState parity. The registry's
-`fraud_prevention` purpose is not yet surfaced by the Android runtime lists
-(grant it via `grantConsent` if your integration collects fraud-prevention
-signals; it is never included in `grantAll()`).
+The Android runtime exposes all 12 as `canonicalConsentPurposes`, each stamped
+into per-event `context.consent`, and the six explicit opt-in purposes as
+`explicitOptInPurposes`. `grantAll()` grants exactly the six base purposes.
+`validate_sdk_parity` fails if either list drifts from `packages/shared/consent.ts`.
 
 ```kotlin
 // Grant specific purposes
 Aether.grantConsent(listOf("analytics", "marketing"))
 
-// Grant all non-explicit-opt-in purposes (excludes credit and location)
+// Grant the six base purposes (never an explicit opt-in purpose)
 Aether.grantAll()
 
 // Explicitly grant credit after showing separate consent UI
@@ -208,7 +218,9 @@ val state = Aether.getConsentState() // ["analytics", ...]
 
 // Runtime canonical purposes
 val purposes = Aether.canonicalConsentPurposes
-// ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+// ["analytics", "marketing", "personalization", "web3", "agent", "commerce",
+//  "financial_activity", "credit", "location", "economic_observability",
+//  "cross_chain_observability", "fraud_prevention"]
 ```
 
 ### Consent receipts
@@ -356,7 +368,8 @@ data class AetherConfig(
     val onJourneyResumed:                    // Fires once when a prior session is matched
         ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
     val subjectHintsOnly: Boolean = false,   // Subject-hints identity (default OFF = legacy client-side canonical re-stamp)
-    val encryptedDurableQueue: Boolean = false // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
+    val encryptedDurableQueue: Boolean = false, // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
+    val siteId: String? = null               // Site a publishable key is bound to; sent as X-Aether-Site
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
 }

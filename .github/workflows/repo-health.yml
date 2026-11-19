@@ -204,6 +204,32 @@ jobs:
           path: release-evidence/
           if-no-files-found: error
 
+  integration-on-demand:
+    name: Durable integration (on demand)
+    # Runs `make integration-durable` against any ref when dispatched, e.g. a
+    # feature branch before it is promoted. Kept separate from main-integration,
+    # which deploy.yml and the release controls poll for by name on main/staging.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
+        run: make bootstrap
+
+      - name: Add project virtualenv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run durable integration
+        run: make integration-durable
+
   docs-sync:
     # Write-capable job — auto-commits regenerated docs on push to main only.
     # Separated from lint-docs so that contents:write is never granted to a job

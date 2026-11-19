@@ -86,6 +86,14 @@ _FIRST_VALUE_STORES: tuple[tuple[str, dict[str, Any]], ...] = (
 )
 
 
+# Test events sent from the dashboard (POST /v1/activation/test-event) prove the
+# ingestion path but not an install: they are authorized by the operator's own
+# session, not by a key an SDK was configured with. Their ids are remembered so
+# the first event an installed SDK actually sends can be told apart from them.
+_TEST_EVENT_IDS_KEPT = 20
+_FIRST_SDK_EVENT_SCAN = 50
+
+
 class ActivationService:
     """Drives the self-serve activation lifecycle for a tenant."""
 
@@ -183,6 +191,9 @@ class ActivationService:
             "created_key_ids": record.get("created_key_ids", []),
             "billing_state": billing.value,
             "first_value_evidence": record.get("first_value_evidence", {}),
+            # The first event an installed SDK sent, as opposed to a dashboard
+            # test event. None until one arrives. Additive.
+            "first_sdk_event": record.get("first_sdk_event"),
             "waiting_reason": record.get("waiting_reason"),
             # WS-3 (intent-driven activation): the tenant's selected ActivationIntent
             # tokens (durable; drives the recommended connect plan). Additive.
@@ -210,6 +221,12 @@ class ActivationService:
 
     async def get_status(self, tenant_id: str) -> dict[str, Any]:
         record = await self._load_or_create(tenant_id)
+        # Status is what onboarding polls while it waits for an install, so it
+        # looks for the first SDK event until one is recorded (then never again).
+        if not record.get("first_sdk_event"):
+            await self._reconcile_first_sdk_event(record)
+            if record.get("first_sdk_event"):
+                record = await self.repo.save_or_update(record)
         return await self._status_view(record)
 
     async def select_plan(self, tenant_id: str, plan_tier: str) -> dict[str, Any]:
@@ -321,6 +338,11 @@ class ActivationService:
             results.append(result)
 
         record = await self._load_or_create(tenant_id)
+        # Remember the id before reconciling, so this event is never reported
+        # as the installed SDK's first event.
+        record["activation_test_event_ids"] = (
+            list(record.get("activation_test_event_ids") or []) + [event.id]
+        )[-_TEST_EVENT_IDS_KEPT:]
         record = await self._reconcile_first_value(record)
         record = await self.repo.save_or_update(record)
         return {"results": results, "state": record["state"]}
@@ -353,6 +375,40 @@ class ActivationService:
 
     # ── First-value evidence (durable Bronze read) ───────────────────────────
 
+    async def _reconcile_first_sdk_event(self, record: dict[str, Any]) -> None:
+        """Record the first event an installed SDK sent, once.
+
+        First value (below) accepts any durable row, including a dashboard test
+        event, because that proves the pipeline. It does not prove an install:
+        the test event is authorized by the operator's session, not by a key an
+        SDK was configured with. This scans recent Bronze ``sdk_events`` rows
+        and skips the remembered test-event ids, so "an SDK is sending" is only
+        reported once something other than the dashboard sent an event.
+        """
+        if record.get("first_sdk_event"):
+            return
+        excluded = set(record.get("activation_test_event_ids") or [])
+        rows = await BronzeRepository("sdk_events").find_many(
+            filters={"tenant_id": record["tenant_id"], "source": "sdk"},
+            limit=_FIRST_SDK_EVENT_SCAN,
+            sort_by="created_at",
+            sort_order="desc",
+        )
+        for row in rows:
+            payload = row.get("payload") or {}
+            event_id = row.get("provider_record_id") or payload.get("event_id")
+            if not event_id or event_id in excluded:
+                continue
+            source_tag = row.get("source_tag") or ""
+            record["first_sdk_event"] = {
+                "event_id": event_id,
+                "event_type": payload.get("event_type") or payload.get("type"),
+                "batch_id": source_tag.split("batch:")[-1] if "batch:" in source_tag else payload.get("batch_id"),
+                "received_at": row.get("ingested_at") or payload.get("received_at"),
+                "bronze_id": row.get("id"),
+            }
+            return
+
     async def _reconcile_first_value(self, record: dict[str, Any]) -> dict[str, Any]:
         """Derive first-value state from durable Bronze rows.
 
@@ -373,6 +429,7 @@ class ActivationService:
         force-transitioned.
         """
         tenant_id = record["tenant_id"]
+        await self._reconcile_first_sdk_event(record)
         current = ActivationState(record["state"])
         reachable = _FIRST_EVIDENCE_FROM | {S.event_received, S.first_value_ready}
         if current not in reachable:

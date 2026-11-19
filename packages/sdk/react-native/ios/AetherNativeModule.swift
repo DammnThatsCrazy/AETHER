@@ -32,6 +32,9 @@ class AetherNativeModule: RCTEventEmitter {
         // Base64url P-256 public key; the native health agent then verifies the
         // manifests it fetches (fail-closed). Absent => applied unverified.
         aetherConfig.manifestPublicKey = config["manifestPublicKey"] as? String
+        // Site a publishable key is bound to; the native SDK sends it as
+        // X-Aether-Site on every request.
+        aetherConfig.siteId = config["siteId"] as? String
         aetherConfig.endpoint = resolveEndpoint
         aetherConfig.onJourneyResumed = { [weak self] anonymousId, userId in
             DispatchQueue.main.async {

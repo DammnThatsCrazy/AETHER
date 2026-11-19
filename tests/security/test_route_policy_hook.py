@@ -262,3 +262,47 @@ def test_site_binding_does_not_constrain_a_secret_key():
     secret = TenantContext(tenant_id="t", permissions=["read", "write", "ingest"])
     with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
         assert _hook()(request, "/v1/batch", secret) is None
+
+
+def test_publishable_key_reaches_native_sdk_posts_for_its_own_site_only():
+    """Native apps ship a site-bound publishable key, so the SDK's heartbeat
+    and attribution resolves must admit it, and only as POSTs for its site.
+    Consent receipts and identity lookups stay secret-key surfaces."""
+    post = _req()
+    post.method = "POST"
+    post.headers = {"X-Aether-Site": "site_a"}
+    other_site = _req()
+    other_site.method = "POST"
+    other_site.headers = {"X-Aether-Site": "site_b"}
+    undeclared = _req()
+    undeclared.method = "POST"
+    read = _req()
+    read.headers = {"X-Aether-Site": "site_a"}
+    paths = (
+        "/v1/diagnostics/sdk/heartbeat",
+        "/v1/attribution/deferred/resolve",
+        "/v1/attribution/apple-ads/resolve",
+    )
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        for path in paths:
+            assert _hook()(post, path, _PUBLISHABLE) is None, path
+            assert _is_denial(_hook()(other_site, path, _PUBLISHABLE)), path
+            assert _is_denial(_hook()(undeclared, path, _PUBLISHABLE)), path
+            assert _is_denial(_hook()(read, path, _PUBLISHABLE)), path
+        assert _is_denial(_hook()(post, "/v1/consent/records", _PUBLISHABLE))
+        assert _is_denial(_hook()(post, "/v1/diagnostics/sdk/health", _PUBLISHABLE))
+        assert _is_denial(_hook()(post, "/v1/attribution/deferred/handoffs", _PUBLISHABLE))
+
+
+def test_public_ingest_identifier_does_not_gain_the_native_sdk_posts():
+    """The native allowance is for the site-bound class; the unbound public
+    ingest identifier keeps its narrower ingestion-only reach."""
+    ident = TenantContext(
+        tenant_id="t",
+        credential_class="public_ingest_identifier",
+        permissions=["ingest"],
+    )
+    post = _req()
+    post.method = "POST"
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _is_denial(_hook()(post, "/v1/attribution/deferred/resolve", ident))

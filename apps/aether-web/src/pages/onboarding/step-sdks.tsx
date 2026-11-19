@@ -122,7 +122,10 @@ export function useSdkFleet(status: ActivationStatus | null, selected: readonly 
     selectedCount: rows.length,
     issuedCount: rows.filter(r => r.issued).length,
     readyCount: rows.filter(r => r.ready).length,
+    /** Any durable event, including a dashboard test event (pipeline proven). */
     live: hasReceivedEvent(status?.state),
+    /** An installed SDK has sent an event (not just the dashboard test). */
+    sdkLive: Boolean(status?.first_sdk_event),
   };
 }
 
@@ -182,11 +185,17 @@ export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: Sdk
     let site = row.site;
     if (!site) {
       const list = parseOrigins(origins[row.sdk.id] ?? '');
-      if (!list.length) throw new Error(`Enter the site address ${row.sdk.short} runs on, e.g. https://example.com.`);
-      site = await createSdkSite({ name: label, origins: list });
+      const binding = row.sdk.site ?? { platform: 'web' as const, binding: 'origins' as const };
+      if (binding.binding === 'app_ids') {
+        if (!list.length) throw new Error(`Enter the bundle ID or package name of your ${row.sdk.short} app, e.g. com.example.app.`);
+        site = await createSdkSite({ name: label, platform: binding.platform, appIds: list });
+      } else {
+        if (!list.length) throw new Error(`Enter the site address ${row.sdk.short} runs on, e.g. https://example.com.`);
+        site = await createSdkSite({ name: label, origins: list });
+      }
     }
     const pk = await createSitePublishableKey(site.id, label);
-    return { id: pk.id, key: pk.key, saved: false, siteId: pk.siteId, snippet: pk.snippet };
+    return { id: pk.id, key: pk.key, saved: false, siteId: pk.siteId, ...(pk.snippet ? { snippet: pk.snippet } : {}) };
   }
 
   async function mintSecret(sdk: SdkOption): Promise<RevealedKey> {
@@ -264,7 +273,7 @@ export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: Sdk
         step={3}
         kicker="SDKs and keys"
         title="Add your SDKs"
-        description="Optional. Select any surface you run, all of them, or none. Each SDK gets its own key, so every app, device and server can be rotated and revoked on its own. Browser SDKs get a publishable key bound to your site."
+        description="Optional. Select any surface you run, all of them, or none. Each SDK gets its own key, so every app, device and server can be rotated and revoked on its own. Browser and app SDKs get a publishable key bound to your site or app."
         summary={`${fleet.selectedCount} SDK${fleet.selectedCount === 1 ? '' : 's'} · ${fleet.issuedCount} key${fleet.issuedCount === 1 ? '' : 's'} · ${fleet.live ? 'events arriving' : 'awaiting first event'}`}
       />
 
@@ -355,7 +364,8 @@ export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: Sdk
               if (row.shown) fleet.setRevealed(prev => ({ ...prev, [row.sdk.id]: { ...row.shown!, saved: value } }));
               if (row.keyId) fleet.acknowledge(row.keyId, value);
             }}
-            tenantLive={fleet.live}
+            tenantLive={fleet.sdkLive}
+            pipelineLive={fleet.live}
             testLabel={sendTest.isLoading ? 'Sending…' : 'Send test event'}
             testResult={testResult ? `test event ${testResult.status}${testResult.reason ? ` · ${testResult.reason}` : ''}` : null}
             onTest={() => void sendTest.mutate({ event_type: 'onboarding_test_event', properties: { source: 'onboarding', sdk: row.sdk.id } })}
@@ -364,7 +374,7 @@ export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: Sdk
       </div>
 
       <div className="flex flex-wrap justify-center gap-1.5" aria-label="Secret key permissions">
-        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Server and app keys can</span>
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Server keys can</span>
         {SDK_KEY_PERMISSIONS.map(scope => (
           <span
             key={scope}
@@ -374,7 +384,7 @@ export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: Sdk
             {scope}
           </span>
         ))}
-        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>· browser keys can only ingest for their site</span>
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>· browser and app keys can only ingest for their site</span>
       </div>
     </div>
   );
@@ -391,6 +401,7 @@ function SdkPanel({
   onCopy,
   onAck,
   tenantLive,
+  pipelineLive,
   testLabel,
   testResult,
   onTest,
@@ -405,24 +416,31 @@ function SdkPanel({
   readonly onCopy: (value: string) => void;
   readonly onAck: (value: boolean) => void;
   readonly tenantLive: boolean;
+  readonly pipelineLive: boolean;
   readonly testLabel: string;
   readonly testResult: string | null;
   readonly onTest: () => void;
 }) {
   const { sdk, shown, record, site, issued, ready } = row;
   const publishable = sdk.keyKind === 'publishable';
+  const appBound = sdk.site?.binding === 'app_ids';
+  // Site liveness comes from the web loader's install signals; a native app has
+  // no loader, so it reports live on the workspace's first event like a server.
+  const loaderTracked = publishable && !appBound;
   const siteId = shown?.siteId ?? site?.id ?? null;
-  const siteLive = useSiteLive(publishable && issued ? siteId : null);
-  const live = publishable ? siteLive.data?.live === true : tenantLive;
-  const liveDetail = publishable
+  const siteLive = useSiteLive(loaderTracked && issued ? siteId : null);
+  const live = loaderTracked ? siteLive.data?.live === true : tenantLive;
+  const liveDetail = loaderTracked
     ? siteLive.data
       ? live
         ? `site ${siteId} · loader reporting`
         : `site ${siteId} · ${siteLive.data.state.replace(/_/g, ' ')}`
       : `GET /v1/sdk/sites/${siteId ?? '{site_id}'}/live`
     : live
-      ? 'first event received for this workspace'
-      : (testResult ?? 'install the snippet, or send a test event');
+      ? 'first event received from an installed SDK'
+      : pipelineLive
+        ? 'test event received · install the snippet to see your SDK\'s first event'
+        : (testResult ?? 'install the snippet, or send a test event');
 
   return (
     <Panel className="flex min-w-0 flex-col gap-3" style={{ padding: 'clamp(14px,2.6vw,20px)' }}>
@@ -438,11 +456,11 @@ function SdkPanel({
 
       {!issued && publishable && !site && (
         <label className="flex flex-col gap-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
-          Site address the {sdk.short} SDK runs on
+          {appBound ? `Bundle ID or package name of your ${sdk.short} app` : `Site address the ${sdk.short} SDK runs on`}
           <input
             value={origin}
             onChange={e => onOrigin(e.target.value)}
-            placeholder="https://www.example.com"
+            placeholder={appBound ? (sdk.platform === 'react-native' ? 'com.example.app, com.example.app.android' : 'com.example.app') : 'https://www.example.com'}
             data-testid={`site-origin-${sdk.id}`}
             className="ae-mono rounded border px-3 py-2 text-[13px] outline-none focus:border-[var(--ae-blue)]"
             style={{ background: 'var(--ae-raised)', borderColor: 'var(--ae-edge)', color: 'var(--ae-ink)' }}
@@ -476,10 +494,10 @@ function SdkPanel({
       {shown && (
         <span className="text-[12px] leading-snug" style={{ color: 'var(--ae-amber)' }}>
           {publishable
-            ? 'Publishable key, bound to this site · visible in your page, still shown here only once.'
-            : sdk.platform === 'server'
-              ? 'Secret key, server-side only · shown once, stored as a hash.'
-              : 'Secret key for this app · shown once, stored as a hash.'}
+            ? appBound
+              ? 'Publishable key, bound to this app · readable from the app binary, so it can only send events for this site. Shown here only once.'
+              : 'Publishable key, bound to this site · visible in your page, still shown here only once.'
+            : 'Secret key, server-side only · shown once, stored as a hash.'}
         </span>
       )}
       {!shown && record && (
@@ -517,7 +535,7 @@ function SdkPanel({
             <span className="text-[13px] font-medium">{live ? 'live' : 'awaiting first signal'}</span>
             <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }}>{liveDetail}</span>
           </span>
-          {!live && !publishable && <LinkButton onClick={onTest}>{testLabel}</LinkButton>}
+          {!live && !loaderTracked && <LinkButton onClick={onTest}>{testLabel}</LinkButton>}
         </div>
       )}
 

@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:c4e06ef133b2b170fbb1f57136e6e64b6b121afc685020dc46be5c0a13bb4a37"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:318dc97a7e324a5fceef2fba9b16d65a90b87e314773c541db6a884ad204715d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -48,8 +48,19 @@ pod 'AetherSDK', '= 0.1.0-alpha.0'
 import AetherSDK
 
 // In AppDelegate.application(_:didFinishLaunchingWithOptions:)
-Aether.shared.initialize(config: AetherConfig(apiKey: "your-api-key"))
+var config = AetherConfig(apiKey: "pk_live_...")   // publishable key from onboarding
+config.siteId = "site_..."                         // the site the key is bound to
+Aether.shared.initialize(config: config)
 ```
+
+Onboarding issues the publishable key and site id together, binding the site to
+your app's bundle ID. The key ships inside the app and can be read out of it, so
+the backend accepts it only on requests that declare its site (`X-Aether-Site`,
+sent on every request when `siteId` is set). A publishable key reaches
+`/v1/batch`, the SDK manifest, the health heartbeat and the deferred and Apple
+Ads attribution resolves. Canonical consent receipts
+(`recordCanonicalConsentReceipt`) and identity resolution (`autoResumeJourney`)
+need a secret key, so send those from your backend.
 
 ## Core API
 
@@ -174,19 +185,16 @@ base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
 by an accept-all path. Present each explicit opt-in purpose as a separate
 consent choice in your UI.
 
-The iOS runtime exposes `canonicalConsentPurposes` (8 purposes, listed below)
-with `explicitOptInPurposes = ["credit", "location"]`; the extended purposes
-`financial_activity`, `economic_observability`, and `cross_chain_observability`
-are used by the event gating map and stamped into per-event `context.consent`.
-The registry's `fraud_prevention` purpose is not yet surfaced by the iOS
-runtime lists (grant it via `grantConsent` if your integration collects
-fraud-prevention signals; it is never included in `grantAll()`).
+The iOS runtime exposes all 12 as `canonicalConsentPurposes`, each stamped into
+per-event `context.consent`, and the six explicit opt-in purposes as
+`explicitOptInPurposes`. `grantAll()` grants exactly the six base purposes.
+`validate_sdk_parity` fails if either list drifts from `packages/shared/consent.ts`.
 
 ```swift
 // Grant specific purposes
 Aether.shared.grantConsent(categories: ["analytics", "marketing"])
 
-// Grant all non-explicit-opt-in purposes (excludes credit and location)
+// Grant the six base purposes (never an explicit opt-in purpose)
 Aether.shared.grantAll()
 
 // Explicitly grant credit after showing separate consent UI
@@ -200,7 +208,9 @@ let state = Aether.shared.getConsentState() // ["analytics", ...]
 
 // Runtime canonical purposes
 let purposes = Aether.canonicalConsentPurposes
-// ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+// ["analytics", "marketing", "personalization", "web3", "agent", "commerce",
+//  "financial_activity", "credit", "location", "economic_observability",
+//  "cross_chain_observability", "fraud_prevention"]
 ```
 
 ### Consent receipts
@@ -383,6 +393,7 @@ struct AetherConfig {
           _ resolvedUserId: String?) -> Void)? = nil
     var subjectHintsOnly: Bool = false           // Subject-hints identity (default OFF = legacy client-side canonical re-stamp)
     var encryptedDurableQueue: Bool = false      // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
+    var siteId: String? = nil                    // Site a publishable key is bound to; sent as X-Aether-Site
 }
 
 struct ModuleConfig {

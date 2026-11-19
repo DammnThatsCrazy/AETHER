@@ -47,7 +47,9 @@ class AetherHealthAgent(
      * last-known-good manifest is kept (fail-closed). A public key is safe to
      * ship in the app. When unset, manifests are applied without verification.
      */
-    private val manifestPublicKey: String? = null
+    private val manifestPublicKey: String? = null,
+    /** Site a publishable key is bound to; sent as `X-Aether-Site`. */
+    private val siteId: String? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var heartbeatJob: Job? = null
@@ -140,6 +142,7 @@ class AetherHealthAgent(
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setAetherSite(siteId)
             conn.setRequestProperty("X-Aether-SDK", "android")
             conn.doOutput = true
             conn.connectTimeout = 5000
@@ -156,6 +159,7 @@ class AetherHealthAgent(
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setAetherSite(siteId)
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             if (conn.responseCode == 200) {

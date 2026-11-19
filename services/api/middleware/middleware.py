@@ -1253,6 +1253,24 @@ def _evaluate_kyber_capability(request: Request, path: str, pol) -> Optional[Aet
 # publishable key (which ships in page HTML) can never read handoff records.
 _SDK_HANDOFF_PATHS = frozenset({"/sdk/journey-handoff", "/sdk/journey-handoff/redeem"})
 
+# SDK-facing POSTs a native app makes beside its batches, admitted for a
+# site-bound publishable key so iOS, Android and React Native can ship one
+# instead of a secret key. Each is safe for a publicly readable credential:
+#   * the SDK health heartbeat writes the SDK's own diagnostics and returns
+#     nothing tenant-wide;
+#   * deferred attribution resolve consumes a handoff only for the exact secret
+#     identifier the app presents, and answers unmatched, expired and consumed
+#     handoffs identically, so it is no oracle;
+#   * Apple Ads resolve exchanges a token only the device's AdServices issues.
+# Canonical consent receipts (/v1/consent/records) and identity lookups stay
+# off this list: they assert or read compliance and identity state, which a
+# key anyone can lift out of an app binary must not do.
+_PUBLISHABLE_SDK_POST_PATHS = frozenset({
+    "/v1/diagnostics/sdk/heartbeat",
+    "/v1/attribution/deferred/resolve",
+    "/v1/attribution/apple-ads/resolve",
+})
+
 
 def _evaluate_route_policy(
     request: Request, path: str, context, *, platform_operator: bool = False
@@ -1348,10 +1366,16 @@ def _evaluate_route_policy(
 
         credential_class = getattr(context, "credential_class", "legacy")
         if credential_class in ("public_ingest_identifier", CREDENTIAL_CLASS_PUBLISHABLE):
+            publishable_sdk_post = (
+                credential_class == CREDENTIAL_CLASS_PUBLISHABLE
+                and path in _PUBLISHABLE_SDK_POST_PATHS
+                and getattr(request, "method", "GET").upper() == "POST"
+            )
             if (
                 path not in ("/v1/batch", "/v1/track")
                 and not path.startswith("/v1/ingest")
                 and path not in _SDK_HANDOFF_PATHS
+                and not publishable_sdk_post
             ):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
         if credential_class == CREDENTIAL_CLASS_PUBLISHABLE:

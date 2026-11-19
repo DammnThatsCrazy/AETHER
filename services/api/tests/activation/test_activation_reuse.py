@@ -144,3 +144,56 @@ async def test_select_plan_performs_no_billing_write(svc):
     assert status2["billing_state"] == S.billing_active.value
     # The activation service left the billing account exactly as it found it.
     assert stripe_repository._mem_accounts[seeded] == snapshot
+
+
+# ── An installed SDK's first event is told apart from the dashboard test ─────
+
+@pytest.mark.asyncio
+async def test_dashboard_test_event_is_not_reported_as_an_installed_sdk(
+    svc, make_request, onboard_with_keys
+):
+    """The test event proves the pipeline (first value), not an install."""
+    tenant = "tenant-first-sdk-1"
+    await onboard_with_keys(svc, tenant)
+    request = make_request(tenant)
+
+    result = await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+    assert result["state"] == S.first_value_ready.value
+
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"] is None
+
+
+@pytest.mark.asyncio
+async def test_first_event_from_an_installed_sdk_is_recorded_once(
+    svc, make_request, onboard_with_keys
+):
+    tenant = "tenant-first-sdk-2"
+    await onboard_with_keys(svc, tenant)
+    request = make_request(tenant)
+    await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+
+    # An SDK sends through /v1/batch with its own event id.
+    sdk_batch = BatchRequest(
+        batch=[
+            BaseEvent(
+                id="evt-installed-sdk-1",
+                type="track",
+                timestamp="2026-07-30T00:00:00Z",
+                sessionId="sess-sdk",
+                anonymousId="anon-sdk",
+                properties={},
+            )
+        ],
+        sentAt="2026-07-30T00:00:00Z",
+    )
+    response = await ingest_batch(request, sdk_batch, get_producer())
+    assert response["accepted"] == 1
+
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"]["event_id"] == "evt-installed-sdk-1"
+
+    # Later dashboard test events never replace it.
+    await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"]["event_id"] == "evt-installed-sdk-1"

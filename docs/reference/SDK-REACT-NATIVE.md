@@ -11,8 +11,8 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:091ce96b8c65438b4176e0e8910fed824262f2ced75ebe93ca2c59ce1dff37e4"
-  "packages/sdk/react-native/src/index.tsx": "sha256:25cad4024a1305c105b5517f9fd2495cd7de9d4948147dbdc2dd448d70e8a0fc"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:96dde9820967b222ef6f0e7ae5fe317730d347d9624d7c07c958995c8751eabb"
+  "packages/sdk/react-native/src/index.tsx": "sha256:04a3dc4d417f7ffe71ca99712bd37ce158b506100492de8b04eb0de8195864cf"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -46,7 +46,8 @@ import { AetherProvider } from '@olympuslabs/aether-react-native';
 export default function App() {
   return (
     <AetherProvider config={{
-      apiKey: 'your-api-key',
+      apiKey: 'pk_live_...',   // publishable key from onboarding
+      siteId: 'site_...',      // the site the key is bound to
       environment: 'production',
     }}>
       <NavigationContainer>
@@ -56,6 +57,13 @@ export default function App() {
   );
 }
 ```
+
+Onboarding issues the publishable key and site id together, binding the site to
+the bundle ID and application ID of both builds. The key ships inside the app
+and can be read out of it, so the backend accepts it only on requests that
+declare its site: the native SDKs and the JS heartbeat send `siteId` as
+`X-Aether-Site`. Canonical consent receipts (`consent.recordReceipt`) and
+identity resolution need a secret key, so send those from your backend.
 
 ## Core API
 
@@ -396,6 +404,7 @@ Aether.trackPushOpened({
 ```typescript
 interface AetherRNConfig {
   apiKey: string;
+  siteId?: string;             // Site a publishable key is bound to; sent as X-Aether-Site
   environment?: 'production' | 'staging' | 'development';
   endpoint?: string;           // Default: 'https://api.aether.network'
   debug?: boolean;

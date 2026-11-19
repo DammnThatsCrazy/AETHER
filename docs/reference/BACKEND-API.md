@@ -37,11 +37,11 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:1c705295bbe2d36266a88595ced35c8e06d8a5c8adb0fc62fb22438b861a2abf"
+  "services/api/ingestion/": "sha256:06ba65d666a56d66787d5889feb8992000aff7a3a70b3ea9324b4ca13f2f824f"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
   "services/api/journeys/": "sha256:9eaf419a31db907f9887bde040d0d4bb1a9ed8fea9a7dfba96fce1c93dfc62bf"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
+  "services/api/tenancy/": "sha256:25b4f1a79b57e5356a1e8098d988fcad4626960892101acc4ad0cef07c9ee7c0"
   "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
@@ -430,23 +430,34 @@ Registers the properties a tenant installs the SDK on, serves the install
 snippet for each, and mints the publishable key bound to a site. Reads are open
 to any authenticated member of the tenant; every write requires the `write`
 permission, because a site is a credential boundary rather than a preference:
-a publishable key travels in page HTML, so the site is the only thing confining
-it to one property.
+a publishable key travels in page HTML or an app binary, so the site is the
+only thing confining it to one property.
+
+A publishable key reaches `POST /v1/batch`, `/v1/track`, `/v1/ingest*`, the SDK
+manifest, the two journey-handoff POSTs, and three native SDK POSTs:
+`/v1/diagnostics/sdk/heartbeat`, `/v1/attribution/deferred/resolve` and
+`/v1/attribution/apple-ads/resolve`. Every request except the manifest read
+must declare a site it is bound to in `X-Aether-Site`
+(`ROUTE_POLICY_SITE_UNDECLARED` / `ROUTE_POLICY_SITE_MISMATCH` otherwise).
+Consent receipts (`/v1/consent/records`) and identity lookups need a secret key.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/v1/sdk/sites` | GET | List the tenant's sites (`limit`, `include_revoked`) |
-| `/v1/sdk/sites` | POST | Register a site: `name`, `origins[]` (the install origins), `environment` |
+| `/v1/sdk/sites` | POST | Register a site: `name`, `platform` (`web` default, `ios`, `android`, `react_native`), `origins[]` for web or `app_ids[]` (bundle ID / package name) for native, `environment` |
 | `/v1/sdk/sites/{site_id}` | GET | One site plus the keys bound to it and whether it is installable |
-| `/v1/sdk/sites/{site_id}` | PATCH | Rename, re-scope origins, change environment, or revoke |
+| `/v1/sdk/sites/{site_id}` | PATCH | Rename, re-scope origins (web) or app ids (native), change environment, or revoke |
 | `/v1/sdk/sites/{site_id}` | DELETE | Remove the site; refused with 409 while a publishable key is still bound to it |
 | `/v1/sdk/sites/{site_id}/install` | GET | The install page: snippet with a placeholder key, bound keys, loader URL, and the first-signal expectation |
-| `/v1/sdk/sites/{site_id}/keys` | POST | Mint a publishable key bound to this site; the only response that returns the raw key and a pasteable snippet |
+| `/v1/sdk/sites/{site_id}/keys` | POST | Mint a publishable key bound to this site; the only response that returns the raw key, and for a web site a pasteable snippet (`snippet` is null for native sites, which configure the key and site id in code) |
 | `/v1/sdk/sites/{site_id}/heartbeat` | GET | The install verifier: whether the pasted snippet actually came up, and what it reported |
 | `/v1/sdk/sites/{site_id}/live` | GET | The cheap liveness read for a polling dashboard (`live`, `state`, `last_signal`, `age_seconds`) |
 
 Origins are normalized on write (bare hosts read as `https`, wildcards refused,
-default ports stripped); a non-`https` origin is rejected off localhost.
+default ports stripped); a non-`https` origin is rejected off localhost. A web
+site declares only origins and a native site only app ids, since native apps
+send no `Origin`. App ids must be reverse-DNS (`com.example.app`), keep their
+case and refuse wildcards; they scope the key, they do not authenticate the app.
 Revoking a site stops it being handed out for new installs but does not
 invalidate keys already bound to it — those are revoked separately through
 `/v1/me/api-keys/{key_id}`.
@@ -588,7 +599,7 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
-| `GET`  | `/v1/activation/status` | read | Current activation record + derived billing state. |
+| `GET`  | `/v1/activation/status` | read | Current activation record + derived billing state, and `first_sdk_event`: the first event an installed SDK sent, excluding dashboard test events (null until one arrives). |
 | `POST` | `/v1/activation/select-plan` | write | Body `{ "plan_tier": "alpha".."omega" }`. Records the tier; does not start checkout. |
 | `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
 | `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
@@ -4016,7 +4027,7 @@ When on, canonical activity emitted by the silver projectors requests a debounce
 
 ### Apple Ads attribution (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`)
 
-- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). The activity references its touchpoint (`silver_table` / `silver_fact_id`, with an ID derived from the token hash), so the touchpoint is listed in the journey's `touchpoint_ids`, including the profile journey after login, and attribution can credit it. Responses:
+- `POST /v1/attribution/apple-ads/resolve` — SDK key (a site-bound publishable key may call it, for its own site). Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). The activity references its touchpoint (`silver_table` / `silver_fact_id`, with an ID derived from the token hash), so the touchpoint is listed in the journey's `touchpoint_ids`, including the profile journey after login, and attribution can credit it. Responses:
   - `{resolved: true, evidence}`;
   - `{resolved: false, status: pending, retry_after_seconds: 5}`: Apple's record is not ready, so retry;
   - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.
