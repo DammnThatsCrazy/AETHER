@@ -103,6 +103,40 @@ Pass `clientIp` if your framework has already resolved it (for example Express
 `req.ip` with `trust proxy`). Set `trustForwardedFor: true` only behind a proxy
 you control; otherwise any client can choose the IP Aether checks.
 
+## MCP and A2A caller identity
+
+If your server is an MCP server or an A2A agent, tell Aether who is calling:
+
+```ts
+import { captureMcpClientIdentity, captureA2aCallerIdentity } from '@olympuslabs/aether-server';
+
+// MCP tool handler: `extra.authInfo` is set only after your auth middleware
+// verified the bearer token.
+aether.track({
+  type: 'agent_tool_called',
+  context: { agentProtocol: captureMcpClientIdentity({
+    clientInfo: server.getClientVersion(),
+    authInfo: extra.authInfo,
+  }) },
+});
+
+// A2A: after your server authenticated the caller against your Agent Card.
+aether.track({
+  type: 'agent_task_received',
+  context: { agentProtocol: captureA2aCallerIdentity({
+    agentCard: callerCard,
+    authenticated: true,
+    cardSignatureVerified: false,
+    authScheme: 'oauth2',
+  }) },
+});
+```
+
+Tokens are never sent. The OAuth subject (the user who authorized the client)
+is SHA-256-hashed before it leaves your server, and only identity fields of an
+Agent Card are kept. A client your server authenticated is graded
+`server_observed`; `clientInfo` or an Agent Card alone is `declared`.
+
 ## Consent
 
 Purposes are the canonical set from `@olympuslabs/aether-shared/consent`.

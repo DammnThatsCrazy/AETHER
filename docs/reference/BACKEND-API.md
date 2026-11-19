@@ -37,9 +37,9 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:f1866e71b3e3bb9df9ee763da1e529cdcf56b9ba233bac80efdcdbd8a73fce1e"
+  "services/api/ingestion/": "sha256:77026609f89839bf1d863510ff3cd0b2e4c979b3b5851d5e27bdffbe35691aa5"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:ac23224e05cbaaa5b88c5fd0872d27262e9d690a28ff1659257e1474868ec527"
+  "services/api/journeys/": "sha256:ceca43e0daa9da4b8f410ca680d82a3f9f221d430fe61487f926da490fc6f6bf"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:25b4f1a79b57e5356a1e8098d988fcad4626960892101acc4ad0cef07c9ee7c0"
   "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
@@ -998,6 +998,21 @@ forwarded `receivedAt`), stores only the verdicts under
 Forwarded evidence is graded one step below Aether's own observation
 (`provider_ip_range_forwarded` → `server_observed`; `web_bot_auth_forwarded` →
 `platform_verified`), and Aether's own observation of a request wins.
+
+**Agent protocol identity (MCP / A2A).** Server SDK events may carry
+`context.agentProtocol` (from `captureMcpClientIdentity` /
+`captureA2aCallerIdentity`). Ingestion grades it into
+`server_context.agent_protocol` and removes the raw block: an MCP OAuth client
+or A2A caller authenticated by the tenant's server is `server_observed`
+(`mcp_oauth_client` 0.85, `a2a_authenticated` 0.8,
+`a2a_authenticated_signed_card` 0.9); MCP `clientInfo` or an Agent Card alone is
+`declared` (0.6). Tokens are never accepted; the OAuth subject arrives as a
+SHA-256 hash.
+
+**Mobile automation evidence.** The iOS and Android SDKs send
+`context.device.automation.{testHarness, emulator}`. `testHarness: true`
+classifies the touchpoint as `machine` (evidence `actor:mobile_test_harness`);
+`emulator` is recorded as evidence only. Accessibility state is never collected.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's
@@ -4482,7 +4497,11 @@ Communications tenant surface (`/v1/comms/*`):
   message body (`html` and/or `text`), the tenant's own `allowed_hosts`, and up
   to 500 recipients, it returns one copy per recipient (in request order, no
   email echoed) with every link to those hosts tagged, plus the deterministic
-  `link_id` for each URL. `POST /v1/comms/click-tokens/verify` returns the
+  `link_id` for each URL. Each tagged copy also returns its tenant-scoped
+  `recipient_alias_id` and `external_message_id`; suppressed recipients come
+  back as `status: "suppressed"` with no copy (fail closed). Aether does not
+  send the message; `packages/sdk/examples/campaign-sender-python` is the
+  reference sender. `POST /v1/comms/click-tokens/verify` returns the
   correlation evidence for one token. At ingestion the token is verified
   against the authenticated tenant and persisted only as a seal bound to that
   event. The Silver dispatcher stamps campaign/message/link lineage on the

@@ -77,6 +77,13 @@ export {
 export type { AgentEventEnvelope } from './agentic';
 export { captureRequestEvidence } from './request-evidence';
 export type { CaptureRequestEvidenceOptions, RequestEvidence } from './request-evidence';
+export { captureA2aCallerIdentity, captureMcpClientIdentity } from './protocol-identity';
+export type {
+  AgentProtocolEvidence,
+  CaptureA2aCallerIdentityInput,
+  CaptureMcpClientIdentityInput,
+  McpAuthInfoLike,
+} from './protocol-identity';
 
 
 /** True inside an AWS Lambda execution environment. */

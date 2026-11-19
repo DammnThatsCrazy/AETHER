@@ -140,3 +140,25 @@ class TestTagLinksRoute:
             await tag_links_route(_request(), TagLinksBody(
                 allowed_hosts=["shop.test"], recipients=[{"recipient_email": "a@b.test"}],
             ))
+
+    async def test_suppressed_recipient_gets_no_copy_and_no_token(self, monkeypatch):
+        from journeys.comms.mailbox import build_email_alias
+        from journeys.comms.routes import TagLinksBody, tag_links_route
+        from journeys.comms.suppression_authority import SuppressionAuthorityService
+
+        gone = build_email_alias("gone@example.com", TENANT).alias_hash
+
+        async def is_suppressed(self, tenant_id, *, recipient_alias_id=None, **_kw):
+            return recipient_alias_id == gone
+
+        monkeypatch.setattr(SuppressionAuthorityService, "is_suppressed", is_suppressed)
+        data = (await tag_links_route(_request(), TagLinksBody(
+            allowed_hosts=["shop.test"],
+            html='<a href="https://shop.test/sale">Sale</a>',
+            recipients=[{"recipient_email": "gone@example.com"}, {"recipient_email": "jane@example.com"}],
+        )))["data"]
+        gone_copy, jane_copy = data["recipients"]
+        assert gone_copy == {"index": 0, "status": "suppressed", "tagged": False, "html": None, "text": None}
+        assert jane_copy["status"] == "tagged" and "ae=" in jane_copy["html"]
+        assert jane_copy["recipient_alias_id"] == build_email_alias("jane@example.com", TENANT).alias_hash
+        assert data["suppressed_recipients"] == 1 and data["untagged_recipients"] == 0

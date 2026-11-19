@@ -269,3 +269,82 @@ async def test_email_click_journey(env, monkeypatch):
     signup_entity = producer.published[-1].payload["canonical_entity_id"]
     assert await repo.resolve_surviving_canonical_entity_id(TENANT, signup_entity) == \
         await repo.resolve_surviving_canonical_entity_id(TENANT, jane_entity)
+
+
+
+@pytest.mark.asyncio
+async def test_link_from_external_sender_email_attributes_the_click(env, monkeypatch, tmp_path):
+    """The external campaign sender mails the campaign; Jane clicks her link."""
+    import asyncio
+    import concurrent.futures
+    import importlib.util
+    import json as _json
+    from email import message_from_bytes
+
+    from journeys.comms import routes
+
+    path = ROOT / "packages" / "sdk" / "examples" / "campaign-sender-python" / "aether_campaign_sender.py"
+    spec = importlib.util.spec_from_file_location("aether_campaign_sender_e2e", path)
+    sender = importlib.util.module_from_spec(spec)
+    sys.modules["aether_campaign_sender_e2e"] = sender
+    spec.loader.exec_module(sender)
+
+    tenant = SimpleNamespace(tenant_id=TENANT, webhook_secret=None, require_permission=lambda _p: None)
+    loop = asyncio.get_running_loop()
+
+    async def dispatch(url, body, headers):
+        raw = _json.dumps(body, separators=(",", ":")).encode()
+
+        async def read_body():
+            return raw
+
+        request = SimpleNamespace(state=SimpleNamespace(tenant=tenant), headers=headers, body=read_body)
+        if url.endswith("/tag-links"):
+            return await routes.tag_links_route(request, routes.TagLinksBody(**body))
+        return await routes.generic_comms_webhook(request, routes.CommsWebhookBody(**body))
+
+    def post_json(url, body, headers):
+        # The sender is synchronous; run each call on the test's event loop.
+        return asyncio.run_coroutine_threadsafe(dispatch(url, body, headers), loop).result()
+
+    sent: list = []
+
+    class Smtp:
+        def send_message(self, message):
+            sent.append(message_from_bytes(bytes(message)))
+
+        def quit(self):
+            pass
+
+    def run():
+        return sender.run_send(
+            client=sender.AetherClient("https://aether.test", "key", post_json=post_json),
+            transport=sender.SmtpTransport("smtp.test", starttls=False, smtp_factory=lambda h, p: Smtp()),
+            ledger=sender.SendLedger(str(tmp_path / "ledger.jsonl")),
+            send_id="campaign-65-wave-1",
+            message=sender.Message(
+                subject="Our sale", mail_from="news@shop.test", allowed_hosts=["shop.test"],
+                text="Our sale: https://shop.test/sale?utm_source=email", campaign_id="campaign-65",
+            ),
+            recipients=["jane@example.com", "sam@example.com"],
+            log=lambda _l: None,
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        summary = await loop.run_in_executor(pool, run)
+    assert summary.counts == {"sent": 2} and summary.reported == 2
+
+    jane_mail = next(m for m in sent if m["To"] == "jane@example.com")
+    jane_link = jane_mail.get_payload(decode=True).decode().strip().split(": ", 1)[1]
+    jane_message_id = jane_mail["X-Aether-Message-Id"]
+
+    click = await _ingest("evt-external-click", jane_link, anon="anon-jane-inbox")
+    jane_entity = await _identity(click)
+    row = await _touchpoint(monkeypatch, click)
+    assert row["provenance"]["click_correlation"]["recipient_outcome"] == "resolved"
+    assert row["external_message_id"] == jane_message_id
+    assert row["_seen_campaign_hint"] == "campaign-65"
+    from identity.identity.routes import get_identity_resolver
+
+    repo = get_identity_resolver()._repo
+    assert await repo.resolve_surviving_canonical_entity_id(TENANT, row["profile_id"]) == jane_entity

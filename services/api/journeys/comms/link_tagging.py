@@ -148,4 +148,87 @@ def tag_links(
     return result
 
 
-__all__ = ["TaggedBody", "link_id_for", "normalize_hosts", "tag_links"]
+@dataclass
+class RecipientCopy:
+    index: int
+    tagged: bool
+    html: Optional[str]
+    text: Optional[str]
+    recipient_alias_id: Optional[str] = None
+    recipient_display: Optional[str] = None
+    external_message_id: Optional[str] = None
+
+
+@dataclass
+class TaggedMessage:
+    copies: list[RecipientCopy]
+    links: dict[str, str]  # link_id -> untagged url
+
+    @property
+    def untagged(self) -> int:
+        return sum(1 for c in self.copies if not c.tagged)
+
+
+def tag_message_for_recipients(
+    tenant_id: str,
+    *,
+    html: Optional[str],
+    text: Optional[str],
+    allowed_hosts: frozenset[str],
+    recipients: list[dict[str, Optional[str]]],
+    campaign_id: Optional[str] = None,
+    external_message_id: Optional[str] = None,
+    sequence_step: Optional[int] = None,
+    ttl_seconds: int = 30 * 24 * 3600,
+) -> TaggedMessage:
+    """Per-recipient copies of one message (the core of ``tag-links``).
+
+    Each recipient dict may carry ``recipient_email`` (hashed here, never
+    returned), ``recipient_alias_id`` and ``external_message_id``. A recipient
+    with no usable identity gets an untagged copy — a copy without a recipient
+    would be a shared link again.
+    """
+    from journeys.comms.click_token import issue_click_token
+    from journeys.comms.mailbox import build_email_alias
+
+    copies: list[RecipientCopy] = []
+    links: dict[str, str] = {}
+    for index, recipient in enumerate(recipients):
+        alias_id = recipient.get("recipient_alias_id")
+        display = None
+        email = recipient.get("recipient_email")
+        if email:
+            alias = build_email_alias(email, tenant_id)
+            if alias:
+                alias_id = alias_id or alias.alias_hash
+                display = alias.display
+        message_id = recipient.get("external_message_id") or external_message_id
+        if not alias_id:
+            copies.append(RecipientCopy(index, False, html, text, external_message_id=message_id))
+            continue
+
+        def issue(link_id: str, _alias: str = alias_id, _message: Optional[str] = message_id) -> str:
+            return issue_click_token(
+                tenant_id,
+                campaign_id=campaign_id,
+                external_message_id=_message,
+                recipient_alias_id=_alias,
+                link_id=link_id,
+                sequence_step=sequence_step,
+                ttl_seconds=ttl_seconds,
+            )
+
+        tagged = tag_links(html=html, text=text, allowed_hosts=allowed_hosts, issue=issue)
+        links.update(tagged.links)
+        copies.append(RecipientCopy(
+            index, True, tagged.html, tagged.text,
+            recipient_alias_id=alias_id, recipient_display=display,
+            external_message_id=message_id,
+        ))
+    return TaggedMessage(copies=copies, links=links)
+
+
+__all__ = [
+    "RecipientCopy", "TaggedBody", "TaggedMessage", "link_id_for",
+    "normalize_hosts", "tag_links", "tag_message_for_recipients",
+]

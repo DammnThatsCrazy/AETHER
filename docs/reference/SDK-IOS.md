@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:318dc97a7e324a5fceef2fba9b16d65a90b87e314773c541db6a884ad204715d"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:db7050b3a954e35b3db29d2045fad88d467a698acd9383b897b00acaa000827e"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:c512710d0b1d40e78143de7ffd3c0998e07fedb80da9cf9db69b8100eb0234cd"
+  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
 ---
 
 # Aether iOS SDK v0.1.0-alpha.0 — Integration Guide
@@ -138,6 +138,16 @@ The fingerprint is stamped as `context.fingerprint.id`, but stamping is
 when `respectATT` is enabled it is omitted unless the user authorized tracking
 via App Tracking Transparency (iOS 14.5+). Only the composite hash is sent —
 raw device signals are never transmitted.
+
+### Automation Evidence
+
+Every event's `device.automation` carries two booleans for agent / automation
+detection: `testHarness` (XCTest is hosting the app process) and `emulator`
+(running in the Simulator). Aether classifies `testHarness: true` as automation;
+`emulator` is evidence only. Accessibility state (VoiceOver, Switch Control) is
+never read. XCUITest and Appium drive the app from a separate process and are
+not detectable from inside it. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md).
 
 ## Wallet Tracking
 
@@ -436,7 +446,7 @@ not establish iOS device or customer-tenant graph behavior.
 
 ### What the SDK sends (event context):
 - Event type, name, and raw properties
-- `library` `{name: "aether-ios", version}`, `device` `{osName: "iOS"|"macOS", osVersion, locale, timezone}`
+- `library` `{name: "aether-ios", version}`, `device` `{osName: "iOS"|"macOS", osVersion, locale, timezone, automation: {testHarness, emulator}}`
 - Temporal provenance captured at the event's occurrence instant:
   `utcOffsetMinutes` (zone-at-instant, DST-correct), `timeZoneSource: "device"`,
   `clockSource: "device"`

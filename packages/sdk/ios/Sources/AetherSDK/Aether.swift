@@ -748,6 +748,17 @@ public struct EventContext: Codable {
         public let osVersion: String
         public let locale: String
         public let timezone: String
+        /// Presence-only automation evidence (see `AutomationSignals`).
+        public var automation: AutomationInfo? = nil
+    }
+
+    /// Automation evidence for actor classification. Booleans only; nothing
+    /// about the user, their input or assistive technology is read.
+    public struct AutomationInfo: Codable, Equatable {
+        /// XCTest is hosting this process (unit / hosted tests).
+        public let testHarness: Bool
+        /// Running in the iOS Simulator. Evidence only; never changes the actor alone.
+        public let emulator: Bool
     }
 
     public struct CampaignInfo: Codable {
@@ -3322,7 +3333,8 @@ public final class Aether: NSObject {
                 osName: osName,
                 osVersion: osVersion,
                 locale: Locale.current.identifier,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                automation: AutomationSignals.current
             ),
             campaign: self.campaignInfo,
             // Active acquisition evidence rides on every event while
