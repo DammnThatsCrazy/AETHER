@@ -17,7 +17,7 @@ source_hashes:
   "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:92c6809c5c0533fdfd9fcd9d134214cec31f685e6e6e9a13225cadc3aeb11a51"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
+  "packages/shared/events.ts": "sha256:c512710d0b1d40e78143de7ffd3c0998e07fedb80da9cf9db69b8100eb0234cd"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide

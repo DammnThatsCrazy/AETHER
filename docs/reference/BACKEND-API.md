@@ -37,9 +37,9 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:06ba65d666a56d66787d5889feb8992000aff7a3a70b3ea9324b4ca13f2f824f"
+  "services/api/ingestion/": "sha256:f1866e71b3e3bb9df9ee763da1e529cdcf56b9ba233bac80efdcdbd8a73fce1e"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:9eaf419a31db907f9887bde040d0d4bb1a9ed8fea9a7dfba96fce1c93dfc62bf"
+  "services/api/journeys/": "sha256:ac23224e05cbaaa5b88c5fd0872d27262e9d690a28ff1659257e1474868ec527"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:25b4f1a79b57e5356a1e8098d988fcad4626960892101acc4ad0cef07c9ee7c0"
   "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
@@ -978,6 +978,26 @@ classifier grades it by what the ingestion server verified
 | Header, client IP inside the provider's published range | `platform_verified` | `provider_ip_range` | 0.95–0.98 |
 
 The raw IP is used only for the range check and is never stored.
+
+**Web Bot Auth.** A request carrying an RFC 9421 HTTP Message Signature tagged
+`web-bot-auth` is verified on `/v1/batch` and verified-link redirects against
+the reviewed key snapshot `journeys/traffic/web_bot_auth_directories.json`
+(refreshed by `scripts/refresh_web_bot_auth_directories.py`; no request-time
+key fetch). A verified signature outranks any user-agent claim and classifies
+the touchpoint as `platform_verified` / `web_bot_auth` (confidence 0.99), even
+for a normal browser user-agent. A signer with no keys in the snapshot is
+self-declared automation (`machine`, unverified); invalid, expired or replayed
+signatures prove nothing and are kept only as evidence.
+
+**Server-forwarded request evidence.** Server SDK events may carry
+`context.requestEvidence` (from `captureRequestEvidence` /
+`capture_request_evidence`): what the customer's server saw on the incoming
+request. Ingestion verifies it (provider IP ranges, Web Bot Auth at the
+forwarded `receivedAt`), stores only the verdicts under
+`server_context.forwarded_request`, and always removes the raw IP and headers.
+Forwarded evidence is graded one step below Aether's own observation
+(`provider_ip_range_forwarded` → `server_observed`; `web_bot_auth_forwarded` →
+`platform_verified`), and Aether's own observation of a request wins.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's

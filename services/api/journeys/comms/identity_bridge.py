@@ -392,12 +392,14 @@ async def resolve_unique_tenant_entity_for_alias(
     alias_value_hash: str,
     *,
     alias_repository: Any = None,
-    entity_repository: Any = None,
 ) -> Optional[str]:
-    """Return the one tenant-owned canonical entity holding an alias, else None.
+    """Return the one surviving canonical identity entity holding an alias.
 
-    An alias held by several subjects is ambiguous evidence, never permission
-    to pick one; an entity that is missing or owned by another tenant is
+    Canonical entities live in the identity resolution store. The alias query
+    is tenant-scoped, holders are followed through merge tombstones to their
+    surviving entity, and an alias whose holders survive as more than one
+    entity is ambiguous evidence — never permission to pick one. A survivor
+    whose subject row belongs to another tenant or is still marked merged is
     rejected. Never raises — identity storage is optional in local mode.
     """
     if not tenant_id or not alias_value_hash:
@@ -407,23 +409,26 @@ async def resolve_unique_tenant_entity_for_alias(
             from identity.identity.repository import IdentityResolutionRepository
 
             alias_repository = IdentityResolutionRepository()
-        entity_ids = await alias_repository.find_subjects_by_alias(
+        holders = await alias_repository.find_subjects_by_alias(
             tenant_id, alias_type, alias_value_hash
         )
-        if len(entity_ids) != 1 or not entity_ids[0]:
+        survive = getattr(alias_repository, "resolve_surviving_canonical_entity_id", None)
+        survivors: set[str] = set()
+        for holder in holders:
+            if not holder:
+                continue
+            survivor = await survive(tenant_id, str(holder)) if survive else str(holder)
+            survivors.add(str(survivor))
+        if len(survivors) != 1:
             return None
-        canonical_id = str(entity_ids[0])
-        if entity_repository is None:
-            from repositories.repos import EntityRepository
-
-            entity_repository = EntityRepository()
-        entity = await entity_repository.find_by_id(canonical_id)
+        canonical_id = survivors.pop()
+        subject_lookup = getattr(alias_repository, "get_subject_by_canonical_entity_id", None)
+        subject = await subject_lookup(tenant_id, canonical_id) if subject_lookup else None
     except Exception:  # pragma: no cover - identity backend optional in local
         return None
-    if (
-        not isinstance(entity, dict)
-        or entity.get("tenant_id") != tenant_id
-        or entity.get("entity_id") != canonical_id
+    if subject is not None and (
+        subject.get("tenant_id") not in (None, tenant_id)
+        or subject.get("status") == "merged"
     ):
         return None
     return canonical_id

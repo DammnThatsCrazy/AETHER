@@ -20,6 +20,7 @@ retry.  The Bronze record is idempotent, so a retry is safe.
 from __future__ import annotations
 
 import re
+import time
 import uuid
 from datetime import datetime
 from typing import Any, Literal, Optional, Sequence
@@ -236,6 +237,11 @@ class EventContext(BaseModel):
     # Delegation
     delegationId: Optional[str] = None
     delegationScope: Optional[list[str]] = None
+
+    # Request evidence forwarded by a server SDK (captureRequestEvidence):
+    # verified at ingestion, then removed before storage (raw IP / headers are
+    # never persisted). See journeys/traffic/forwarded_evidence.py.
+    requestEvidence: Optional[dict[str, Any]] = None
 
     # Identity-stitching signals
     identityConfidence: Optional[float] = None
@@ -580,6 +586,7 @@ async def ingest_events(
                 normalized["sdk_tier"] = _advisory
             if server_context is not None:
                 normalized["server_context"] = server_context
+            _apply_forwarded_request_evidence(normalized)
             namespace = _stamp_identity_namespace(normalized, tenant_id, declared_site)
             _attach_observation_envelope(
                 normalized, batch_id=batch_id, tenant_id=tenant_id,
@@ -881,6 +888,7 @@ async def _ingest_batch_v2(
             normalized["sdk_tier"] = _advisory
         if server_context is not None:
             normalized["server_context"] = server_context
+        _apply_forwarded_request_evidence(normalized)
         namespace = _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
         # Keep the transactional path on the same additive Envelope-B adoption
         # contract as V1; the default-off flag preserves existing payloads.
@@ -1062,7 +1070,8 @@ async def _process_single_event(
 
 
 def _build_server_context(request: Request, tenant_id: str) -> Optional[dict]:
-    """Server-observed request context: network enrichment + agent verification.
+    """Server-observed request context: network enrichment + agent verification
+    (declared user-agent vs. published IP ranges, and Web Bot Auth signatures).
 
     Agent verification runs whether or not network enrichment is enabled: it is a
     cheap header check, and only does an IP range lookup when the request's own
@@ -1073,7 +1082,58 @@ def _build_server_context(request: Request, tenant_id: str) -> Optional[dict]:
     if agent is not None:
         context = dict(context or {})
         context["agent_verification"] = agent
+    signed = _build_web_bot_auth(request)
+    if signed is not None:
+        context = dict(context or {})
+        context["web_bot_auth"] = signed
     return context
+
+
+def _apply_forwarded_request_evidence(normalized: dict) -> None:
+    """Verify ``context.requestEvidence`` and replace it with verdicts only.
+
+    Always removes the raw evidence (client IP, user-agent, signature headers)
+    from the stored event, whether or not verification succeeds.
+    """
+    context = normalized.get("context")
+    if not isinstance(context, dict) or "requestEvidence" not in context:
+        return
+    raw = context.pop("requestEvidence", None)
+    try:
+        from journeys.traffic.forwarded_evidence import verify_forwarded_request_evidence
+
+        verdict = verify_forwarded_request_evidence(raw, time.time())
+    except Exception as exc:  # verification must never break ingestion
+        logger.warning("Forwarded request evidence failed (event continues): %s", exc)
+        return
+    if verdict is None:
+        return
+    server_ctx = dict(normalized.get("server_context") or {})
+    server_ctx["forwarded_request"] = verdict
+    normalized["server_context"] = server_ctx
+    for kind in ("agent_verification", "web_bot_auth"):
+        if kind in verdict:
+            metrics.increment(
+                "ingestion_forwarded_evidence_total",
+                labels={"kind": kind, "verification": str(verdict[kind].get("verification"))},
+            )
+
+
+def _build_web_bot_auth(request: Request) -> Optional[dict]:
+    """Verify a Web Bot Auth (RFC 9421) signature on the request, if present."""
+    try:
+        from journeys.traffic.web_bot_auth import verify_starlette_request
+
+        evidence = verify_starlette_request(request)
+        if evidence is not None:
+            metrics.increment(
+                "ingestion_web_bot_auth_total",
+                labels={"verification": evidence["verification"]},
+            )
+        return evidence
+    except Exception as exc:  # verification must never break ingestion
+        logger.warning("Web Bot Auth verification failed (event continues): %s", exc)
+        return None
 
 
 def _build_agent_verification(request: Request) -> Optional[dict]:

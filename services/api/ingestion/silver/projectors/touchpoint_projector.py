@@ -200,11 +200,32 @@ class TouchpointProjector(BaseProjector):
         device_ctx = ctx.get("device") if isinstance(ctx.get("device"), dict) else {}
         automation = device_ctx.get("automation") if isinstance(device_ctx.get("automation"), dict) else {}
         webdriver_flag = automation.get("webdriver") is True
+        # Web Bot Auth: a verified signature is classified by the classifier
+        # itself; a well-formed signature from a signer Aether has no keys for
+        # is a self-declared bot (automation, unverified). Invalid, expired or
+        # replayed signatures prove nothing and are kept only as evidence.
+        server_ctx = event.get("server_context") if isinstance(event.get("server_context"), dict) else {}
+        # Evidence Aether observed itself wins; evidence the tenant's server
+        # observed and forwarded (server SDK captureRequestEvidence) is used
+        # only when Aether saw nothing, and stays marked observed_by=tenant_server.
+        forwarded = server_ctx.get("forwarded_request") if isinstance(server_ctx.get("forwarded_request"), dict) else {}
+        agent_verification = server_ctx.get("agent_verification") or forwarded.get("agent_verification")
+        web_bot_auth = server_ctx.get("web_bot_auth") or forwarded.get("web_bot_auth")
+        if not isinstance(web_bot_auth, dict):
+            web_bot_auth = None
+        wba_state = str((web_bot_auth or {}).get("verification") or "")
         explicit_actor_type = (
             ctx.get("actorType")
             or props.get("actor_type")
             or ("agent" if ctx.get("agentId") else None)
             or ("machine" if webdriver_flag else None)
+            or ("machine" if wba_state == "web_bot_auth_unknown_signer" else None)
+        )
+        actor_evidence: tuple[str, ...] = tuple(
+            tag for tag in (
+                "actor:webdriver_flag" if webdriver_flag else "",
+                f"actor:{wba_state}" if wba_state and wba_state != "web_bot_auth_verified" else "",
+            ) if tag
         )
         classified = _source_classifier.classify(
             referrer=raw_referrer,
@@ -230,11 +251,9 @@ class TouchpointProjector(BaseProjector):
             declared_entry_method=(
                 acq_ev.get("entryMethod") or acq_ev.get("entry_method")
             ),
-            server_agent_evidence=(
-                (event.get("server_context") or {}).get("agent_verification")
-                if isinstance(event.get("server_context"), dict) else None
-            ),
-            actor_evidence=("actor:webdriver_flag",) if webdriver_flag else (),
+            server_agent_evidence=agent_verification if isinstance(agent_verification, dict) else None,
+            web_bot_auth_evidence=web_bot_auth,
+            actor_evidence=actor_evidence,
         )
         destination_domain = (
             acq_ev.get("destinationDomain") or acq_ev.get("destination_domain")

@@ -327,6 +327,7 @@ class SourceClassifier:
         explicit_actor_type: Optional[str] = None,
         declared_entry_method: Optional[str] = None,
         server_agent_evidence: Optional[dict[str, Any]] = None,
+        web_bot_auth_evidence: Optional[dict[str, Any]] = None,
         actor_evidence: tuple[str, ...] = (),
     ) -> ClassifiedSource:
         """Classify raw source evidence without assigning a campaign.
@@ -338,6 +339,10 @@ class SourceClassifier:
         request (``journeys.traffic.agent_verification.server_agent_evidence``):
         the matched user-agent signature from the real request header and
         whether the client IP is inside that provider's published range.
+
+        ``web_bot_auth_evidence`` is the server's verification of a Web Bot Auth
+        (RFC 9421) signature (``journeys.traffic.web_bot_auth``). Only a verified
+        signature is used here; it outranks any user-agent claim.
         """
         result = self._classify_inner(
             referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
@@ -347,6 +352,7 @@ class SourceClassifier:
             explicit_actor_type=explicit_actor_type,
             declared_entry_method=declared_entry_method,
             server_agent_evidence=server_agent_evidence,
+            web_bot_auth_evidence=web_bot_auth_evidence,
         )
         if actor_evidence:
             result = replace(result, evidence=tuple(result.evidence) + tuple(actor_evidence))
@@ -367,6 +373,7 @@ class SourceClassifier:
         explicit_actor_type: Optional[str] = None,
         declared_entry_method: Optional[str] = None,
         server_agent_evidence: Optional[dict[str, Any]] = None,
+        web_bot_auth_evidence: Optional[dict[str, Any]] = None,
     ) -> ClassifiedSource:
         """Precedence-ordered classification; see :meth:`classify`."""
         del utm_campaign, landing_page  # campaign and destination are separate concerns
@@ -375,6 +382,12 @@ class SourceClassifier:
         domain, safe_referrer, path_hash = self.normalize_referrer(
             referrer=referrer, referrer_domain=referrer_domain,
         )
+
+        signed = self._classify_web_bot_auth(
+            web_bot_auth_evidence, domain, safe_referrer, path_hash,
+        )
+        if signed is not None:
+            return signed
 
         machine = self._classify_user_agent(
             user_agent, domain, safe_referrer, path_hash,
@@ -431,6 +444,53 @@ class SourceClassifier:
             evidence=evidence,
         )
 
+    def _classify_web_bot_auth(
+        self,
+        evidence: Optional[dict[str, Any]],
+        domain: str,
+        safe_referrer: str,
+        path_hash: Optional[str],
+    ) -> Optional[ClassifiedSource]:
+        """A verified Web Bot Auth signature: cryptographic proof of the signer.
+
+        Outranks every user-agent claim, because signing agents usually send a
+        normal browser user-agent. Unverified outcomes return ``None`` here; the
+        projector records them as evidence instead.
+        """
+        if not evidence or evidence.get("verification") != "web_bot_auth_verified":
+            return None
+        provider = self._clean_token(evidence.get("provider")) or None
+        product = self._clean_token(evidence.get("product")) or None
+        signer = str(evidence.get("signature_agent") or "")
+        signer_host = signer.split("://", 1)[-1] if signer else "unknown"
+        # A signature is verifiable wherever it was observed; a forwarded one is
+        # labelled so it stays distinguishable from Aether's own observation.
+        verification = (
+            "web_bot_auth_forwarded" if evidence.get("observed_by") == "tenant_server" else "web_bot_auth"
+        )
+        confidence = 0.97 if verification == "web_bot_auth_forwarded" else 0.99
+        signals = (f"web_bot_auth:{signer_host}", f"agent_verification:{verification}")
+        if evidence.get("actor_type") == "machine":
+            return self._result(
+                provider or "web_bot_auth", "machine", "AI Crawler", confidence,
+                source_class="machine_referral", mediation="crawler_discovery",
+                ai_provider=provider, ai_product=product, actor_type="machine",
+                journey_role="excluded", verification=verification,
+                domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                attribution_eligible=False, traffic_origin="external",
+                entry_method="web_referrer" if domain else "unknown",
+                proof_level="platform_verified", evidence=signals,
+            )
+        return self._result(
+            provider or "web_bot_auth", "agent_referral", "Agent Referral", confidence,
+            source_class="agent_referral", mediation="agent_mediated_referral",
+            ai_provider=provider, ai_product=product, actor_type="agent",
+            journey_role="handoff", verification=verification,
+            domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+            entry_method="web_referrer" if domain else "unknown",
+            proof_level="platform_verified", evidence=signals,
+        )
+
     def _classify_user_agent(
         self,
         user_agent: str,
@@ -462,9 +522,19 @@ class SourceClassifier:
         if not ua:
             return None
 
+        forwarded = server.get("observed_by") == "tenant_server"
+
         def grade(signature: str, verified_conf: float) -> tuple[str, str, float]:
             if header_signature != signature:
                 return "declared", "user_agent_claim", 0.5
+            if forwarded:
+                # Observed by the customer's server and forwarded, not seen by
+                # Aether: one step below Aether's own observation.
+                if server_state == "provider_ip_range":
+                    return "server_observed", "provider_ip_range_forwarded", 0.85
+                if server_state == "ip_mismatch":
+                    return "declared", "user_agent_ip_mismatch_forwarded", 0.3
+                return "declared", "user_agent_header_forwarded", 0.65
             if server_state == "provider_ip_range":
                 return "platform_verified", "provider_ip_range", verified_conf
             if server_state == "ip_mismatch":
