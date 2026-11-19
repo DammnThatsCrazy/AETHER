@@ -60,6 +60,8 @@ HIGH_RISK_LEVELS = frozenset({"high", "critical"})
 #: credential is bound to it, so it does not prove who reported an edge.
 VERIFIED_STATES = frozenset({"attested", "reconciled"})
 EFFECT_PROOF_STATES = frozenset({"attested", "reconciled"})
+#: Strongest first. ``source_reported`` = unsigned, the producer's own report.
+EXECUTION_VERIFICATION_RANK = ("attested", "reconciled", "deployment_verified", "source_reported")
 ECONOMIC_REF_FIELDS = ("payment_intent_ref", "settlement_event_ref", "external_order_id")
 COMMUNICATION_MARKERS = ("agent_comm", "communication", "message")
 
@@ -1421,6 +1423,13 @@ class LineageEngine:
             "agent_run_sample": sorted(node.runs)[:self.config.sample_ids],
             "tool_sample": sorted(node.tools)[:20],
             "service_sample": sorted(node.services)[:20],
+            # How this agent's own facts were verified at ingestion: signed
+            # (attested), registry-validated, or unsigned producer reports.
+            "execution_verification_states": sorted(node.verification),
+            "strongest_execution_verification": next(
+                (v for v in EXECUTION_VERIFICATION_RANK if v in node.verification), None
+            ),
+            "has_source_reported_facts": "source_reported" in node.verification,
             "verified_effects": sorted(node.effects_verified)[:20],
             "reported_effects": sorted(node.effects_reported)[:20],
             "outcome_refs": sorted(node.outcomes)[:20],

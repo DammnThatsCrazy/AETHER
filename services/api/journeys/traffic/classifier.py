@@ -328,6 +328,7 @@ class SourceClassifier:
         declared_entry_method: Optional[str] = None,
         server_agent_evidence: Optional[dict[str, Any]] = None,
         web_bot_auth_evidence: Optional[dict[str, Any]] = None,
+        agent_protocol_evidence: Optional[dict[str, Any]] = None,
         actor_evidence: tuple[str, ...] = (),
     ) -> ClassifiedSource:
         """Classify raw source evidence without assigning a campaign.
@@ -343,6 +344,9 @@ class SourceClassifier:
         ``web_bot_auth_evidence`` is the server's verification of a Web Bot Auth
         (RFC 9421) signature (``journeys.traffic.web_bot_auth``). Only a verified
         signature is used here; it outranks any user-agent claim.
+
+        ``agent_protocol_evidence`` is the graded MCP / A2A caller identity
+        (``journeys.traffic.protocol_identity``), observed by the tenant's server.
         """
         result = self._classify_inner(
             referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
@@ -353,6 +357,7 @@ class SourceClassifier:
             declared_entry_method=declared_entry_method,
             server_agent_evidence=server_agent_evidence,
             web_bot_auth_evidence=web_bot_auth_evidence,
+            agent_protocol_evidence=agent_protocol_evidence,
         )
         if actor_evidence:
             result = replace(result, evidence=tuple(result.evidence) + tuple(actor_evidence))
@@ -374,6 +379,7 @@ class SourceClassifier:
         declared_entry_method: Optional[str] = None,
         server_agent_evidence: Optional[dict[str, Any]] = None,
         web_bot_auth_evidence: Optional[dict[str, Any]] = None,
+        agent_protocol_evidence: Optional[dict[str, Any]] = None,
     ) -> ClassifiedSource:
         """Precedence-ordered classification; see :meth:`classify`."""
         del utm_campaign, landing_page  # campaign and destination are separate concerns
@@ -388,6 +394,12 @@ class SourceClassifier:
         )
         if signed is not None:
             return signed
+
+        protocol = self._classify_agent_protocol(
+            agent_protocol_evidence, domain, safe_referrer, path_hash,
+        )
+        if protocol is not None:
+            return protocol
 
         machine = self._classify_user_agent(
             user_agent, domain, safe_referrer, path_hash,
@@ -489,6 +501,40 @@ class SourceClassifier:
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
             entry_method="web_referrer" if domain else "unknown",
             proof_level="platform_verified", evidence=signals,
+        )
+
+    def _classify_agent_protocol(
+        self,
+        evidence: Optional[dict[str, Any]],
+        domain: str,
+        safe_referrer: str,
+        path_hash: Optional[str],
+    ) -> Optional[ClassifiedSource]:
+        """An MCP client or A2A caller identified by the tenant's server.
+
+        Ranks below a verified Web Bot Auth signature (cryptographic) and above
+        user-agent claims: the protocol handshake itself establishes that the
+        caller is an agent client.
+        """
+        if not evidence:
+            return None
+        from journeys.traffic.protocol_identity import GRADES
+
+        verification = str(evidence.get("verification") or "")
+        if verification not in GRADES:
+            return None
+        proof, confidence = GRADES[verification]
+        protocol = str(evidence.get("protocol") or "agent_protocol")
+        provider = self._clean_token(evidence.get("provider")) or None
+        product = self._clean_token(evidence.get("product")) or None
+        return self._result(
+            provider or product or protocol, "agent_referral", "Agent Referral", confidence,
+            source_class="agent_referral", mediation="agent_mediated_referral",
+            ai_provider=provider, ai_product=product, actor_type="agent",
+            journey_role="handoff", verification=verification,
+            domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+            entry_method="unknown", proof_level=proof,
+            evidence=(f"agent_protocol:{protocol}", f"agent_verification:{verification}"),
         )
 
     def _classify_user_agent(

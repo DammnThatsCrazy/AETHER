@@ -75,6 +75,9 @@ runtime:
       - WORKER_ROLES_ENABLED
       - PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED
       - PATTERN_DISCOVERY_SCHEDULER_ENABLED
+      # The block below also carries AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED: signed
+      # agent events need the registry for attestation-key registration
+      # (docs/architecture/AGENT-DETECTION-RELIABILITY.md).
       # ── Identity Continuity runtime (blueprint §15) — staging ON for proof ──
       - IDENTITY_RESOLUTION_ENABLED
       - IDENTITY_AUTO_MERGE_ENABLED
@@ -95,6 +98,7 @@ runtime:
       - AGENT_IDENTITY_RESOLUTION_ENABLED
       - JOURNEY_HANDOFF_ENABLED
       - JOURNEY_ACTIVITY_REBUILD_ENABLED
+      - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
     # Default-off flags the staging task definitions set to true. The ECS
     # module reads this list (yamldecode), so the manifest alone switches them
     # on; each must also be listed under "on" and be default-off in settings.
@@ -118,11 +122,11 @@ runtime:
       - AGENT_IDENTITY_RESOLUTION_ENABLED
       - JOURNEY_HANDOFF_ENABLED
       - JOURNEY_ACTIVITY_REBUILD_ENABLED
+      - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
     "off":
       - AETHER_ACTIVATION_ENABLED
       - AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED
       - AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED
-      - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
       - AETHER_AGENT_RUNTIME_DURABLE_ENABLED
       - AETHER_AGENT_WORKER_BRIDGE_ENABLED
       - AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED

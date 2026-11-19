@@ -3291,12 +3291,15 @@ class Agent360Provider:
         agent missing from the projection is ``unknown``: not projected yet says
         nothing about whether it has a parent or descendants."""
 
-        def section(state: str, reason: Optional[str], **extra: Any) -> ProjectionSection:
+        def section(
+            state: str, reason: Optional[str], *, warnings: Optional[list[str]] = None, **extra: Any,
+        ) -> ProjectionSection:
             return ProjectionSection(
                 id=LINEAGE_SECTION,
                 state=state,  # type: ignore[arg-type]
                 title="Delegation lineage",
                 content={"state": state, "reason": reason, **extra},
+                warnings=warnings,
                 canonicalAuthorityRefs=["observations", "delegations"],
             )
 
@@ -3328,7 +3331,31 @@ class Agent360Provider:
         if detail["node"] is None:
             return section("unknown", "this agent is not in the lineage projection yet", disclosure=disclosure)
         state = "available" if disclosure["completeness"] == "complete" else "degraded"
-        return section(state, None, data=detail, disclosure=disclosure)
+        node = detail["node"]
+        strongest = node.get("strongest_execution_verification")
+        # Signed (attested) facts are high reliability; registry-validated
+        # deployments medium-high; unsigned producer reports are shown as
+        # source_reported so they are never read as verified.
+        execution_verification = {
+            "states": node.get("execution_verification_states") or [],
+            "strongest": strongest,
+            "hasSourceReported": bool(node.get("has_source_reported_facts")),
+            "label": (
+                "signed" if strongest in ("attested", "reconciled")
+                else "registry_validated" if strongest == "deployment_verified"
+                else "source_reported" if strongest == "source_reported"
+                else "unknown"
+            ),
+        }
+        warnings = (
+            ["Some of this agent's events are unsigned (source_reported); sign them with an "
+             "attestation key registered on the deployment to make them verifiable."]
+            if execution_verification["hasSourceReported"] else None
+        )
+        return section(
+            state, None, warnings=warnings, data=detail, disclosure=disclosure,
+            executionVerification=execution_verification,
+        )
 
     async def _behavior_sections(
         self,

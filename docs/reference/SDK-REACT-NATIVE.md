@@ -15,7 +15,7 @@ source_hashes:
   "packages/sdk/react-native/src/index.tsx": "sha256:25cad4024a1305c105b5517f9fd2495cd7de9d4948147dbdc2dd448d70e8a0fc"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:c512710d0b1d40e78143de7ffd3c0998e07fedb80da9cf9db69b8100eb0234cd"
+  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide

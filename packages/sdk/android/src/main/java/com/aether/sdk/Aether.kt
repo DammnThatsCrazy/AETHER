@@ -2424,6 +2424,9 @@ object Aether : DefaultLifecycleObserver {
         }
     }
 
+    /** Computed once per process: test harness / emulator state does not change. */
+    private val automationSignals: JSONObject by lazy { AutomationSignals.collect() }
+
     private fun buildContext(eventDate: Date): JSONObject = JSONObject().apply {
         put("os", JSONObject().apply {
             put("name", "Android")
@@ -2433,6 +2436,8 @@ object Aether : DefaultLifecycleObserver {
         put("device", JSONObject().apply {
             put("manufacturer", Build.MANUFACTURER)
             put("model", Build.MODEL)
+            // Presence-only automation evidence (never accessibility state).
+            put("automation", automationSignals)
         })
         put("locale", Locale.getDefault().toLanguageTag())
         put("timezone", TimeZone.getDefault().id)
