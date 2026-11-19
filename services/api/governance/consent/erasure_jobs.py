@@ -509,6 +509,7 @@ async def _run_completeness_planes(
             "social_relationship_evidence_events",
             "agent_lineage_projection",
             "pattern_discovery",
+            "venue_account_links",
         )
     ))
     try:

@@ -4582,3 +4582,53 @@ class StorageLegalHoldRepository(BaseRepository):
         return await self.find_many(
             filters={"tenant_id": tenant_id, "status": "active"}, limit=limit
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VENUE ACCOUNT LINKS — tenant subject ↔ read-only venue account
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class VenueAccountLinkRepository(BaseRepository):
+    """Tenant-held links between a subject and a read-only venue account.
+
+    One row per ``(tenant_id, subject_id, venue, account_ref)``. Rows hold no
+    secret: wallet links reference server-verified ownership evidence, key and
+    OAuth links reference a credential by id only. Revocation is a state
+    change (``status=revoked``) so later runs exclude the account; DSR erasure
+    hard-deletes the subject's rows through ``delete_by_principal``.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("venue_account_links")
+
+    async def list_for_tenant(
+        self,
+        tenant_id: str,
+        *,
+        venue: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 1000,
+    ) -> list[dict]:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if venue:
+            filters["venue"] = venue
+        if subject_id:
+            filters["subject_id"] = subject_id
+        if status:
+            filters["status"] = status
+        rows = await self.find_many(filters=filters, limit=limit)
+        return [r for r in rows if r.get("tenant_id") == tenant_id]
+
+    async def get_for_tenant(self, tenant_id: str, link_id: str) -> Optional[dict]:
+        record = await self.find_by_id(link_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            return None
+        return record
+
+    async def delete_by_principal(self, tenant_id: str, subject_id: str) -> int:
+        """DSR erasure: hard-delete every link of one tenant subject."""
+        return await self.delete_for_tenant_where(tenant_id, "subject_id", [subject_id])
