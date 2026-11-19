@@ -587,3 +587,27 @@ final class AetherSDKTests: XCTestCase {
         XCTAssertTrue(plainParsed.sanitizedURL.contains("ae=express"))
     }
 }
+
+final class AutomationSignalsTests: XCTestCase {
+
+    func testXCTestEnvironmentMarksTestHarness() {
+        XCTAssertTrue(AutomationSignals.isTestHarness(
+            environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"],
+            classLoaded: { _ in false }
+        ))
+    }
+
+    func testOrdinaryProcessIsNotATestHarness() {
+        XCTAssertFalse(AutomationSignals.isTestHarness(environment: [:], classLoaded: { _ in false }))
+    }
+
+    func testLoadedXCTestClassMarksTestHarness() {
+        XCTAssertTrue(AutomationSignals.isTestHarness(environment: [:], classLoaded: { $0 == "XCTestCase" }))
+    }
+
+    func testAutomationEncodesAsTwoBooleans() throws {
+        let data = try JSONEncoder().encode(EventContext.AutomationInfo(testHarness: true, emulator: false))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Bool])
+        XCTAssertEqual(json, ["testHarness": true, "emulator": false])
+    }
+}

@@ -57,3 +57,21 @@ def test_payload_only_agent_claim_is_declared() -> None:
     row = _row({"userAgent": "Mozilla/5.0 ChatGPT-User/1.0"})
     assert row["actor_type"] == "agent"
     assert row["proof_level"] == "declared"
+
+
+def test_mobile_test_harness_is_machine() -> None:
+    row = _row({"device": {"automation": {"testHarness": True, "emulator": True}}})
+    assert row["actor_type"] == "machine"
+    signals = row["provenance"]["source_evidence_signals"]
+    assert "actor:mobile_test_harness" in signals and "actor:emulator" in signals
+
+
+def test_emulator_alone_is_evidence_not_an_actor() -> None:
+    row = _row({"device": {"automation": {"testHarness": False, "emulator": True}}})
+    assert row["actor_type"] == "unknown"
+    assert "actor:emulator" in row["provenance"]["source_evidence_signals"]
+
+
+def test_real_device_without_harness_is_not_evidence_of_a_human() -> None:
+    row = _row({"device": {"automation": {"testHarness": False, "emulator": False}}})
+    assert row["actor_type"] == "unknown"

@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:59c1bd5ad02e9ef86cd83e47640752e84ef503261b3a261694fa11447d712f1c"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:4fdd835bbf082c9c3a21d51eb524b4824d574a7a611eddd873afb416c6b41cc7"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:c512710d0b1d40e78143de7ffd3c0998e07fedb80da9cf9db69b8100eb0234cd"
+  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -134,6 +134,16 @@ The fingerprint is stamped as `context.fingerprint.id` — but stamping is
 **consent-gated in GDPR mode**: until `analytics` consent is granted, the
 fingerprint is omitted from event context (and from identity-resolve calls).
 Only the composite hash is sent — raw device signals are never transmitted.
+
+### Automation Evidence
+
+Every event's `device.automation` carries two booleans for agent / automation
+detection: `testHarness` (the monkey, the user test harness on API 29+, or an
+instrumentation framework such as Espresso, UiAutomator or Appium's
+UiAutomator2 server loaded in the app process) and `emulator`. Aether
+classifies `testHarness: true` as automation; `emulator` is evidence only.
+Accessibility services are never inspected. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md).
 
 ## Wallet Tracking
 
@@ -402,7 +412,7 @@ not establish Android device or customer-tenant graph behavior.
 ### What the SDK sends (event context):
 - Event type, name, and raw properties (sensitive fields scrubbed recursively,
   including nested maps/lists)
-- `os` `{name: "Android", version, sdkInt}` and `device` `{manufacturer, model}`
+- `os` `{name: "Android", version, sdkInt}` and `device` `{manufacturer, model, automation: {testHarness, emulator}}`
 - `locale`, `timezone`, plus temporal provenance captured at the event's
   occurrence instant: `utcOffsetMinutes` (zone-at-instant, DST-correct),
   `timeZoneSource: "device"`, `clockSource: "device"`

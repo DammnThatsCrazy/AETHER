@@ -242,6 +242,10 @@ class EventContext(BaseModel):
     # verified at ingestion, then removed before storage (raw IP / headers are
     # never persisted). See journeys/traffic/forwarded_evidence.py.
     requestEvidence: Optional[dict[str, Any]] = None
+    # Agent protocol identity forwarded by a server SDK (MCP client / A2A
+    # caller): graded at ingestion, replaced by the verdict before storage.
+    # See journeys/traffic/protocol_identity.py.
+    agentProtocol: Optional[dict[str, Any]] = None
 
     # Identity-stitching signals
     identityConfidence: Optional[float] = None
@@ -587,6 +591,7 @@ async def ingest_events(
             if server_context is not None:
                 normalized["server_context"] = server_context
             _apply_forwarded_request_evidence(normalized)
+            _apply_agent_protocol_identity(normalized)
             namespace = _stamp_identity_namespace(normalized, tenant_id, declared_site)
             _attach_observation_envelope(
                 normalized, batch_id=batch_id, tenant_id=tenant_id,
@@ -889,6 +894,7 @@ async def _ingest_batch_v2(
         if server_context is not None:
             normalized["server_context"] = server_context
         _apply_forwarded_request_evidence(normalized)
+        _apply_agent_protocol_identity(normalized)
         namespace = _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
         # Keep the transactional path on the same additive Envelope-B adoption
         # contract as V1; the default-off flag preserves existing payloads.
@@ -1117,6 +1123,30 @@ def _apply_forwarded_request_evidence(normalized: dict) -> None:
                 "ingestion_forwarded_evidence_total",
                 labels={"kind": kind, "verification": str(verdict[kind].get("verification"))},
             )
+
+
+def _apply_agent_protocol_identity(normalized: dict) -> None:
+    """Grade ``context.agentProtocol`` (MCP / A2A) and keep only the verdict."""
+    context = normalized.get("context")
+    if not isinstance(context, dict) or "agentProtocol" not in context:
+        return
+    raw = context.pop("agentProtocol", None)
+    try:
+        from journeys.traffic.protocol_identity import evaluate_agent_protocol
+
+        verdict = evaluate_agent_protocol(raw)
+    except Exception as exc:  # grading must never break ingestion
+        logger.warning("Agent protocol identity failed (event continues): %s", exc)
+        return
+    if verdict is None:
+        return
+    server_ctx = dict(normalized.get("server_context") or {})
+    server_ctx["agent_protocol"] = verdict
+    normalized["server_context"] = server_ctx
+    metrics.increment(
+        "ingestion_agent_protocol_total",
+        labels={"protocol": verdict["protocol"], "verification": verdict["verification"]},
+    )
 
 
 def _build_web_bot_auth(request: Request) -> Optional[dict]:

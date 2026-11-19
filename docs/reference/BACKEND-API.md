@@ -37,9 +37,9 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:c3822e11664785f3e53c4c05c11dd824d45265a29330b72781f8f5dd79499cf5"
+  "services/api/ingestion/": "sha256:a93e556b4a9bc01599bdcfc4f8331f860469f6ec133380b009b9977badd2f51f"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:ac23224e05cbaaa5b88c5fd0872d27262e9d690a28ff1659257e1474868ec527"
+  "services/api/journeys/": "sha256:fc7fd61c7dc4d50bc676b5e2580423b35a4be0f6992c591d63af83a26e9a2d41"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
@@ -987,6 +987,21 @@ forwarded `receivedAt`), stores only the verdicts under
 Forwarded evidence is graded one step below Aether's own observation
 (`provider_ip_range_forwarded` → `server_observed`; `web_bot_auth_forwarded` →
 `platform_verified`), and Aether's own observation of a request wins.
+
+**Agent protocol identity (MCP / A2A).** Server SDK events may carry
+`context.agentProtocol` (from `captureMcpClientIdentity` /
+`captureA2aCallerIdentity`). Ingestion grades it into
+`server_context.agent_protocol` and removes the raw block: an MCP OAuth client
+or A2A caller authenticated by the tenant's server is `server_observed`
+(`mcp_oauth_client` 0.85, `a2a_authenticated` 0.8,
+`a2a_authenticated_signed_card` 0.9); MCP `clientInfo` or an Agent Card alone is
+`declared` (0.6). Tokens are never accepted; the OAuth subject arrives as a
+SHA-256 hash.
+
+**Mobile automation evidence.** The iOS and Android SDKs send
+`context.device.automation.{testHarness, emulator}`. `testHarness: true`
+classifies the touchpoint as `machine` (evidence `actor:mobile_test_harness`);
+`emulator` is recorded as evidence only. Accessibility state is never collected.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's
