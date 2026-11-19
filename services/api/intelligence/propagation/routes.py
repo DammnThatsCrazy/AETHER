@@ -1,7 +1,9 @@
 """Propagation & Diffusion lens API (flag-gated, tenant-scoped, read-only).
 
 ``POST /v1/social360/propagation/runs`` computes one bounded propagation run
-over the caller's own tenant and returns the ``PropagationRun`` contract. It
+over the caller's own tenant and returns the ``PropagationRun`` contract.
+``POST /v1/social360/propagation/subjects/{subject_id}/summary`` returns the
+Profile360 view of one subject inside that run. It
 never writes graph truth and never reads another tenant's data. Disabled unless
 ``AETHER_PROPAGATION_LENS_ENABLED`` is on.
 """
@@ -44,13 +46,10 @@ def _require_permissions(request: Request) -> str:
     return tenant.tenant_id
 
 
-@router.post("/runs")
-async def create_propagation_run(body: PropagationRunRequest, request: Request) -> dict:
+async def _run(body: PropagationRunRequest, tenant_id: str):
     from intelligence.propagation.contracts import ExposureChannel, PropagationQuery
     from intelligence.propagation.service import PropagationService
 
-    _require_enabled()
-    tenant_id = _require_permissions(request)
     try:
         channels = (
             tuple(ExposureChannel(c) for c in body.channels) if body.channels else tuple(ExposureChannel)
@@ -64,7 +63,25 @@ async def create_propagation_run(body: PropagationRunRequest, request: Request) 
             exposure_window_seconds=body.exposure_window_seconds,
             max_hops=body.max_hops,
         )
-        result = await PropagationService().run(query, include_live=body.include_live)
+        return await PropagationService().run(query, include_live=body.include_live)
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc
+
+
+@router.post("/runs")
+async def create_propagation_run(body: PropagationRunRequest, request: Request) -> dict:
+    _require_enabled()
+    tenant_id = _require_permissions(request)
+    result = await _run(body, tenant_id)
     return APIResponse(data=result.to_dict()).to_dict()
+
+
+@router.post("/subjects/{subject_id}/summary")
+async def subject_propagation_summary(subject_id: str, body: PropagationRunRequest, request: Request) -> dict:
+    """Profile360 view: the subject's episodes and inbound/outbound paths."""
+    from intelligence.propagation.engine import subject_summary
+
+    _require_enabled()
+    tenant_id = _require_permissions(request)
+    result = await _run(body, tenant_id)
+    return APIResponse(data=subject_summary(result, subject_id)).to_dict()

@@ -266,3 +266,18 @@ def test_live_polymarket_capture_yields_linked_adoptions():
     assert adoptions, "live capture should contain at least one first-entry buy"
     assert all(a.subject_id == "user_live" and a.instrument_key.startswith("polymarket:mainnet:0x") for a in adoptions)
     assert len({a.instrument_key for a in adoptions}) == len(adoptions)
+
+
+def test_subject_summary_lists_roles_and_paths():
+    from intelligence.propagation.engine import subject_summary
+
+    result = run([adopt("u1", 0), adopt("u2", 60), adopt("u3", 120)],
+                 [follows("u2", "u1"), follows("u3", "u2")], POP)
+    middle = subject_summary(result, "u2")
+    assert [e["role"] for e in middle["episodes"]] == ["adopter"]
+    assert [p["target_subject"] for p in middle["inbound_paths"]] == ["u2"]
+    assert [p["target_subject"] for p in middle["outbound_paths"]] == ["u3"]
+    seed = subject_summary(result, "u1")
+    assert seed["seeded_episodes"] == 1 and seed["inbound_paths"] == []
+    absent = subject_summary(result, "u9")
+    assert absent["episodes"] == [] and absent["seeded_episodes"] == 0

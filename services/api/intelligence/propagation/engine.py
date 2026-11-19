@@ -425,4 +425,46 @@ def compute_propagation(
     )
 
 
-__all__ = ["LIMITATIONS", "compute_propagation"]
+def subject_summary(run: PropagationRun, subject_id: str) -> dict[str, Any]:
+    """Profile-facing view of one subject inside a run (no new computation).
+
+    Lists the episodes the subject seeded or adopted in, the paths that reached
+    the subject (inbound) and the paths that passed through it (outbound), with
+    each episode's classification and claim type. A subject absent from every
+    episode returns empty lists, not zeros of an invented metric.
+    """
+    episodes = []
+    inbound = []
+    outbound = []
+    for episode in run.episodes:
+        adopter = next((a for a in episode.adopters if a.subject_id == subject_id), None)
+        if adopter is None:
+            continue
+        role = "seed" if episode.seed_subject == subject_id else "adopter"
+        episodes.append({
+            "episode_id": episode.episode_id,
+            "instrument_key": episode.instrument_key,
+            "side": episode.side,
+            "role": role,
+            "adopted_at": adopter.adopted_at,
+            "classification": episode.classification.value,
+            "claim_type": episode.claim_type.value,
+        })
+        for path in episode.paths:
+            if path.target_subject == subject_id:
+                inbound.append({"episode_id": episode.episode_id, **_plain(asdict(path))})
+            elif any(h.from_subject == subject_id for h in path.hops):
+                outbound.append({"episode_id": episode.episode_id, **_plain(asdict(path))})
+    return {
+        "run_id": run.run_id,
+        "tenant_id": run.tenant_id,
+        "subject_id": subject_id,
+        "episodes": episodes,
+        "inbound_paths": inbound,
+        "outbound_paths": outbound,
+        "seeded_episodes": sum(1 for e in episodes if e["role"] == "seed"),
+        "limitations": list(run.limitations),
+    }
+
+
+__all__ = ["LIMITATIONS", "compute_propagation", "subject_summary"]
