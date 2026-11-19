@@ -216,3 +216,17 @@ def test_hyperliquid_live_capture_replays_through_adapter():
     assert checkpoint["provider_health"] == "ok"
     assert not _contains_float(events)
     assert all(f["payload"]["canonical_market_id"].startswith("hyperliquid:mainnet:") for f in fills)
+
+
+def test_runtime_fill_intake_keeps_event_contract_context_in_source_refs():
+    from value.derivatives.runtime_routes import _fill_source_refs
+
+    refs = _fill_source_refs({
+        "source_refs": ["polymarket:tx:1"], "instrument_type": "event_contract",
+        "event_contract_ref": "polymarket:mainnet:0xc", "outcome": "Yes", "direction": None,
+    })
+    assert refs == [
+        "polymarket:tx:1", "instrument_type=event_contract",
+        "event_contract_ref=polymarket:mainnet:0xc", "outcome=Yes",
+    ]
+    assert _fill_source_refs({"source_refs": ["outcome=No"], "outcome": "Yes"}) == ["outcome=No"]

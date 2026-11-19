@@ -948,6 +948,9 @@ def create_app() -> FastAPI:
     from services.social360.routes import router as social360_evidence_router
 
     app.include_router(social360_evidence_router)
+    from intelligence.propagation.routes import router as propagation_router
+
+    app.include_router(propagation_router)  # /v1/social360/propagation — flag-gated
     app.include_router(sdk_coverage_router)
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)

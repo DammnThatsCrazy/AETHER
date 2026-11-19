@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aether://contracts/propagation-run.schema.json",
+  "title": "Aether PropagationRun canonical contract",
+  "description": "One tenant-scoped Propagation & Diffusion lens run: first-entry adoptions grouped by instrument and side, evidence-backed exposure paths between the tenant's own linked subjects, separate diffusion metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred classification. Unknown metrics are null with a reason code, never 0. There is no collapsed influence or contagion score. claim_type causally_supported is reserved and is never emitted by this computation. Python mirror: services/api/intelligence/propagation/contracts.py; TypeScript mirror: packages/shared/propagation-contract.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id", "tenant_id", "query", "computed_at", "episodes", "input_digest",
+    "limitations", "algorithm", "algorithm_version", "schema_version", "execution_by_aether"
+  ],
+  "properties": {
+    "run_id": {"type": "string", "pattern": "^pr_[0-9a-f]{24}$"},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "query": {"$ref": "#/$defs/query"},
+    "computed_at": {"type": "string"},
+    "episodes": {"type": "array", "items": {"$ref": "#/$defs/episode"}},
+    "input_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "algorithm": {"const": "aether.propagation.exposure_adoption"},
+    "algorithm_version": {"type": "string"},
+    "schema_version": {"const": "propagation.run.v1"},
+    "execution_by_aether": {"const": false}
+  },
+  "$defs": {
+    "channel": {"enum": ["social", "onchain", "in_app", "relationship"]},
+    "claim_type": {"enum": ["observed", "inferred", "causally_supported"]},
+    "nullable_int": {"type": ["integer", "null"], "minimum": 0},
+    "nullable_rate": {"type": ["number", "null"], "minimum": 0},
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id", "window_start", "window_end", "instrument_keys", "channels",
+        "exposure_window_seconds", "max_hops", "lockstep_window_seconds",
+        "lockstep_min_entities", "viral_lift_threshold", "min_exposed_for_baseline", "as_of"
+      ],
+      "properties": {
+        "tenant_id": {"type": "string", "minLength": 1},
+        "window_start": {"type": "string"},
+        "window_end": {"type": "string"},
+        "instrument_keys": {"type": "array", "items": {"type": "string"}},
+        "channels": {"type": "array", "items": {"$ref": "#/$defs/channel"}},
+        "exposure_window_seconds": {"type": "integer", "minimum": 1},
+        "max_hops": {"type": "integer", "minimum": 1, "maximum": 16},
+        "lockstep_window_seconds": {"type": "integer", "minimum": 1},
+        "lockstep_min_entities": {"type": "integer", "minimum": 2},
+        "viral_lift_threshold": {"type": "number", "exclusiveMinimum": 0},
+        "min_exposed_for_baseline": {"type": "integer", "minimum": 1},
+        "as_of": {"type": ["string", "null"]}
+      }
+    },
+    "adoption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id", "subject_id", "instrument_key", "side", "adopted_at", "venue",
+        "account_ref", "canonical_market_id", "evidence_refs"
+      ],
+      "properties": {
+        "tenant_id": {"type": "string"},
+        "subject_id": {"type": "string"},
+        "instrument_key": {"type": "string"},
+        "side": {"type": "string", "minLength": 1},
+        "adopted_at": {"type": "string"},
+        "venue": {"type": "string"},
+        "account_ref": {"type": "string"},
+        "canonical_market_id": {"type": "string"},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "hop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_subject", "to_subject", "exposure_id", "channel", "predicate", "lag_seconds", "evidence_refs"],
+      "properties": {
+        "from_subject": {"type": "string"},
+        "to_subject": {"type": "string"},
+        "exposure_id": {"type": "string"},
+        "channel": {"$ref": "#/$defs/channel"},
+        "predicate": {"type": "string"},
+        "lag_seconds": {"type": "integer", "minimum": 0},
+        "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "influence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["decision", "propagation_certified", "available_component_ids", "reason_codes", "algorithm", "version"],
+      "properties": {
+        "decision": {"type": "string"},
+        "propagation_certified": {"type": "boolean"},
+        "available_component_ids": {"type": "array", "items": {"type": "string"}},
+        "reason_codes": {"type": "array", "items": {"type": "string"}},
+        "algorithm": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path_id", "seed_subject", "target_subject", "hops", "depth", "certified_depth", "claim_type", "influence"],
+      "properties": {
+        "path_id": {"type": "string", "pattern": "^pp_[0-9a-f]{24}$"},
+        "seed_subject": {"type": "string"},
+        "target_subject": {"type": "string"},
+        "hops": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/hop"}},
+        "depth": {"type": "integer", "minimum": 1},
+        "certified_depth": {"type": "integer", "minimum": 0},
+        "claim_type": {"const": "observed"},
+        "influence": {"$ref": "#/$defs/influence"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adopters", "exposed_adopters", "independent_adopters", "propagation_radius",
+        "certified_radius", "max_breadth", "velocity_per_hour", "median_lag_seconds",
+        "repeated_exposure_adopters", "channels", "unknown_reasons"
+      ],
+      "properties": {
+        "adopters": {"type": "integer", "minimum": 1},
+        "exposed_adopters": {"type": "integer", "minimum": 0},
+        "independent_adopters": {"type": "integer", "minimum": 0},
+        "propagation_radius": {"$ref": "#/$defs/nullable_int"},
+        "certified_radius": {"$ref": "#/$defs/nullable_int"},
+        "max_breadth": {"$ref": "#/$defs/nullable_int"},
+        "velocity_per_hour": {"$ref": "#/$defs/nullable_rate"},
+        "median_lag_seconds": {"$ref": "#/$defs/nullable_int"},
+        "repeated_exposure_adopters": {"type": "integer", "minimum": 0},
+        "channels": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/channel"},
+          "additionalProperties": {"type": "integer", "minimum": 1}
+        },
+        "unknown_reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "population", "exposed", "exposed_adopters", "unexposed", "unexposed_adopters",
+        "exposed_rate", "unexposed_rate", "lift", "reason_codes"
+      ],
+      "properties": {
+        "population": {"type": "integer", "minimum": 1},
+        "exposed": {"type": "integer", "minimum": 0},
+        "exposed_adopters": {"type": "integer", "minimum": 0},
+        "unexposed": {"type": "integer", "minimum": 0},
+        "unexposed_adopters": {"type": "integer", "minimum": 0},
+        "exposed_rate": {"$ref": "#/$defs/nullable_rate"},
+        "unexposed_rate": {"$ref": "#/$defs/nullable_rate"},
+        "lift": {"$ref": "#/$defs/nullable_rate"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "coordination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lockstep_groups", "shared_funding_pairs", "reason_codes"],
+      "properties": {
+        "lockstep_groups": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+        "shared_funding_pairs": {
+          "type": "array",
+          "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}
+        },
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "episode_id", "tenant_id", "instrument_key", "side", "seed_subject", "started_at",
+        "ended_at", "classification", "claim_type", "classification_reasons", "metrics",
+        "baseline", "coordination", "paths", "adopters"
+      ],
+      "properties": {
+        "episode_id": {"type": "string", "pattern": "^pe_[0-9a-f]{24}$"},
+        "tenant_id": {"type": "string"},
+        "instrument_key": {"type": "string"},
+        "side": {"type": "string"},
+        "seed_subject": {"type": "string"},
+        "started_at": {"type": "string"},
+        "ended_at": {"type": "string"},
+        "classification": {"enum": ["organic", "viral", "coordinated", "insufficient_data"]},
+        "claim_type": {"enum": ["observed", "inferred"]},
+        "classification_reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "metrics": {"$ref": "#/$defs/metrics"},
+        "baseline": {"$ref": "#/$defs/baseline"},
+        "coordination": {"$ref": "#/$defs/coordination"},
+        "paths": {"type": "array", "items": {"$ref": "#/$defs/path"}},
+        "adopters": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/adoption"}}
+      }
+    }
+  }
+}

@@ -122,6 +122,23 @@ async def _project_graph_position(position: dict) -> None:
         position.get("idempotency_key") or position["position_id"],
     )
 
+# Fill context that has no column of its own: event-contract identity and the
+# venue-reported position transition. Kept as ``key=value`` source refs so the
+# stored fill still says which condition/outcome it traded and whether it acted
+# on a position opened before the observed history.
+FILL_CONTEXT_REF_KEYS = ("instrument_type", "event_contract_ref", "outcome", "direction")
+
+
+def _fill_source_refs(fill: dict[str, Any]) -> list[str]:
+    refs = [str(r) for r in (fill.get("source_refs") or []) if r]
+    existing = {r.split("=", 1)[0] for r in refs if "=" in r}
+    for key in FILL_CONTEXT_REF_KEYS:
+        value = fill.get(key)
+        if value and key not in existing:
+            refs.append(f"{key}={value}")
+    return refs
+
+
 router = APIRouter(prefix="/v1/derivatives/runtime", tags=["derivatives"])
 
 # Event intake routing: canonical event name -> (repo factory, id field)
@@ -379,6 +396,8 @@ async def ingest_observation(payload: DerivativesObservationIn, request: Request
         **{k: v for k, v in payload.payload.items() if k != "execution_by_aether"},
     }
     repo = repo_cls()
+    if id_field == "fill_id":
+        record["source_refs"] = _fill_source_refs(payload.payload)
     record = {k: v for k, v in record.items() if k in repo.columns}
     record.setdefault(id_field, entity_id)
     transition = await _classify_transition(repo, tenant_id, id_field, entity_id, record)
