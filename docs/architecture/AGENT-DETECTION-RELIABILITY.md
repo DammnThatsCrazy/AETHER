@@ -13,7 +13,7 @@ estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
   "config/release/feature_flags/production.yaml": "sha256:11012b061ec3f670dcacf00daf813331fd05f69f69a723f6b991fd4e25aa668f"
-  "config/release/feature_flags/staging.yaml": "sha256:6098ad6d5f99b2f2e9678ce4ca2ee2e956967e553e0af5b9a55f4e4df78cf2c8"
+  "config/release/feature_flags/staging.yaml": "sha256:03fe2bc078f4b8b5a9d830da70853b9139f3620cb9aa2597df538c5f7f50898f"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:e5ab231da8aac54b09d595f9068b49265f4bbe8fa27d26a44def030be2216d7a"
   "packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt": "sha256:e4b92160a166df33266838a65d5b2fb54627362f1f408ba0b866696aede9d21e"
   "packages/sdk/android/src/main/java/com/aether/sdk/DeviceIntegrity.kt": "sha256:55abb4473b991539ecc9ab831eb3aff01f61d75753fdcc61239ad53a775acb4a"

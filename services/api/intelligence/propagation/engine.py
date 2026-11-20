@@ -80,7 +80,7 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
     return parsed
 
 
-_FAR_FUTURE = datetime.max.replace(tzinfo=timezone.utc)
+_FAR_FUTURE = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
 
 def _adoption_order(adoption: AdoptionEvent) -> tuple[datetime, str, str]:

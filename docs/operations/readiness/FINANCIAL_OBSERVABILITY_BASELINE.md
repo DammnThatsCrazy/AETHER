@@ -229,8 +229,9 @@ conservative relative to its code and tests (§4).
   run has been recorded. Kalshi account data, live polling, and order
   execution are unsupported.
 - **Activation:** `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` and
-  `AETHER_PROPAGATION_LENS_ENABLED` (both default off), a staging rehearsal
-  with linked accounts, and an assigned owner.
+  `AETHER_PROPAGATION_LENS_ENABLED` default off in settings and are turned on
+  in the staging manifest (off in production). Still needed: a staging
+  rehearsal with linked accounts and an assigned owner.
 - **Owner:** unassigned; proposed `financial-platform`.
 
 ### 2.9 Financial credential turnkey
@@ -262,7 +263,8 @@ conservative relative to its code and tests (§4).
 ### 3.1 Rollout flags
 
 All flagship economic flags default off except the card-linked restriction and
-PII blocks, which default on.
+PII blocks, which default on. The staging manifest turns on
+`AETHER_VENUE_ACCOUNT_LINKS_ENABLED` and `AETHER_PROPAGATION_LENS_ENABLED`.
 
 | Domain | Flags |
 |---|---|

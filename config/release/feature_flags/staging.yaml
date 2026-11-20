@@ -99,6 +99,8 @@ runtime:
       - JOURNEY_HANDOFF_ENABLED
       - JOURNEY_ACTIVITY_REBUILD_ENABLED
       - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
+      - AETHER_VENUE_ACCOUNT_LINKS_ENABLED
+      - AETHER_PROPAGATION_LENS_ENABLED
     # Default-off flags the staging task definitions set to true. The ECS
     # module reads this list (yamldecode), so the manifest alone switches them
     # on; each must also be listed under "on" and be default-off in settings.
@@ -123,6 +125,8 @@ runtime:
       - JOURNEY_HANDOFF_ENABLED
       - JOURNEY_ACTIVITY_REBUILD_ENABLED
       - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
+      - AETHER_VENUE_ACCOUNT_LINKS_ENABLED
+      - AETHER_PROPAGATION_LENS_ENABLED
     "off":
       - AETHER_ACTIVATION_ENABLED
       - AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED
@@ -295,8 +299,6 @@ runtime:
       - SEMANTIC_RETENTION_ENABLED
       - STRIPE_BILLING_ENABLED
       - PATTERN_DISCOVERY_ML_ENABLED
-      - AETHER_PROPAGATION_LENS_ENABLED
-      - AETHER_VENUE_ACCOUNT_LINKS_ENABLED
     required_on:
       - TRUST_PLANE_ENABLED
       - HUMAN_SESSIONS_ENABLED

@@ -40,7 +40,7 @@ def _instant(value: str):
     from shared.temporal.instant import try_parse_instant
 
     parsed, _ = try_parse_instant(value)
-    return parsed or datetime.max.replace(tzinfo=timezone.utc)
+    return parsed or datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
 
 def _account_ref(trading_account_id: str) -> str:
