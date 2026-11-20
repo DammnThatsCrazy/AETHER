@@ -153,7 +153,12 @@ class VenueAccountSync:
             return None
         from connectors.provider_runtime.credential_broker import credential_broker
 
-        return await credential_broker.reveal(link.tenant_id, link.credential_ref)
+        credential = await credential_broker.reveal(link.tenant_id, link.credential_ref)
+        if link.method.value == "oauth":
+            from value.derivatives.venue_oauth import VenueOAuthService
+
+            credential = await VenueOAuthService().refresh_if_expired(link, credential)
+        return credential
 
     async def sync_tenant(self, tenant_id: str) -> TenantSyncResult:
         links = await self._link_service().list_links(tenant_id)

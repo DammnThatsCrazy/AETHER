@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, SecretStr
 
 from config.settings import settings
 from repositories.derivatives_repos import (
@@ -139,3 +140,34 @@ def _source_view(connection) -> Optional[dict]:
     from value.derivatives.market_reference import _source_record
 
     return _source_record(connection)
+
+
+class _OAuthAppBody(BaseModel):
+    client_id: str
+    client_secret: SecretStr
+
+
+@admin_router.get("/oauth-apps/{venue}")
+async def venue_oauth_app_status(venue: str, request: Request):
+    """Whether the Aether-hosted OAuth app for a venue is configured (no secret)."""
+    _gate(request)
+    from value.derivatives.venue_oauth import VenueOAuthError, VenueOAuthService
+
+    try:
+        return await VenueOAuthService().app_status(venue)
+    except VenueOAuthError as exc:
+        raise HTTPException(status_code=404, detail={"code": exc.reason}) from exc
+
+
+@admin_router.put("/oauth-apps/{venue}")
+async def configure_venue_oauth_app(venue: str, body: _OAuthAppBody, request: Request):
+    """Store the Olympus OAuth app credential for a venue under the olympus scope."""
+    _gate(request)
+    from value.derivatives.venue_oauth import VenueOAuthError, VenueOAuthService
+
+    try:
+        return await VenueOAuthService().configure_app(
+            venue=venue, client_id=body.client_id, client_secret=body.client_secret.get_secret_value(),
+        )
+    except VenueOAuthError as exc:
+        raise HTTPException(status_code=404, detail={"code": exc.reason}) from exc

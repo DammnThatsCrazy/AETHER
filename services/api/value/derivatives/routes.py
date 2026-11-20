@@ -323,6 +323,51 @@ async def create_credential_account_link(body: CredentialLinkRequest, request: R
     return APIResponse(data=link.to_record()).to_dict()
 
 
+class OAuthStartRequest(BaseModel):
+    subject_id: str
+    account_ref: str
+    consent_receipt_id: str
+    redirect_uri: str = Field(..., description="The tenant app page the venue returns the member to")
+
+
+class OAuthCompleteRequest(BaseModel):
+    state: str
+    code: str
+
+
+@router.post("/account-links/oauth/{venue}/start")
+async def start_venue_oauth_link(venue: str, body: OAuthStartRequest, request: Request) -> dict:
+    """Begin an OAuth link through the Aether-hosted venue app (PKCE, signed state)."""
+    from value.derivatives.venue_oauth import VenueOAuthError, VenueOAuthService
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    try:
+        challenge = await VenueOAuthService().start(
+            tenant_id=_tenant_id(request), venue=venue, **body.model_dump(),
+        )
+    except VenueOAuthError as exc:
+        raise BadRequestError(exc.reason) from exc
+    return APIResponse(data=challenge).to_dict()
+
+
+@router.post("/account-links/oauth/complete")
+async def complete_venue_oauth_link(body: OAuthCompleteRequest, request: Request) -> dict:
+    """Redeem the venue's code for this tenant's state and link the account."""
+    from value.derivatives.account_links import AccountLinkError
+    from value.derivatives.venue_oauth import VenueOAuthError, VenueOAuthService
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    try:
+        link = await VenueOAuthService(link_service=_link_service()).complete(
+            tenant_id=_tenant_id(request), state_token=body.state, code=body.code, actor=_actor(request),
+        )
+    except (VenueOAuthError, AccountLinkError) as exc:
+        raise BadRequestError(exc.reason) from exc
+    return APIResponse(data=link.to_record()).to_dict()
+
+
 @router.post("/account-links/sync")
 async def sync_venue_account_links(request: Request) -> dict:
     """Read every active governed link of this tenant through rights admission."""

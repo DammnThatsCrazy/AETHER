@@ -142,3 +142,9 @@ records under an operator-provisioned `public_reference` grant and writes only
 the global market registry that tenant fills reference. Disconnect stops acquisition and keeps the
 grant; revoke ends the grant; erasure revokes and deletes.
 
+Venue OAuth (`venue_oauth.py`) draws the same line: the OAuth application is an
+Olympus credential under the reserved `olympus` scope, set by a Kyber operator;
+the tokens a member grants are the member's account access, stored per link
+under the tenant behind the link's connection, and refused unless every granted
+scope is read-only.
+

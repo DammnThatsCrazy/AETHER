@@ -161,7 +161,7 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
     descriptors: list[AdapterCertificationDescriptor] = []
 
     # Registered read-only venue adapters carry an honest ImplementationStatus.
-    # VENUE_ADAPTERS holds the real Hyperliquid/dYdX/GMX/Drift/Polymarket/Kalshi adapters (keyed by
+    # VENUE_ADAPTERS holds the real Hyperliquid/dYdX/GMX/Drift/Polymarket/Kalshi/Bybit/Coinbase-futures adapters (keyed by
     # adapter_id) and wins over the simulator-only DERIVATIVES_ADAPTERS.
     registered: dict[str, Any] = {}
     try:
@@ -197,6 +197,10 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
         "polymarket": {"capabilities": [], "streaming_model": "none", "pagination_model": "cursor"},
         # Account-level event-contract reads with a member read-only key (signed).
         "kalshi": {"capabilities": [], "streaming_model": "none", "pagination_model": "cursor"},
+        # CEX perpetuals with a read-only HMAC-signed key.
+        "bybit": {"capabilities": [], "streaming_model": "none", "pagination_model": "cursor"},
+        # Regulated US futures (CFM) with a read-only CDP key or OAuth token.
+        "coinbase_futures": {"capabilities": [], "streaming_model": "none", "pagination_model": "cursor"},
     }
 
     for token, spec in specs.items():

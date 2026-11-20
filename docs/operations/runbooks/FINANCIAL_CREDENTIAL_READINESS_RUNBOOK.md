@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "scripts/financial_credential_readiness.py": "sha256:c808670fc96db51e2da716797ce096042e209bbbdf7eaa5a79e3202d3d68c027"
-  "services/api/shared/certification/registry.py": "sha256:df889d283e63a520e0e3037fb39afcb9821903f9048b99d5a2d6a5084bfea795"
+  "services/api/shared/certification/registry.py": "sha256:38b3c65829db1ac44f2c422b3e540fd7e8f56f0b0a86bf5c3c314a5de2fdee08"
 ---
 
 # Financial Credential-Readiness Runbook

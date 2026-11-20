@@ -42,7 +42,7 @@ source_hashes:
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:dd578a07926779f3142a2faaac34694ee8950a84f268a5571aea60779584b4c3"
+  "services/api/value/": "sha256:5f77c5e5a97cfc2229ab69254e664a0ba7d4f8b88ae38becd72ee0bbff3ad0e1"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5562,7 +5562,11 @@ response carries `connection_id`, `source_id`, `grant_id` and
 Polymarket, dYdX, GMX, Drift) accept only wallet and tenant-push links
 (`400` `venue_does_not_accept_read_only_api_key` otherwise); Kalshi accepts
 key and tenant-push links (`api_key` = key id, `api_secret` = the PEM private
-key; requests are signed per Kalshi's RSA-PSS scheme). The reserved
+key; requests are signed per Kalshi's RSA-PSS scheme). Bybit (CEX perpetuals)
+accepts key links (`api_key`, `api_secret`; HMAC-signed reads). Coinbase
+Financial Markets futures (`coinbase_futures`, CFTC-regulated) accepts a CDP
+key link (`api_key` = key name, `api_secret` = EC private key PEM; ES256 JWT
+per request) or an OAuth link through the Aether-hosted Coinbase app. The reserved
 `olympus` scope cannot hold a link (`400` `olympus_scope_not_linkable`).
 
 | Method | Path | Permission | Summary |
@@ -5570,6 +5574,8 @@ key; requests are signed per Kalshi's RSA-PSS scheme). The reserved
 | GET | `/v1/derivatives/account-links` | `derivatives:read` | Active and disconnected links; filter by `venue` or `subject_id`; `include_revoked=true` adds revoked rows |
 | POST | `/v1/derivatives/account-links/wallet` | `derivatives:connect` | Link a wallet. `proof_evidence_id` must be active `wallet_ownership_verified` evidence of this tenant whose address, chain namespace, and bound subject match the request; otherwise `400` with a machine-readable reason (`wallet_proof_subject_mismatch`, `wallet_proof_address_mismatch`, ...) |
 | POST | `/v1/derivatives/account-links/credential` | `derivatives:connect` | Link with a read-only venue key (`api_key`, optional `api_secret` and `passphrase`, `scopes`). Mutating scopes return `400`. The key is stored by the credential broker under the link's connection; re-linking the same account rotates it in place |
+| POST | `/v1/derivatives/account-links/oauth/{venue}/start` | `derivatives:connect` | Begin an OAuth link through the Aether-hosted venue app: returns `authorize_url` (PKCE S256) and a signed state valid 10 minutes that names this tenant, subject, account and consent receipt. `400` `venue_oauth_not_supported` / `venue_oauth_app_not_configured` |
+| POST | `/v1/derivatives/account-links/oauth/complete` | `derivatives:connect` | Redeem `state` + `code` (posted by the tenant app the venue redirected to). The state must be this tenant's, unexpired and unused; the code is exchanged with the Olympus app secret; a granted scope that is not read-only returns `400` `granted_scope_not_read_only`. The tokens become the link's credential; expired tokens are refreshed at sync |
 | POST | `/v1/derivatives/account-links/tenant-push` | `derivatives:connect` | Record that the tenant already holds this account's activity for its own subject. Fills it then posts to `/v1/derivatives/runtime/observations` with `venue_id` and `account_ref` are admitted under this link's grant |
 | POST | `/v1/derivatives/account-links/sync` | `derivatives:connect` | Read every active link of the tenant through rights admission and write admitted fills. Per-link result: `ok`, `degraded`, `denied` (the grant no longer admits; nothing after it is kept and the checkpoint does not move), `failed`, or `skipped` |
 | POST | `/v1/derivatives/account-links/{link_id}/sync` | `derivatives:connect` | Same, for one link |
@@ -5582,7 +5588,9 @@ provision the Olympus market sources that fill the registry:
 
 | Method | Path | Permission | Summary |
 |---|---|---|---|
-| GET | `/v1/admin/kyber/derivatives/runtime/market-sources` | Kyber operator | Olympus market-reference source per supported venue (Hyperliquid, dYdX, Polymarket, Kalshi), or `null` when none is provisioned or its grant was revoked |
+| GET | `/v1/admin/kyber/derivatives/runtime/market-sources` | Kyber operator | Olympus market-reference source per supported venue (Hyperliquid, dYdX, Polymarket, Kalshi, Bybit, Coinbase futures), or `null` when none is provisioned or its grant was revoked |
+| GET | `/v1/admin/kyber/derivatives/runtime/oauth-apps/{venue}` | Kyber operator | Whether the Aether-hosted OAuth app for a venue is configured (client id and scopes, never the secret) |
+| PUT | `/v1/admin/kyber/derivatives/runtime/oauth-apps/{venue}` | Kyber operator | Store or rotate the Olympus OAuth app credential (`client_id`, `client_secret`) under the reserved `olympus` scope |
 | POST | `/v1/admin/kyber/derivatives/runtime/market-sources/{venue}` | Kyber operator | Provision the venue's source under the reserved `olympus` scope: a connection for `<venue>.markets.market_data` and a `public_reference` grant of class `olympus_provider`. Idempotent; `400` `market_reference_not_supported` for venues without a public market fetcher |
 
 DSR erasure revokes each of the subject's link grants, deletes their

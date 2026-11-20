@@ -186,6 +186,61 @@ async def _kalshi(client: Any, wanted: set[str], deployment: str) -> list[Market
     return facts
 
 
+async def _bybit(client: Any, wanted: set[str], deployment: str) -> list[MarketFact]:
+    facts = []
+    for symbol in sorted(wanted):
+        response = await client.get(
+            "https://api.bybit.com/v5/market/instruments-info",
+            params={"category": "linear", "symbol": symbol},
+        )
+        response.raise_for_status()
+        for item in ((response.json() or {}).get("result") or {}).get("list") or []:
+            if str(item.get("symbol")) != symbol:
+                continue
+            price_filter = item.get("priceFilter") or {}
+            lot = item.get("lotSizeFilter") or {}
+            facts.append(MarketFact(
+                venue="bybit", deployment=deployment, venue_market_id=symbol,
+                instrument_type="perpetual_future",
+                underlying_asset_id=str(item.get("baseCoin") or symbol),
+                quote_asset_id=str(item.get("quoteCoin") or "USDT"),
+                settlement_asset_id=str(item.get("settleCoin") or "USDT"),
+                contract_type="perpetual", inverse_or_linear="linear",
+                price_precision=Decimal(str(price_filter.get("tickSize") or "0.0001")),
+                size_precision=Decimal(str(lot.get("qtyStep") or "0.001")),
+                status=str(item.get("status") or "unknown").lower(),
+                raw=dict(item),
+            ))
+    return facts
+
+
+async def _coinbase_futures(client: Any, wanted: set[str], deployment: str) -> list[MarketFact]:
+    facts = []
+    for product in sorted(wanted):
+        response = await client.get(f"https://api.coinbase.com/api/v3/brokerage/market/products/{product}")
+        if response.status_code == 404:
+            continue
+        response.raise_for_status()
+        item = response.json() or {}
+        details = item.get("future_product_details") or {}
+        perpetual = bool(details.get("perpetual_details")) or "PERP" in product.upper()
+        facts.append(MarketFact(
+            venue="coinbase_futures", deployment=deployment, venue_market_id=product,
+            instrument_type="perpetual_future" if perpetual else "dated_future",
+            underlying_asset_id=str(item.get("base_currency_id") or details.get("contract_root_unit") or product),
+            quote_asset_id=str(item.get("quote_currency_id") or "USD"), settlement_asset_id="USD",
+            contract_type="perpetual" if perpetual else "dated",
+            inverse_or_linear="linear",
+            contract_multiplier=Decimal(str(details.get("contract_size") or "1")),
+            price_precision=Decimal(str(item.get("quote_increment") or "0.01")),
+            size_precision=Decimal(str(item.get("base_increment") or "1")),
+            status=str(item.get("status") or "unknown").lower(),
+            expiry_at=details.get("contract_expiry") or None,
+            raw=dict(item),
+        ))
+    return facts
+
+
 MarketFetcher = Callable[[Any, set[str], str], Awaitable[list[MarketFact]]]
 
 MARKET_FETCHERS: dict[str, MarketFetcher] = {
@@ -193,6 +248,8 @@ MARKET_FETCHERS: dict[str, MarketFetcher] = {
     "dydx": _dydx,
     "polymarket": _polymarket,
     "kalshi": _kalshi,
+    "bybit": _bybit,
+    "coinbase_futures": _coinbase_futures,
 }
 
 _VENUE_TYPES = {"polymarket": "prediction_market"}

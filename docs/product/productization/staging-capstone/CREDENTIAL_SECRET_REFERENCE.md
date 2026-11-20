@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
-  "services/api/shared/certification/registry.py": "sha256:df889d283e63a520e0e3037fb39afcb9821903f9048b99d5a2d6a5084bfea795"
+  "services/api/shared/certification/registry.py": "sha256:38b3c65829db1ac44f2c422b3e540fd7e8f56f0b0a86bf5c3c314a5de2fdee08"
 ---
 
 # Credential & Secret Reference
@@ -44,7 +44,7 @@ Polling-capable providers (Coinbase, MoonPay, Bridge) additionally need a
 verified polling endpoint + read credential before `_fetch_poll_records` returns
 data. No secret ⇒ the provider stays observation-only via SDK signals.
 
-### Derivatives (6) — read-only
+### Derivatives (8) — read-only
 Hyperliquid, dYdX, GMX, Drift and Polymarket need no credential: they read
 public account activity by wallet address, and the wallet comes from a
 verified tenant venue account link (`/v1/derivatives/account-links`, flag
@@ -52,7 +52,13 @@ verified tenant venue account link (`/v1/derivatives/account-links`, flag
 key (key id plus PEM private key), supplied per subject through
 `POST /v1/derivatives/account-links/credential` and stored by the credential
 broker under that link's connection; it is the member's credential, not an
-Aether environment secret. The read-only
+Aether environment secret. Bybit (key + secret) and Coinbase Financial Markets
+futures (CDP key name + EC private key) work the same way. Coinbase can also be
+linked by OAuth: the Olympus OAuth app's `client_id` / `client_secret` are an
+Olympus credential set by a Kyber operator
+(`PUT /v1/admin/kyber/derivatives/runtime/oauth-apps/coinbase_futures`, stored
+under the reserved `olympus` scope), and the member's tokens are stored per
+link under the tenant. The read-only
 authority is enforced: an adapter rejects `authority_type: trade` and any
 mutating scope (`orders:write`, `withdraw`). Never provision a key with trade or
 withdraw scope.

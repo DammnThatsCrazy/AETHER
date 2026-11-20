@@ -33,7 +33,7 @@ source_hashes:
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
   "config/storage_policies.yaml": "sha256:58e2ed6c49220a7e31bec5fd6dcf39a86899b17a268eb66d3b0293ab3d7d1b81"
-  "docs/_generated/adapter-certification-matrix.json": "sha256:4eea5d0a9bdac2ee03f5ec94d5a75364fc088912c49edcc86c6bd97421041e59"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:a0905786f6c85708910a404e3a9212ca4ffcf06ef1ef48938729b87aa1c4967c"
   "services/api/config/settings.py": "sha256:241a51b5e7bdf223a1163635664a4a4829f8d83013bce958dc6c877ea64e5131"
   "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
@@ -261,11 +261,12 @@ conservative relative to its code and tests (§4).
 
 - **Implementation evidence:** generated matrix at
   `docs/_generated/adapter-certification-matrix.json`.
-- **Current state:** 30 first-release providers on development, all
-  `credential_waiting`, zero live. Domains: communications 8, derivatives 6
+- **Current state:** 32 first-release providers on development, all
+  `credential_waiting`, zero live. Domains: communications 8, derivatives 8
   (five venue adapters read account activity by public wallet and need a
-  tenant wallet link rather than a credential; the Kalshi account adapter
-  needs the member's read-only key), interop 7, payments 5,
+  tenant wallet link rather than a credential; Kalshi, Bybit and Coinbase
+  Financial Markets futures need the member's read-only key, and Coinbase also
+  accepts an OAuth link through the Aether-hosted app), interop 7, payments 5,
   prediction_market 2, stablecoin_chain 2. No import errors.
 - **Rule:** `credential_waiting` is not production-ready. The generated matrix is
   authoritative for counts and per-provider state; the guide no longer hardcodes

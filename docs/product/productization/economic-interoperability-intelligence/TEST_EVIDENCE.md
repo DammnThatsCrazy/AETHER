@@ -57,7 +57,14 @@ source_hashes:
   against the public key; signed portfolio reads project per-side
   event-contract fills and positions; no credential means no read;
   conformance and certification pass; key link then signed sync writes
-  admitted fills; wallet links are refused.
+  admitted fills; wallet links are refused. Bybit and Coinbase futures
+  (`test_cex_futures_adapters.py`): HMAC signatures match the sent query,
+  ES256 JWTs verify and name the exact request, OAuth tokens are sent as
+  bearer, conformance and certification pass, and the shared REST transport
+  keeps a pre-signed query string. Venue OAuth (`test_venue_oauth.py`): the app
+  credential lives only under `olympus`; PKCE authorize URLs carry no secret;
+  states are single-use and tenant-bound; mutating granted scopes are refused;
+  expired tokens are refreshed and rotated in place.
   Event contracts (`test_event_contracts.py`): canonical instrument shape,
   Kalshi current dollar-price fields, and a Polymarket account adapter that
   passes conformance and credentialless certification; pseudonymized live

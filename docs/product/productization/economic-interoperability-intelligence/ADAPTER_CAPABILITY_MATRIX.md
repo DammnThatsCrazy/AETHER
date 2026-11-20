@@ -38,9 +38,11 @@ environment. The machine-readable, source-generated matrix lives at
 | `gmx` | `CREDENTIAL_WAITING` | Public on-chain read path (subgraph GraphQL, timestamp pagination); no private API/WS (declared) | Subgraph endpoint + staging validation |
 | `drift` | `CREDENTIAL_WAITING` | REST read path (trades/funding) by authority wallet; WebSocket declared not-supported | Tenant wallet link + staging validation |
 | `polymarket` | `CREDENTIAL_WAITING` | Event contracts: Data API v2 trades and positions by public wallet (cursor pagination); outcome token = market, outcome = side; no WebSocket | Tenant wallet link + staging validation (no credential) |
+| `bybit` | `CREDENTIAL_WAITING` | CEX perpetuals: v5 linear executions and positions with a read-only key (HMAC-SHA256 signed query, cursor pagination); no WebSocket | Member read-only key via key link + staging validation |
+| `coinbase_futures` | `CREDENTIAL_WAITING` | Regulated US futures (CFM): Advanced Trade futures fills and CFM positions with a read-only CDP key (ES256 JWT per request) or an OAuth token from the Aether-hosted app | Member CDP key or OAuth link + staging validation |
 | `kalshi` | `CREDENTIAL_WAITING` | Event contracts: Trade API v2 portfolio fills and market positions with the member's read-only key (RSA-PSS signed requests, cursor pagination); `<ticker>:<yes|no>` = market, outcome = side; no WebSocket | Member read-only key via key link + staging validation |
 
-All six venue adapters implement the conformance-tested `DerivativesAdapter`
+All eight venue adapters implement the conformance-tested `DerivativesAdapter`
 interface, pass `run_conformance` + `run_certification` with zero failures,
 reject mutating scopes, use exact `Decimal` arithmetic, and yield nothing until
 a REST/WS client is injected (honest credential-waiting). Each adapter names

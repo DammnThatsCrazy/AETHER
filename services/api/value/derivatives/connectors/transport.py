@@ -168,11 +168,11 @@ class RestBackfillClient:
         while True:
             response = None
             try:
-                kwargs: dict[str, Any] = {
-                    "headers": headers,
-                    "params": params,
-                    "timeout": timeout,
-                }
+                kwargs: dict[str, Any] = {"headers": headers, "timeout": timeout}
+                # httpx replaces a URL's own query string with ``params`` even
+                # when it is empty, which would drop a pre-signed query.
+                if params:
+                    kwargs["params"] = params
                 if json_body is not None:
                     kwargs["json"] = json_body
                 response = await client.request(method, url, **kwargs)

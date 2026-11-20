@@ -87,6 +87,11 @@ VENUE_SOURCE_PROFILES: dict[str, VenueSourceProfile] = {
         VenueSourceProfile("gmx", "GMX", "positions_read", (WALLET_ACCESS,)),
         VenueSourceProfile("drift", "Drift", "fills_read", (WALLET_ACCESS,)),
         VenueSourceProfile("kalshi", "Kalshi", "portfolio_read", (API_KEY_ACCESS,)),
+        VenueSourceProfile("bybit", "Bybit", "perps_read", (API_KEY_ACCESS,)),
+        VenueSourceProfile(
+            "coinbase_futures", "Coinbase Financial Markets", "futures_read",
+            (API_KEY_ACCESS, OAUTH_ACCESS),
+        ),
     )
 }
 
