@@ -42,7 +42,7 @@ source_hashes:
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:5f77c5e5a97cfc2229ab69254e664a0ba7d4f8b88ae38becd72ee0bbff3ad0e1"
+  "services/api/value/": "sha256:76a33eaf5e2714c8fc57b35cec1f9e8ccbe89835696e9f92250d49f79e63d1d8"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
