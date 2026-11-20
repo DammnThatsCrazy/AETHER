@@ -220,6 +220,13 @@ class TouchpointProjector(BaseProjector):
         agent_protocol = server_ctx.get("agent_protocol")
         if not isinstance(agent_protocol, dict):
             agent_protocol = None
+        # Mobile app attestation (App Attest / Play Integrity), verified at
+        # ingestion. A failed attestation (not a genuine app on a genuine
+        # device) is automation evidence; every other verdict is evidence only
+        # and never proof of a human.
+        device_integrity = server_ctx.get("device_integrity") if isinstance(server_ctx.get("device_integrity"), dict) else {}
+        integrity_verdict = str(device_integrity.get("verdict") or "")
+        integrity_failed = integrity_verdict == "failed"
         wba_state = str((web_bot_auth or {}).get("verification") or "")
         explicit_actor_type = (
             ctx.get("actorType")
@@ -227,6 +234,7 @@ class TouchpointProjector(BaseProjector):
             or ("agent" if ctx.get("agentId") else None)
             or ("machine" if webdriver_flag else None)
             or ("machine" if test_harness_flag else None)
+            or ("machine" if integrity_failed else None)
             or ("machine" if wba_state == "web_bot_auth_unknown_signer" else None)
         )
         actor_evidence: tuple[str, ...] = tuple(
@@ -234,6 +242,7 @@ class TouchpointProjector(BaseProjector):
                 "actor:webdriver_flag" if webdriver_flag else "",
                 "actor:mobile_test_harness" if test_harness_flag else "",
                 "actor:emulator" if emulator_flag else "",
+                f"device_integrity:{integrity_verdict}" if integrity_verdict else "",
                 f"actor:{wba_state}" if wba_state and wba_state != "web_bot_auth_verified" else "",
             ) if tag
         )

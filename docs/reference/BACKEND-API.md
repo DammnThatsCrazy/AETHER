@@ -34,11 +34,11 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
-  "services/api/governance/": "sha256:337d8f8574864a1099f943e8942629570672fea3bb7db229c30ff9fa243b8a83"
+  "services/api/governance/": "sha256:51f72b87ef8db8f17887dec8e03982edad27e78486ce6db0b5424640813a737e"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:5650d1d6b4562540ecad8db6749d474e65ffdba6ca0f64d8eb34e25cfc682fc3"
-  "services/api/intelligence/": "sha256:d3743b13cc80df4fcfbc2bb8fc3056ee880ab1e7a0c768108d252a22a3903913"
+  "services/api/ingestion/": "sha256:05e0cd3c263d9886d3d91e255bc323c59ac8fe2e7d8c0137753c3322e55bb750"
+  "services/api/intelligence/": "sha256:f220006a2dc669085c223255bada777af5d605dea18f98987671bc137380a04b"
   "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:908f8792e6953d73acd81e0d0e9f11dfa26d4c6ceb6973829df4fc1afae2e191"
@@ -435,7 +435,8 @@ only thing confining it to one property.
 
 A publishable key reaches `POST /v1/batch`, `/v1/track`, `/v1/ingest*`,
 `GET /v1/config/sdk/manifest` (its only read, and nothing else under
-`/v1/config`), the two journey-handoff POSTs, and three native SDK POSTs:
+`/v1/config`), the two journey-handoff POSTs, the two device-integrity POSTs
+(`/sdk/device-integrity/challenge` and `/verify`), and three native SDK POSTs:
 `/v1/diagnostics/sdk/heartbeat`, `/v1/attribution/deferred/resolve` and
 `/v1/attribution/apple-ads/resolve`. Every request except the manifest read
 must declare a site it is bound to in `X-Aether-Site`
@@ -1014,6 +1015,17 @@ SHA-256 hash.
 `context.device.automation.{testHarness, emulator}`. `testHarness: true`
 classifies the touchpoint as `machine` (evidence `actor:mobile_test_harness`);
 `emulator` is recorded as evidence only. Accessibility state is never collected.
+
+**Mobile device integrity.** `POST /sdk/device-integrity/challenge`
+(`{platform, anonymousId}`) issues a single-use challenge;
+`POST /sdk/device-integrity/verify` checks an App Attest attestation (iOS,
+offline against the pinned Apple root) or a Play Integrity token (Android,
+decoded through Google with the configured service account) and returns
+`{verdict, integrityToken, expiresAt}`. Both accept the mobile SDK's ingest
+credential and are off unless `AETHER_DEVICE_INTEGRITY_ENABLED`. Events carry
+the token as `context.device.integrity.token`; ingestion verifies it (tenant,
+anonymous id, expiry), records `server_context.device_integrity` and removes the
+token. A `failed` verdict classifies the touchpoint as `machine`.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's

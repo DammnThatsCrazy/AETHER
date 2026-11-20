@@ -322,3 +322,21 @@ def test_publishable_key_can_read_only_the_sdk_manifest():
         assert _is_denial(_hook()(post, "/v1/config/sdk/manifest", _PUBLISHABLE))
         assert _is_denial(_hook()(get, "/v1/config/sdk/manifest/requests", _PUBLISHABLE))
         assert _is_denial(_hook()(get, "/v1/config/sdk", _PUBLISHABLE))
+
+
+def test_publishable_key_reaches_device_integrity_for_its_own_site_only():
+    """Native apps attest with the same site-bound publishable key they ingest
+    with, so the device-integrity POSTs must declare that key's site."""
+    post = _req()
+    post.method = "POST"
+    post.headers = {"X-Aether-Site": "site_a"}
+    other_site = _req()
+    other_site.method = "POST"
+    other_site.headers = {"X-Aether-Site": "site_b"}
+    undeclared = _req()
+    undeclared.method = "POST"
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        for path in ("/sdk/device-integrity/challenge", "/sdk/device-integrity/verify"):
+            assert _hook()(post, path, _PUBLISHABLE) is None, path
+            assert _is_denial(_hook()(other_site, path, _PUBLISHABLE)), path
+            assert _is_denial(_hook()(undeclared, path, _PUBLISHABLE)), path

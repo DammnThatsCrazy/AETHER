@@ -73,6 +73,11 @@ public struct AetherConfig {
     // Keychain, and events are only removed after the server acknowledges the
     // batch (2xx), preserving order and idempotency across kills.
     public var encryptedDurableQueue: Bool = false
+    /// Apple App Attest device-integrity evidence (default OFF). Requires the
+    /// App Attest capability. When ON the SDK attests once per token lifetime and
+    /// attaches the server-issued integrity token to every event as
+    /// `context.device.integrity`. See `DeviceIntegrityManager`.
+    public var deviceIntegrity: Bool = false
     /// The site a publishable (`pk_`) key is bound to, sent as `X-Aether-Site`
     /// on every request. Onboarding issues it with the key: a native app's key
     /// ships inside the binary and can be read out of it, so the backend only
@@ -750,6 +755,13 @@ public struct EventContext: Codable {
         public let timezone: String
         /// Presence-only automation evidence (see `AutomationSignals`).
         public var automation: AutomationInfo? = nil
+        /// Server-issued App Attest integrity token (see `DeviceIntegrityManager`).
+        public var integrity: IntegrityInfo? = nil
+    }
+
+    /// Device-integrity token issued by Aether after App Attest.
+    public struct IntegrityInfo: Codable, Equatable {
+        public let token: String
     }
 
     /// Automation evidence for actor classification. Booleans only; nothing
@@ -923,6 +935,7 @@ public final class Aether: NSObject {
     private var currentJourneyType: String? = nil
     private var currentJourneyStatus: String? = nil
     private var anonymousId: String = ""
+    private var deviceIntegrity: DeviceIntegrityManager?
     private var userId: String?
     /// Source-native correlation stamped on every outgoing event's
     /// context.correlation (WS-C / Invariant #12). Set by the host app so
@@ -1519,6 +1532,14 @@ public final class Aether: NSObject {
 
         self.config = config
         self.anonymousId = loadOrCreateAnonymousId()
+        if config.deviceIntegrity {
+            let manager = DeviceIntegrityManager(defaults: defaults) { [weak self] path, body, completion in
+                guard let self else { completion(nil); return }
+                self.postDeviceIntegrity(path: path, body: body, completion: completion)
+            }
+            self.deviceIntegrity = manager
+            manager.refreshIfNeeded(anonymousId: self.anonymousId)
+        }
         self.walletAddress = defaults.string(forKey: "walletAddress")
         self.walletVm = defaults.string(forKey: "walletVm") ?? "evm"
         self.walletChainId = defaults.string(forKey: "walletChainId") ?? "unknown"
@@ -1777,6 +1798,40 @@ public final class Aether: NSObject {
         }
     }
 
+    /// Current device-integrity token for this install, refreshing in the background when due.
+    private func currentIntegrityInfo() -> EventContext.IntegrityInfo? {
+        guard let manager = deviceIntegrity else { return nil }
+        manager.refreshIfNeeded(anonymousId: anonymousId)
+        return manager.currentToken(for: anonymousId).map { EventContext.IntegrityInfo(token: $0) }
+    }
+
+    /// POST to a device-integrity route; completes with the decoded JSON body, or nil on any failure.
+    private func postDeviceIntegrity(path: String, body: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
+        guard let config = config,
+              let url = URL(string: "\(config.endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))\(path)"),
+              let payload = try? JSONSerialization.data(withJSONObject: body) else {
+            completion(nil)
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
+        request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 15.0
+        request.httpBody = payload
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard error == nil, (200...299).contains(status), let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion(nil)
+                return
+            }
+            completion(json)
+        }.resume()
+    }
+
     /// POST to a journey-handoff route; completes with the response `data` object, or nil on any failure.
     private func postJourneyHandoff(path: String, body: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
         guard isInitialized, let config = config,
@@ -1900,6 +1955,9 @@ public final class Aether: NSObject {
         traits = [:]
         consentState = []
         anonymousId = UUID().uuidString
+        // The integrity token is bound to the install id; a new id re-attests.
+        deviceIntegrity?.clear()
+        deviceIntegrity?.refreshIfNeeded(anonymousId: anonymousId)
         sessionId = UUID().uuidString
         eventSequence = 0
         // Acquisition attribution is identity-scoped state: logout/reset
@@ -3334,7 +3392,8 @@ public final class Aether: NSObject {
                 osVersion: osVersion,
                 locale: Locale.current.identifier,
                 timezone: TimeZone.current.identifier,
-                automation: AutomationSignals.current
+                automation: AutomationSignals.current,
+                integrity: currentIntegrityInfo()
             ),
             campaign: self.campaignInfo,
             // Active acquisition evidence rides on every event while

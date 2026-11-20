@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:db7050b3a954e35b3db29d2045fad88d467a698acd9383b897b00acaa000827e"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:0fd06ce368352a101c6605094bce9d5c68e46ab5c1ba1a31d0bfdbd8e9f49091"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether iOS SDK v0.1.0-alpha.0 — Integration Guide
@@ -57,8 +57,8 @@ Onboarding issues the publishable key and site id together, binding the site to
 your app's bundle ID. The key ships inside the app and can be read out of it, so
 the backend accepts it only on requests that declare its site (`X-Aether-Site`,
 sent on every request when `siteId` is set). A publishable key reaches
-`/v1/batch`, the SDK manifest, the health heartbeat and the deferred and Apple
-Ads attribution resolves. Canonical consent receipts
+`/v1/batch`, the SDK manifest, the health heartbeat, App Attest device
+integrity, and the deferred and Apple Ads attribution resolves. Canonical consent receipts
 (`recordCanonicalConsentReceipt`) and identity resolution (`autoResumeJourney`)
 need a secret key, so send those from your backend.
 
@@ -148,6 +148,15 @@ detection: `testHarness` (XCTest is hosting the app process) and `emulator`
 never read. XCUITest and Appium drive the app from a separate process and are
 not detectable from inside it. See
 [Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md).
+
+### Device Integrity (App Attest)
+
+Opt in with `config.deviceIntegrity = true` (requires the App Attest capability).
+The SDK attests a fresh App Attest key against a single-use Aether challenge
+once per token lifetime and attaches the server-issued token to every event as
+`device.integrity.token`. A failed attestation is treated as automation; a
+verified one is device-integrity evidence, never proof of a human. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md) §4.7.
 
 ## Wallet Tracking
 

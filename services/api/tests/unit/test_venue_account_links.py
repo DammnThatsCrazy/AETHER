@@ -159,3 +159,24 @@ async def test_dsr_erasure_plane_deletes_subject_links(service):
     assert await svc.list_links(TENANT, active_only=False) == []
     # Another tenant's link for the same subject id is untouched.
     assert len(await svc.list_links(OTHER)) == 1
+
+
+async def test_dsr_erasure_plane_honors_legal_hold(service, monkeypatch):
+    from governance.consent import erasure_planes
+    from shared.storage import lifecycle as lifecycle_module
+
+    svc, evidence = service
+    await _link(svc, evidence.add("ev_1"))
+
+    async def active_hold(self, tenant_id, resource_type, subject_ref=None):
+        assert resource_type == "venue_account_links"
+        return {"hold_id": "hold_9", "reason": "litigation"}
+
+    monkeypatch.setattr(lifecycle_module.StorageLifecycle, "active_hold", active_hold)
+    receipts = await erasure_planes.erase_venue_account_links_plane(
+        erasure_planes.ErasureSubject(tenant_id=TENANT, user_id="user_1")
+    )
+    receipt = receipts[erasure_planes.VENUE_ACCOUNT_LINKS_COMPONENT]
+    assert receipt.status == "skipped_legal_hold"
+    assert receipt.policy_decision_id == "storage_legal_hold:hold_9"
+    assert len(await svc.list_links(TENANT)) == 1

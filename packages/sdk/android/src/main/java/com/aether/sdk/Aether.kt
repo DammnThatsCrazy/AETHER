@@ -72,6 +72,15 @@ data class AetherConfig(
     // acknowledges the batch (2xx), preserving order and idempotency.
     val encryptedDurableQueue: Boolean = false,
     /**
+     * Google Play Integrity device-integrity evidence (default OFF). Requires the
+     * host app to depend on `com.google.android.play:integrity`. When ON the SDK
+     * attests once per token lifetime and attaches the server-issued integrity
+     * token to every event as `context.device.integrity`.
+     */
+    val deviceIntegrity: Boolean = false,
+    /** Google Cloud project number for Play Integrity (needed outside Play distribution). */
+    val playIntegrityCloudProjectNumber: Long? = null,
+    /**
      * The site a publishable (`pk_`) key is bound to, sent as `X-Aether-Site`
      * on every request. Onboarding issues it with the key: a native app's key
      * ships inside the APK and can be read out of it, so the backend only
@@ -281,6 +290,7 @@ object Aether : DefaultLifecycleObserver {
 
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
+    private var deviceIntegrity: DeviceIntegrityManager? = null
     private var userId: String? = null
     private var email: String? = null
     private var walletAddress: String? = null
@@ -823,6 +833,20 @@ object Aether : DefaultLifecycleObserver {
         this.context = application.applicationContext
         this.prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         this.anonymousId = loadOrCreateAnonymousId()
+        val appContext = application.applicationContext
+        val integrityPrefs = prefs
+        if (config.deviceIntegrity && integrityPrefs != null && DeviceIntegrityManager.playIntegrityAvailable()) {
+            deviceIntegrity = DeviceIntegrityManager(
+                prefs = integrityPrefs,
+                post = { path, body -> postDeviceIntegrity(path, body) },
+                requestPlayToken = { nonce ->
+                    PlayIntegrityClient.requestToken(appContext, nonce, config.playIntegrityCloudProjectNumber)
+                },
+                packageName = appContext.packageName,
+            )
+            val install = anonymousId
+            scope.launch { deviceIntegrity?.refreshIfNeeded(install) }
+        }
         this.userId = prefs?.getString("userId", null)
         this.walletAddress = prefs?.getString("walletAddress", null)
         this.walletVm = prefs?.getString("walletVm", "evm") ?: "evm"
@@ -1052,6 +1076,34 @@ object Aether : DefaultLifecycleObserver {
         return link
     }
 
+    /** POST to a device-integrity route and return the JSON body, or null on any failure. */
+    private suspend fun postDeviceIntegrity(path: String, body: JSONObject): JSONObject? {
+        val cfg = config ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val connection = URL("${cfg.endpoint.trimEnd('/')}$path")
+                    .openConnection() as HttpURLConnection
+                try {
+                    connection.requestMethod = "POST"
+                    connection.doOutput = true
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 15000
+                    connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                    connection.setAetherSite(cfg.siteId)
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("X-Aether-SDK", "android")
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    if (connection.responseCode !in 200..299) return@withContext null
+                    JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     /** POST to a journey-handoff route and return the `data` object, or null on any failure. */
     private suspend fun postJourneyHandoff(path: String, body: JSONObject): JSONObject? {
         val cfg = config ?: return null
@@ -1189,6 +1241,10 @@ object Aether : DefaultLifecycleObserver {
         traits.clear()
         consentState.clear()
         anonymousId = UUID.randomUUID().toString()
+        // The integrity token is bound to the install id; a new id re-attests.
+        deviceIntegrity?.clear()
+        val resetInstall = anonymousId
+        scope.launch { deviceIntegrity?.refreshIfNeeded(resetInstall) }
         sessionId = UUID.randomUUID().toString()
         eventSequence = 0
         // Acquisition evidence is identity-scoped: reset()/logout clears both
@@ -2463,6 +2519,14 @@ object Aether : DefaultLifecycleObserver {
             put("model", Build.MODEL)
             // Presence-only automation evidence (never accessibility state).
             put("automation", automationSignals)
+            // Server-issued Play Integrity token for this install, when attested.
+            deviceIntegrity?.let { manager ->
+                manager.currentToken(anonymousId)?.let { put("integrity", JSONObject().put("token", it)) }
+                if (manager.needsRefresh(anonymousId)) {
+                    val install = anonymousId
+                    scope.launch { manager.refreshIfNeeded(install) }
+                }
+            }
         })
         put("locale", Locale.getDefault().toLanguageTag())
         put("timezone", TimeZone.getDefault().id)

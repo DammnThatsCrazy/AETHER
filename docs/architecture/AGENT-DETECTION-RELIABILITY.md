@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior, exec]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/agent_verification.py, services/api/journeys/traffic/web_bot_auth.py, services/api/journeys/traffic/forwarded_evidence.py, services/api/journeys/traffic/protocol_identity.py, packages/sdk/server/src/protocol-identity.ts, packages/sdk/python/aether_agentic/protocol_identity.py, packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift, packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt, config/release/feature_flags/staging.yaml, config/release/feature_flags/production.yaml, infra/aws/terraform/modules/ecs/main.tf, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/actions/agent/agent360_provider.py, packages/sdk/server/src/request-evidence.ts, packages/sdk/python/aether_agentic/request_evidence.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/metrics.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/silver_adapters.py, packages/sdk/web/src/utils/index.ts, packages/sdk/web/src/types.ts, packages/sdk/server/src/agentic.ts, services/api/actions/agent/attestation.py, services/api/actions/agent_lineage/engine.py, services/api/actions/agent_lineage/evidence.py, services/api/config/settings.py]
+source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/agent_verification.py, services/api/journeys/traffic/web_bot_auth.py, services/api/journeys/traffic/forwarded_evidence.py, services/api/journeys/traffic/protocol_identity.py, packages/sdk/server/src/protocol-identity.ts, packages/sdk/python/aether_agentic/protocol_identity.py, packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift, packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt, config/release/feature_flags/staging.yaml, config/release/feature_flags/production.yaml, infra/aws/terraform/modules/ecs/main.tf, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/actions/agent/agent360_provider.py, services/api/ingestion/device_integrity/app_attest.py, services/api/ingestion/device_integrity/play_integrity.py, services/api/ingestion/device_integrity/tokens.py, services/api/ingestion/device_integrity/routes.py, packages/sdk/ios/Sources/AetherSDK/DeviceIntegrity.swift, packages/sdk/android/src/main/java/com/aether/sdk/DeviceIntegrity.kt, packages/sdk/server/src/request-evidence.ts, packages/sdk/python/aether_agentic/request_evidence.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/metrics.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/silver_adapters.py, packages/sdk/web/src/utils/index.ts, packages/sdk/web/src/types.ts, packages/sdk/server/src/agentic.ts, services/api/actions/agent/attestation.py, services/api/actions/agent_lineage/engine.py, services/api/actions/agent_lineage/evidence.py, services/api/config/settings.py]
 related: [operations/agent-layer-production, plans/public-agent-registry]
 canonical_owner: platform@aether
 estimated_read_minutes: 10
@@ -16,7 +16,9 @@ source_hashes:
   "config/release/feature_flags/staging.yaml": "sha256:6098ad6d5f99b2f2e9678ce4ca2ee2e956967e553e0af5b9a55f4e4df78cf2c8"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:e5ab231da8aac54b09d595f9068b49265f4bbe8fa27d26a44def030be2216d7a"
   "packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt": "sha256:e4b92160a166df33266838a65d5b2fb54627362f1f408ba0b866696aede9d21e"
+  "packages/sdk/android/src/main/java/com/aether/sdk/DeviceIntegrity.kt": "sha256:55abb4473b991539ecc9ab831eb3aff01f61d75753fdcc61239ad53a775acb4a"
   "packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift": "sha256:3ec9083a9cc6588e755cd53e04f9e6ccc5e3bc2f39a9536c4f36e27c9fb02e58"
+  "packages/sdk/ios/Sources/AetherSDK/DeviceIntegrity.swift": "sha256:815b3cf4a60e8001a0d837a5c18c5392001a2770856bb8b625aa100bcd1012ec"
   "packages/sdk/python/aether_agentic/protocol_identity.py": "sha256:a0a54e7ebf79f939042d6caacb7f1043c8de4bf812ba8745cf5f5676f42bbdb0"
   "packages/sdk/python/aether_agentic/request_evidence.py": "sha256:8bd81e418df925af9ce8f6cc0eb8cdaa63dcb51c90ebfc284419f937f4fc7f98"
   "packages/sdk/server/src/agentic.ts": "sha256:da675cdd08068013c1700c8e65943b55a31950c3399b2efb8b67cb08af4107db"
@@ -28,11 +30,15 @@ source_hashes:
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
   "services/api/actions/agent_lineage/engine.py": "sha256:da90a532b17db5e7359823c15ad44b7c45583038c5f40cf8edbcf6eda2fc3f04"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
-  "services/api/config/settings.py": "sha256:80931a86ffe4e0b07546770e71e69ff05a1007779bcc8e2033b63c7e3a466ae2"
-  "services/api/ingestion/ingestion/batch.py": "sha256:1fa8050dea04b2d5a4ed95048f6ca50f705e56c03f12a48e1d95666edea2a711"
+  "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
+  "services/api/ingestion/device_integrity/app_attest.py": "sha256:c0c8337aa587799fb87ae67cfd942c2c32db4f7fab4e23a4a39684181e8b3a4e"
+  "services/api/ingestion/device_integrity/play_integrity.py": "sha256:556236e83bcc2e4db2a43a4116c3b87794ecffb02e24a43592362ebea4c98178"
+  "services/api/ingestion/device_integrity/routes.py": "sha256:28f99915d7dc6a7ce96caf318bce4adc682687cc3aafcb26dd245bb95fcf67aa"
+  "services/api/ingestion/device_integrity/tokens.py": "sha256:cbe855db578486a6a1c156d5ab8d47a8ebf37b4798dda3f89aae918de6124cd7"
+  "services/api/ingestion/ingestion/batch.py": "sha256:edcd2e94c445e083a219d89f7eb484fd67aeb3d01aa055c36e68589c789593b5"
   "services/api/ingestion/silver/dispatcher.py": "sha256:f1ac1e82dd95a777fdc182b5f5c1451548c9cf3208b5bd0651d99f299910a4fb"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
-  "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:e2e8bd16bdb6cb83085176757d5c1e9fb41e413743cf5f4b1a4b72f5d095ba91"
+  "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:3ac990ca4cc58e8f8ad7b5023764b59dd14733e0d6688564408bf13819871d4d"
   "services/api/journeys/measurement/engine/attribution_engine.py": "sha256:a4d7048ab540db38e948daf17c411ec610887107934d42253d0be9a2c7f252c9"
   "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:5cb88fcdb807f9dc52e1cf6e3966d81f6b9f4509a5cdc1517300bed6ce1179df"
   "services/api/journeys/measurement/silver_adapters.py": "sha256:084dfd921dce491ec3eceb43d494a3afbb4e7bfdf580486b21b6c512e2266165"
@@ -76,6 +82,7 @@ engineering assessment, not a readiness claim; see `scripts/production_status.py
 | Agent in a real browser without WebDriver (CDP, extensions, computer-use) | None | **High** when the agent signs with Web Bot Auth and Aether holds its keys (ChatGPT today); otherwise `unknown` | RFC 9421 signature verified on `/v1/batch` and verified-link redirects (§4.1); unsigned agents have no honest client signal |
 | Agent that does not run JavaScript | None | **High** for Web Bot Auth signers and **medium–high** for range-verified agents, when the customer forwards request evidence from the server SDK; invisible on browser-SDK-only sites | `captureRequestEvidence` → verified at ingestion, graded as observed by the tenant's server (§4.2) |
 | Mobile apps driven by a test / automation harness | None | **Medium** (inferred) | iOS / Android SDKs report `testHarness` → `machine`; emulator recorded as evidence only (§4.4) |
+| Mobile app / device genuineness (App Attest, Play Integrity) | None | **Medium–high** once configured: a failed attestation is automation; a verified one rules out spoofed or scripted clients for that install | Opt-in attestation, server-verified integrity token on every event (§4.7) |
 | MCP clients and A2A callers | None | **Medium–high**: `server_observed` when the tenant's server authenticated the client (OAuth / A2A auth), `declared` from clientInfo or an Agent Card alone | Server SDK `captureMcpClientIdentity` / `captureA2aCallerIdentity` (§4.3) |
 
 "Detection reliability" is now itself measured: `actor_detection_total
@@ -280,6 +287,49 @@ detected reliably from inside the app. The Swift and Kotlin sources are not
 compiled in this repository's local checks (`scripts/mobile_build_check.py`
 states that it makes no compile claim); their unit tests run in the native CI.
 
+### 4.7 Mobile app attestation (App Attest / Play Integrity)
+
+Opt-in per app (`AetherConfig.deviceIntegrity`, iOS and Android; React Native
+forwards `deviceIntegrity`). The SDK asks `POST /sdk/device-integrity/challenge`
+for a single-use challenge (stored in the cache, bound to tenant, platform and
+the install's anonymous id), attests, and posts it to
+`POST /sdk/device-integrity/verify`:
+
+- **iOS — App Attest**, verified offline (`ingestion/device_integrity/app_attest.py`):
+  the credential certificate chains to the pinned Apple App Attestation Root CA
+  (SHA-256 fingerprint checked at load); `SHA256(authData || SHA256(challenge))`
+  matches the nonce extension; the key id is the SHA-256 of the credential key;
+  `rpIdHash` matches a configured `<TEAM_ID>.<bundle id>`; counter 0; the AAGUID
+  matches the configured environment. A fresh key is attested per token
+  lifetime (no per-key server storage).
+- **Android — Play Integrity** (`play_integrity.py`): the token is decoded
+  through Google's `decodeIntegrityToken` with the configured service account
+  (signed JWT-bearer auth, no Google SDK). The nonce, package, timestamp and
+  (when configured) signing-certificate digest must match;
+  `PLAY_RECOGNIZED` + `MEETS_DEVICE_INTEGRITY`/`MEETS_STRONG_INTEGRITY` →
+  `verified`, `MEETS_VIRTUAL_INTEGRITY` → `virtual`, `MEETS_BASIC_INTEGRITY` →
+  `basic`, otherwise `failed`. The SDK links the Play library `compileOnly`.
+
+Verify returns an HMAC integrity token (7 days by default) bound to tenant,
+anonymous id and platform. The SDK sends it as `context.device.integrity.token`;
+`batch._apply_device_integrity` verifies it, records
+`server_context.device_integrity`, and always removes the token. Classification:
+`failed` → `machine` (not a genuine app on a genuine device); `verified`,
+`basic`, `virtual` and an invalid token are evidence only (`device_integrity:<verdict>`),
+never proof of a human. Limit: the token is a bearer credential for its
+lifetime; per-event App Attest assertions would bind each event to the key.
+
+Configuration (`settings.device_integrity`, documented in
+`config/environments/.env.example`): `AETHER_DEVICE_INTEGRITY_ENABLED`, the App
+Attest app IDs and environment, the Play package names, certificate digests and
+service account JSON, and the token HMAC secret. Until those are set the routes
+answer `device_integrity_disabled` / `*_not_configured`. Verified locally:
+App Attest against a locally built Apple-shaped certificate chain, Play
+Integrity with a stubbed Google transport, the routes end to end, the Android
+manager compiled with kotlinc and unit-tested on the JVM, and the Play client
+compiled against the real Play Integrity library. Not verified here: a real
+device attestation and the Swift build (no Xcode); both need native CI.
+
 ### 4.5 Deployment registry on
 
 `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED` is ON in
@@ -323,7 +373,8 @@ unsigned events never read as verified.
 | Gap | Change | Reaches |
 |---|---|---|
 | More Web Bot Auth signers | Add signers to `refresh_web_bot_auth_directories.py` as they publish key directories | High per signer |
-| Mobile app attestation | App Attest / Play Integrity verdicts as device-integrity evidence. Needs owner inputs before it can be built and verified: the Apple Team ID and bundle IDs (App Attest), a Google Cloud project with the Play Integrity API enabled and a service account for `decodeIntegrityToken`, a server-issued nonce flow, and device / native CI to test against | Medium–high |
+| Mobile attestation configuration | Set the App Attest app IDs, Play packages / certificate digests / service account and the token secret, enable `AETHER_DEVICE_INTEGRITY_ENABLED`, turn on `deviceIntegrity` in the apps, and run a real-device attestation in native CI | Medium–high once configured |
+| Per-event App Attest assertions | Bind each event to the attested key instead of a bearer token | High |
 | Providers without published ranges | Add providers to `refresh_agent_provider_ranges.py` as they publish ranges; reverse-DNS verification where documented | High per provider |
 
 Detection with no SDK, server integration, webhook or connector installed is a

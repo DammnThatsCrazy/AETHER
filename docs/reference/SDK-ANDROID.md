@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:f4090e6b5e5cbe87bf5a197a48a6ef1d7f0ba61b2adcf88339f0832391f3dbfb"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:e572628211e30a12ae0778974524a613b7d42d5a1b1897e5cb938e4a7c3f7705"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -65,8 +65,8 @@ Onboarding issues the publishable key and site id together, binding the site to
 your application ID. The key ships inside the APK and can be read out of it, so
 the backend accepts it only on requests that declare its site (`X-Aether-Site`,
 sent on every request when `siteId` is set). A publishable key reaches
-`/v1/batch`, the SDK manifest, the health heartbeat and the deferred-attribution
-resolve. Canonical consent receipts and identity resolution
+`/v1/batch`, the SDK manifest, the health heartbeat, Play Integrity device
+integrity, and the deferred-attribution resolve. Canonical consent receipts and identity resolution
 (`autoResumeJourney`) need a secret key, so send those from your backend.
 
 ## Core API
@@ -158,6 +158,16 @@ UiAutomator2 server loaded in the app process) and `emulator`. Aether
 classifies `testHarness: true` as automation; `emulator` is evidence only.
 Accessibility services are never inspected. See
 [Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md).
+
+### Device Integrity (Play Integrity)
+
+Opt in with `AetherConfig(deviceIntegrity = true)` and add
+`com.google.android.play:integrity` to the app (the SDK links it `compileOnly`;
+set `playIntegrityCloudProjectNumber` outside Play distribution). The SDK
+requests an integrity token with a single-use Aether challenge as its nonce once
+per token lifetime and attaches the server-issued token to every event as
+`device.integrity.token`. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md) §4.7.
 
 ## Wallet Tracking
 

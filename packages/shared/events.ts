@@ -2378,6 +2378,11 @@ export interface DeviceContext {
     testHarness?: boolean;
     emulator?: boolean;
   };
+  /**
+   * Mobile device integrity: the token Aether issued after App Attest / Play
+   * Integrity. Verified at ingestion and removed before storage.
+   */
+  integrity?: { token: string };
 }
 
 export interface CampaignContext {

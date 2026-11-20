@@ -190,6 +190,7 @@ def main() -> int:
     # one that declares no site, so every client SDK must send X-Aether-Site.
     for label, text in (("web", web), ("ios", ios), ("android", android), ("react-native", rn)):
         _require(label, text, ["X-Aether-Site"], "publishable-key site declaration")
+    _check_native_requests_declare_site()
     _require("ios", ios, ["var siteId: String?"], "publishable-key site declaration")
     _require("android", android, ["val siteId: String?"], "publishable-key site declaration")
     _require("react-native", rn, ["siteId?: string"], "publishable-key site declaration")
@@ -276,6 +277,33 @@ def _check_native_consent_purposes() -> None:
         expected = [p for p in canonical if p not in explicit]
         if grant_all != expected:
             fail(f"react-native: GRANT_ALL_PURPOSES {grant_all} != canonical minus explicit {expected}")
+
+
+def _check_native_requests_declare_site() -> None:
+    """Every native request that carries the key must also declare the site.
+
+    A publishable key is refused on any request that declares no site, so a
+    new native call that sets Authorization without X-Aether-Site works with a
+    secret key and silently fails for every app onboarded with a publishable
+    one. The header is set by the setAetherSite helper next to Authorization.
+    """
+    import re
+
+    for label, base, ext in (
+        ("ios", SDK_PKG / "ios" / "Sources", ".swift"),
+        ("android", SDK_PKG / "android" / "src" / "main", ".kt"),
+    ):
+        for path in sorted(base.rglob(f"*{ext}")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for i, line in enumerate(lines):
+                if not re.search(r'"Authorization"', line):
+                    continue
+                window = "\n".join(lines[max(0, i - 3): i + 4])
+                if "setAetherSite(" not in window:
+                    fail(
+                        f"{label}: {path.relative_to(ROOT)}:{i + 1} sets Authorization "
+                        "without setAetherSite (publishable keys are refused without X-Aether-Site)"
+                    )
 
 
 def _report() -> int:

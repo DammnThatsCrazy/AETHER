@@ -47,6 +47,11 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
             // Base64url P-256 public key; the native health agent then verifies the
             // manifests it fetches (fail-closed). Absent => applied unverified.
             manifestPublicKey = if (config.hasKey("manifestPublicKey")) config.getString("manifestPublicKey") else null,
+            // Google Play Integrity device-integrity evidence (opt-in).
+            deviceIntegrity = config.hasKey("deviceIntegrity") && config.getBoolean("deviceIntegrity"),
+            playIntegrityCloudProjectNumber = if (config.hasKey("playIntegrityCloudProjectNumber")) {
+                config.getDouble("playIntegrityCloudProjectNumber").toLong()
+            } else null,
             // Site a publishable key is bound to; the native SDK sends it as
             // X-Aether-Site on every request.
             siteId = if (config.hasKey("siteId")) config.getString("siteId") else null,

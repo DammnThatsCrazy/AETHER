@@ -134,8 +134,12 @@ class RepositoryPropagationSources:
         events: list[dict[str, Any]] = []
         try:
             for _venue, account in sorted(subjects):
+                # derivatives_fills has no created_at column: order explicitly.
                 rows = await self._fills.find_many(
-                    {"tenant_id": tenant_id, "trading_account_id": f"acct_{account}"}, limit=_FILL_LIMIT,
+                    {"tenant_id": tenant_id, "trading_account_id": f"acct_{account}"},
+                    limit=_FILL_LIMIT,
+                    order_by="executed_at",
+                    descending=False,
                 )
                 if len(rows) >= _FILL_LIMIT:
                     reasons.add("stored_fill_scan_capped")

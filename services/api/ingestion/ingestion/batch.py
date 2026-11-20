@@ -592,6 +592,7 @@ async def ingest_events(
                 normalized["server_context"] = server_context
             _apply_forwarded_request_evidence(normalized)
             _apply_agent_protocol_identity(normalized)
+            _apply_device_integrity(normalized, tenant_id)
             namespace = _stamp_identity_namespace(normalized, tenant_id, declared_site)
             _attach_observation_envelope(
                 normalized, batch_id=batch_id, tenant_id=tenant_id,
@@ -895,6 +896,7 @@ async def _ingest_batch_v2(
             normalized["server_context"] = server_context
         _apply_forwarded_request_evidence(normalized)
         _apply_agent_protocol_identity(normalized)
+        _apply_device_integrity(normalized, str(tenant.tenant_id))
         namespace = _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
         # Keep the transactional path on the same additive Envelope-B adoption
         # contract as V1; the default-off flag preserves existing payloads.
@@ -1146,6 +1148,43 @@ def _apply_agent_protocol_identity(normalized: dict) -> None:
     metrics.increment(
         "ingestion_agent_protocol_total",
         labels={"protocol": verdict["protocol"], "verification": verdict["verification"]},
+    )
+
+
+def _apply_device_integrity(normalized: dict, tenant_id: str) -> None:
+    """Verify ``context.device.integrity.token`` and keep only the verdict.
+
+    The token is issued by /sdk/device-integrity/verify after App Attest or Play
+    Integrity, bound to the tenant and the install's anonymous id. It is always
+    removed from the stored event, valid or not.
+    """
+    context = normalized.get("context")
+    device = context.get("device") if isinstance(context, dict) else None
+    if not isinstance(device, dict) or not isinstance(device.get("integrity"), dict):
+        return
+    integrity = device.pop("integrity")
+    try:
+        from config.settings import Environment
+        from ingestion.device_integrity.tokens import token_key, verify_token
+
+        key = token_key(
+            settings.device_integrity.token_secret,
+            allow_ephemeral=settings.env == Environment.LOCAL,
+        )
+        anonymous_id = normalized.get("anonymous_id") or normalized.get("anonymousId")
+        verdict = (
+            verify_token(key, integrity.get("token"), tenant_id=tenant_id, anonymous_id=anonymous_id)
+            if key is not None else None
+        )
+    except Exception as exc:  # verification must never break ingestion
+        logger.warning("Device integrity check failed (event continues): %s", exc)
+        return
+    server_ctx = dict(normalized.get("server_context") or {})
+    server_ctx["device_integrity"] = verdict or {"verdict": "invalid_token"}
+    normalized["server_context"] = server_ctx
+    metrics.increment(
+        "ingestion_device_integrity_total",
+        labels={"verdict": (verdict or {}).get("verdict", "invalid_token")},
     )
 
 

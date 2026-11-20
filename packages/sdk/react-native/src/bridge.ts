@@ -126,6 +126,16 @@ export interface AetherRNConfig {
   manifestPublicKey?: string;
   autoResumeJourney?: boolean;
   onJourneyResumed?: (identity: ResolvedIdentity) => void;
+  /**
+   * Device-integrity evidence (default off): Apple App Attest on iOS, Google
+   * Play Integrity on Android. Forwarded to the native SDKs, which attest once
+   * per token lifetime and attach the server-issued token to every event.
+   * iOS needs the App Attest capability; Android needs the host app to depend
+   * on `com.google.android.play:integrity`.
+   */
+  deviceIntegrity?: boolean;
+  /** Google Cloud project number for Play Integrity outside Play distribution. */
+  playIntegrityCloudProjectNumber?: number;
 }
 
 export interface Identity {
