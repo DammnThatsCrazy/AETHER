@@ -31,8 +31,9 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': '61cd0dd6', 'reason': 'Reviewed 61cd0dd6: staging customer_services.access-mcp.repository is now true (the staging aether-access-mcp ECR repository is provisioned on the next reviewed apply; the service stays disabled), and staging plan tests pass the declared flag. Only the staging enablement status changes; cost impact is one ECR repository.'}
   - {'commit': '5797361b', 'reason': 'Two staging plan test runs now pass the declared MCP repository flag; no documented behavior changes.'}
+  - {'commit': 'd8f94809', 'reason': 'Pilot and remote CI staging plans now carry the declared MCP state; MCP docs updated to name every planner, other docs describe the workflows generally and are unchanged.'}
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
+  ".github/workflows/infrastructure.yml": "sha256:92f140fd0db133d881197c15f370cb89f97f2eee9a42d2b8b9574fafc1c055fc"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:a06f7a35966acf7aa9447d19b0d3ca7d39ef45db3ab28922ba8f4c074ab7fa8b"

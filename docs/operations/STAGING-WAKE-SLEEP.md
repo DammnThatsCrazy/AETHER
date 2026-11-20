@@ -48,7 +48,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:5438ebb42b66a0d798a3488b24c463e17725337b4c19e8ec2ca522c563217be7"
-  ".github/workflows/pilot-staging.yml": "sha256:36ebc8a80d84008b4b55c2fd562b28aa67f6a02e08478de9e4a4cbd77897a07a"
+  ".github/workflows/pilot-staging.yml": "sha256:6db71f1a5bd78bb73aafa7f6785d5848f9bea49183ff6483b0c9442d23eb703b"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:b48c4f2b4edfc25be0b4de2aba35213dca689af9684e13d34856ee76c77e08b1"
   ".github/workflows/staging-lifecycle.yml": "sha256:c0e9550d8465d09c1a82a81f68e43e6d7b5109685a81dbbc8777a03c630a9b24"
