@@ -59,3 +59,23 @@ def test_wsgi_environ():
     assert ev["clientIp"] == "198.51.100.9"
     assert ev["userAgent"] == "GPTBot/1.2"
     assert "c=1" not in str(ev)
+
+
+def _proxied_environ(**extra):
+    return {
+        "REQUEST_METHOD": "GET", "PATH_INFO": "/", "wsgi.url_scheme": "https",
+        "HTTP_HOST": "shop.example", "REMOTE_ADDR": "10.0.0.1", **extra,
+    }
+
+
+def test_wsgi_behind_trusted_proxy_uses_forwarded_client():
+    environ = _proxied_environ(HTTP_X_FORWARDED_FOR="203.0.113.7, 10.0.0.1")
+    trusted = capture_request_evidence_from_wsgi(environ, trust_forwarded_for=True)
+    assert trusted["clientIp"] == "203.0.113.7"
+    # Untrusted: the forwarded header is ignored and the peer stays.
+    assert capture_request_evidence_from_wsgi(environ)["clientIp"] == "10.0.0.1"
+
+
+def test_wsgi_trusted_without_forwarded_header_falls_back_to_peer():
+    ev = capture_request_evidence_from_wsgi(_proxied_environ(), trust_forwarded_for=True)
+    assert ev["clientIp"] == "10.0.0.1"

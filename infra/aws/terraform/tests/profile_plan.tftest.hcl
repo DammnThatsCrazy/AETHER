@@ -192,6 +192,8 @@ run "staging_profile_plan" {
   command = plan
 
   variables {
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
     deployment_profile           = "staging"
     environment                  = "staging"
     network_egress_mode          = null
@@ -455,6 +457,8 @@ run "staging_pilot_profile_plan" {
   command = plan
 
   variables {
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
     deployment_profile           = "staging"
     deployment_lane              = "pilot"
     environment                  = "staging"
@@ -526,16 +530,18 @@ run "staging_pilot_asleep_profile_plan" {
   command = plan
 
   variables {
-    deployment_profile  = "staging"
-    deployment_lane     = "pilot"
-    environment         = "staging"
-    staging_state       = "asleep"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = true
-    log_retention_days  = 3
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
+    deployment_profile           = "staging"
+    deployment_lane              = "pilot"
+    environment                  = "staging"
+    staging_state                = "asleep"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = true
+    log_retention_days           = 3
     # Monthly-only billing: with the flag off no yearly secret is mounted, so
     # an unpopulated yearly stub never blocks a task.
     stripe_annual_prices_enabled = false
@@ -570,6 +576,8 @@ run "staging_listener_maintenance_transition" {
   command = plan
 
   variables {
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository      = true
     deployment_profile                = "staging"
     environment                       = "staging"
     network_egress_mode               = null
@@ -595,6 +603,8 @@ run "staging_consolidated_hosts_skip_legacy_dns" {
   command = plan
 
   variables {
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository    = true
     deployment_profile              = "staging"
     environment                     = "staging"
     network_egress_mode             = null
@@ -619,15 +629,17 @@ run "staging_asleep_profile_plan" {
   command = plan
 
   variables {
-    deployment_profile  = "staging"
-    environment         = "staging"
-    staging_state       = "asleep"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = true
-    log_retention_days  = 3
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    staging_state                = "asleep"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = true
+    log_retention_days           = 3
   }
 
   assert {
@@ -975,16 +987,18 @@ run "staging_awake_applied" {
   # prevent_destroy = true — a real plan that would retire the CMK still fails
   # closed.
   variables {
-    deployment_profile    = "staging"
-    environment           = "staging"
-    staging_state         = "awake"
-    network_egress_mode   = null
-    aurora_min_acu        = 0
-    aurora_max_acu        = 2
-    aurora_express_mode   = true
-    skip_aurora           = false
-    log_retention_days    = 3
-    enable_credential_kms = false
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    staging_state                = "awake"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_credential_kms        = false
   }
 
   # The baseline this sleeps FROM. Without it a multiplier stuck at 0 would
@@ -1004,15 +1018,17 @@ run "staging_sleep_plan_against_applied" {
 
 
   variables {
-    deployment_profile  = "staging"
-    environment         = "staging"
-    staging_state       = "asleep"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = false
-    log_retention_days  = 3
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    staging_state                = "asleep"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
   }
 
   # desired_count must be a MANAGED attribute of the applied api service. This
@@ -1115,15 +1131,17 @@ run "access_mcp_service_requires_repository_and_digest" {
   command = plan
 
   variables {
-    deployment_profile  = "staging"
-    environment         = "staging"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = false
-    log_retention_days  = 3
-    enable_access_mcp   = true
+    # Matches customer_services.access-mcp.repository in runtime_deployment.yaml.
+    enable_access_mcp_repository = true
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp            = true
   }
 
   expect_failures = [var.enable_access_mcp]
@@ -1152,12 +1170,11 @@ run "access_mcp_service_on_staging_requires_repository" {
   expect_failures = [var.enable_access_mcp]
 }
 
-run "access_mcp_repository_on_staging_must_match_lifecycle_matrix" {
+run "access_mcp_repository_on_staging_cannot_be_planned_away" {
   command = plan
 
-  # Staging may own the repository, but only when customer_services.access-mcp
-  # declares repository: true, so wake/sleep plans keep it. The matrix declares
-  # false, so this plan must fail the agreement guard.
+  # The runtime matrix declares repository: true, so a staging plan that would
+  # drop the provisioned repository must fail the agreement guard.
 
   variables {
     deployment_profile           = "staging"
@@ -1168,7 +1185,7 @@ run "access_mcp_repository_on_staging_must_match_lifecycle_matrix" {
     aurora_express_mode          = true
     skip_aurora                  = false
     log_retention_days           = 3
-    enable_access_mcp_repository = true
+    enable_access_mcp_repository = false
   }
 
   expect_failures = [output.access_mcp_service_name]
@@ -1287,12 +1304,13 @@ run "access_mcp_origin_accepts_dns_ipv4_and_valid_ports" {
       "https://console.example.test:65535",
       "https://192.0.2.10:1",
     ]
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = false
-    log_retention_days  = 3
+    enable_access_mcp_repository = true
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
   }
 
   assert {
@@ -1306,7 +1324,8 @@ run "aether_app_url_with_trailing_slash_is_rejected" {
   command = plan
 
   variables {
-    aether_app_url = "https://app.ci.aether.invalid/"
+    aether_app_url               = "https://app.ci.aether.invalid/"
+    enable_access_mcp_repository = true
   }
 
   expect_failures = [var.aether_app_url]

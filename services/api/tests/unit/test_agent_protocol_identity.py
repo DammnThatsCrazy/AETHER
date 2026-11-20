@@ -30,9 +30,32 @@ def test_verified_mcp_oauth_client() -> None:
     assert v["verification"] == "mcp_oauth_client"
     assert v["provider"] == "anthropic" and v["product"] == "claude"
     assert v["oauth_client_id"] == "client_123"
-    assert v["oauth_issuer"] == "https://auth.example"
+    assert v["oauth_issuer"] == "https://auth.example/path"  # full issuer, not just the origin
     assert v["principal_subject_hash"] == SUB_HASH
     assert v["observed_by"] == "tenant_server"
+
+
+def _issuer_of(issuer: str) -> str:
+    return evaluate_agent_protocol(capture_mcp_client_identity(
+        client_info={"name": "claude-ai"}, oauth_verified=True, client_id="c",
+        issuer=issuer, subject="user-42",
+    ))["oauth_issuer"]
+
+
+def test_issuers_sharing_an_origin_stay_distinct() -> None:
+    one = _issuer_of("https://Auth.Example/realms/one/")
+    two = _issuer_of("https://auth.example/realms/two")
+    assert one == "https://auth.example/realms/one"
+    assert two == "https://auth.example/realms/two"
+    assert one != two
+    assert _issuer_of("https://auth.example/realms/one?x=1#f") == one  # query/fragment ignored
+
+
+def test_oversized_issuer_is_bounded_but_not_collapsed() -> None:
+    a = _issuer_of("https://auth.example/" + "a" * 400)
+    b = _issuer_of("https://auth.example/" + "b" * 400)
+    assert a.startswith("https://auth.example/#sha256=") and len(a) <= 200
+    assert a != b
 
 
 def test_mcp_client_info_alone_is_declared_and_drops_oauth_fields() -> None:

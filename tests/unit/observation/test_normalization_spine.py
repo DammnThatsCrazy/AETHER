@@ -404,6 +404,23 @@ def test_bus_envelope_flat_payload_identical_flag_on_vs_off(monkeypatch, builder
     assert converged == legacy
 
 
+@pytest.mark.parametrize("spine", [False, True], ids=["spine_off", "spine_on"])
+def test_bus_envelope_carries_ingestion_server_context(monkeypatch, spine) -> None:
+    """Ingestion verdicts live only in server_context (raw evidence is removed
+    at ingestion), so the projector envelope must keep it under both spine
+    settings or Touchpoint/AgentExecution projectors silently lose them."""
+    _set_spine(monkeypatch, spine)
+    payload = _flat_sdk_payload()
+    payload["server_context"] = {
+        "forwarded_request": {"grade": "verified"},
+        "agent_protocol": {"kind": "mcp_oauth_client"},
+        "device_integrity": {"verdict": "attested"},
+    }
+    envelope = workers._bus_payload_to_sdk_envelope(payload)
+    assert envelope["server_context"] == payload["server_context"]
+    assert envelope["server_context"] is not payload["server_context"]  # copied
+
+
 def test_bus_envelope_aether_dump_gains_subject_and_occurrence_flag_on(monkeypatch) -> None:
     """Flag ON: an AetherEvent dump keeps its subject/occurrence in the projector
     envelope (the legacy path dropped them)."""

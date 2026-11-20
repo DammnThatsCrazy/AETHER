@@ -37,9 +37,9 @@ source_hashes:
   "services/api/governance/": "sha256:51f72b87ef8db8f17887dec8e03982edad27e78486ce6db0b5424640813a737e"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:05e0cd3c263d9886d3d91e255bc323c59ac8fe2e7d8c0137753c3322e55bb750"
+  "services/api/ingestion/": "sha256:47c5efad9f19e50367a0c6f9d01fb21fbeb611999c607f43868ddd91f1dc008a"
   "services/api/intelligence/": "sha256:a1371d546f1a62b17f349cf6374cf0e2e000dfcf81e3c565d92ca34bbbe168fa"
-  "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
+  "services/api/journeys/": "sha256:c3e647829f3988c929ace6946d834c3d10e3a7ec5002b832ce08064c62297876"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
   "services/api/value/": "sha256:90c89d0135932f020cf0b8d33bbe34ce983ed8d2420827c726c88a6c5115bd2f"
@@ -4521,8 +4521,10 @@ Communications tenant surface (`/v1/comms/*`):
   landing touchpoint and, with identity-stitching consent and on the first
   device that opens the link, attributes the visit to the recipient
   (`signed_click`, 0.9) and links the visitor to the recipient's email alias in
-  identity resolution. A second device, or a visitor already known as someone
-  else, is recorded as `forwarded_link` (0.4) and never reassigned.
+  identity resolution. A second device, or a visitor already known as an
+  entity different from the known recipient, is recorded as `forwarded_link`
+  (0.4) and never reassigned. Visitors are matched by their namespace-scoped
+  anonymous or user id, exactly as identity resolution stores them.
 - `GET /v1/comms/entitlement` — the tenant's comms plan entitlement, current
   connection usage, and quota state (`allowed` / `quota_approaching` /
   `quota_reached` / `upgrade_required`).

@@ -25,6 +25,7 @@ import ipaddress
 import math
 import os
 import re
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from shared.backend_interpretation.flags import (
@@ -448,6 +449,13 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
     # trusted after the dispatcher re-checks its MAC against tenant + event id.
     if isinstance(payload.get("verified_click"), dict):
         envelope["verified_click"] = dict(payload["verified_click"])
+    # Ingestion-produced verdicts (forwarded-request evidence, Web Bot Auth,
+    # agent-protocol identity, device integrity) live only in server_context;
+    # the raw evidence is removed at ingestion, so TouchpointProjector and
+    # AgentExecutionProjector can read them nowhere else. Both envelope
+    # builders drop it, so carry it across here (either spine setting).
+    if isinstance(payload.get("server_context"), dict):
+        envelope["server_context"] = dict(payload["server_context"])
     return envelope
 
 

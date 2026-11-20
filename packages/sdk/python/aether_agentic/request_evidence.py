@@ -104,11 +104,18 @@ def capture_request_evidence_from_wsgi(
     scheme = str(environ.get("wsgi.url_scheme") or "https")
     host = headers.get("host") or environ.get("SERVER_NAME") or ""
     url = f"{scheme}://{host}{path}" + (f"?{query}" if query else "")
+    # Behind a trusted proxy REMOTE_ADDR is the proxy itself. Passing it as an
+    # explicit client_ip would stop capture_request_evidence from reading
+    # X-Forwarded-For, so let the forwarded address win when it is present and
+    # fall back to REMOTE_ADDR otherwise.
+    client_ip = environ.get("REMOTE_ADDR")
+    if trust_forwarded_for and _header(headers, "x-forwarded-for"):
+        client_ip = None
     return capture_request_evidence(
         method=str(environ.get("REQUEST_METHOD") or "GET"),
         url=url,
         headers=headers,
-        client_ip=environ.get("REMOTE_ADDR"),
+        client_ip=client_ip,
         trust_forwarded_for=trust_forwarded_for,
     )
 

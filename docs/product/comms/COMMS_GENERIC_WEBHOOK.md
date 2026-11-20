@@ -245,8 +245,8 @@ seal and apply one shared rule:
 | Outcome | When | Touchpoint | Identity |
 |---|---|---|---|
 | `resolved` | consented, first device, alias maps to one tenant-owned entity | `profile_id` set to the recipient when empty; `signed_click`, 0.9 | visitor linked to the recipient's email alias |
-| `unresolved` | consented, first device, alias not yet known | lineage only | entity created holding the alias; merges when the person later signs up with that email |
-| `forwarded` | another device presented this token first, or the visitor is already a different known entity | identity untouched; `forwarded_link`, 0.4 | nothing linked |
+| `unresolved` | consented, first device, alias not yet known (including a visitor who is already a known entity) | lineage only | visitor linked to the alias (an entity is created if the visitor is new); merges when the person later signs up with that email |
+| `forwarded` | another device presented this token first, or the visitor and the recipient are both known and are different entities | identity untouched; `forwarded_link`, 0.4 | nothing linked |
 | `consent_required` | no identity-stitching consent on the event | lineage only | nothing linked |
 | `binding_unavailable` | first-device binding store unreachable (fails closed) | lineage only | nothing linked |
 | `absent` | token has no recipient | lineage only | nothing linked |

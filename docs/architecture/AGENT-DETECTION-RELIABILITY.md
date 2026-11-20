@@ -20,7 +20,7 @@ source_hashes:
   "packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift": "sha256:3ec9083a9cc6588e755cd53e04f9e6ccc5e3bc2f39a9536c4f36e27c9fb02e58"
   "packages/sdk/ios/Sources/AetherSDK/DeviceIntegrity.swift": "sha256:815b3cf4a60e8001a0d837a5c18c5392001a2770856bb8b625aa100bcd1012ec"
   "packages/sdk/python/aether_agentic/protocol_identity.py": "sha256:a0a54e7ebf79f939042d6caacb7f1043c8de4bf812ba8745cf5f5676f42bbdb0"
-  "packages/sdk/python/aether_agentic/request_evidence.py": "sha256:8bd81e418df925af9ce8f6cc0eb8cdaa63dcb51c90ebfc284419f937f4fc7f98"
+  "packages/sdk/python/aether_agentic/request_evidence.py": "sha256:f124aa7b8e78c1284f8a0f0770407a842eabc61459802930038a990ae3ee9989"
   "packages/sdk/server/src/agentic.ts": "sha256:da675cdd08068013c1700c8e65943b55a31950c3399b2efb8b67cb08af4107db"
   "packages/sdk/server/src/protocol-identity.ts": "sha256:894f29a47f0dcb8a482c0f73927bfb0f260668e932124f617fe08944cc1cdadc"
   "packages/sdk/server/src/request-evidence.ts": "sha256:0c6673b18f400d3e73e36d004650d8a915e38652839aab168a638263a20fcdf9"
@@ -46,7 +46,7 @@ source_hashes:
   "services/api/journeys/traffic/classifier.py": "sha256:c438ff05ee5da57b954ed47c7c7301f6d9aeb24e5e8e3bee1454d57b9cf55199"
   "services/api/journeys/traffic/forwarded_evidence.py": "sha256:cfed0417980530581d6b1c7697e3459b0c3a397775214916ee480cc51ef9758d"
   "services/api/journeys/traffic/metrics.py": "sha256:6f6a97826153619931bf04d7c3c865c2896d976b4cb834c14444989ed4ac1cc4"
-  "services/api/journeys/traffic/protocol_identity.py": "sha256:d480a1189b5fb3e7fe8d212e2974f0661308a52304b62d05c18b37290d62f9fe"
+  "services/api/journeys/traffic/protocol_identity.py": "sha256:44599b2e75658cda9cedb4f37648a97c01c4a385ca3cb6329690e83db9883920"
   "services/api/journeys/traffic/referral_links.py": "sha256:a50ba8985185c48e664b906c06b7a753457f4daf7731d3cf6c5433f9937bf7c5"
   "services/api/journeys/traffic/web_bot_auth.py": "sha256:adc124afaa9894d0ae67064ab4bd72e1a9a279ba81d5b04a759b7f71e6c3bf20"
 ---
@@ -207,6 +207,9 @@ or Fetch `Request`) and `capture_request_evidence(...)` /
 `capture_request_evidence_from_wsgi(environ)` (Python). The result travels as
 `context.requestEvidence`: user-agent, client IP, method, host, path, query and
 the three signature headers; never bodies, cookies or authorization headers.
+With `trust_forwarded_for` set behind a proxy the customer controls, the client
+IP is the first `X-Forwarded-For` address, falling back to the socket peer
+(`REMOTE_ADDR` in WSGI) only when that header is absent.
 
 At ingestion `batch._apply_forwarded_request_evidence` verifies it
 (`journeys/traffic/forwarded_evidence.py`), writes verdicts to
@@ -261,7 +264,10 @@ Known client names map to providers (Claude → anthropic, ChatGPT → openai,
 Cursor, Gemini, Copilot, Perplexity). The hashed OAuth subject is recorded as
 `principal_subject_hash`: a pseudonymous reference to the user who authorized
 the client. The agent execution projector turns it into a principal *claim*
-(`reported_principal_namespace = "mcp_oauth:<issuer>"`,
+(`reported_principal_namespace = "mcp_oauth:<issuer>"`, where `<issuer>` is the
+full OAuth issuer identifier — scheme, host, port and path — so two issuers on
+one origin, such as `/realms/one` and `/realms/two`, stay distinct; an issuer
+longer than 200 characters becomes its origin plus a SHA-256 digest,
 `reported_principal_ref = <hash>`) when the producer reported no principal. As
 with every claim, the lineage resolver links a human only through a claim
 binding for that (namespace, hash), for example one the tenant's identity

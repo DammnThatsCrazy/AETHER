@@ -49,7 +49,15 @@ python aether_campaign_sender.py ... --preview-dir ./preview
 ```
 
 The run prints a JSON summary (`sent`, `suppressed`, `invalid`, `duplicate`,
-`refused`, reports delivered and pending) with no email addresses.
+`refused`, `ambiguous`, reports delivered and pending) with no email addresses.
+
+`ambiguous` means the SMTP connection dropped while the message was being
+submitted, so the relay may or may not have accepted it. Such a message is
+never resent automatically: it is recorded in the ledger with
+`"status": "ambiguous"` (a rerun skips it) and no sent/dropped report is made.
+Check your relay's logs and resend by hand if needed. If a send fails
+unexpectedly mid-batch, reports for the messages already delivered are queued
+in `<ledger>.pending.jsonl` and delivered on the next run.
 
 ## Requirements on your site
 
