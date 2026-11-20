@@ -76,12 +76,12 @@ reviewed_source_commits:
   - {'commit': '5dcf75ba', 'reason': 'Reviewed 5dcf75ba: the contract generator now types freshnessPolicy.slots and states per-slot maximum ages in the surface catalog. Generated-output typing only; this document needs no change.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "packages/shared/": "sha256:d1e2bafadec8266ae7cf0cabc6ac130103b0a0597d85c0f724da7523618f936f"
+  "packages/shared/": "sha256:4c7bb3b46f92f2447cf2179527ffce55e32dbff2be322c0d2fe99785a134b428"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
-  "services/api/actions/agent/agent360_provider.py": "sha256:946143c4503b65def6e61157ca2776a63fd1d6a1cbd06473ac7373d704bcae49"
+  "services/api/actions/agent/agent360_provider.py": "sha256:4f903310623b89e4616b8f822028fa5a52bda10651b1146267b1c5c77ab7db96"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
-  "services/api/actions/agent/execution360_provider.py": "sha256:c224bc3be2745382c4952d6fd43e2494302c027cb9829d454e73c34633aba000"
-  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
+  "services/api/actions/agent/execution360_provider.py": "sha256:725745643fdb12456c17d8d52bc166fb9aec5de1b3fef206cc61c5d751899fd5"
+  "services/api/actions/agent/user_agents.py": "sha256:6e8c6935786206280889003297253f1401cd67573ff490a78349840555b1af20"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -93,7 +93,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
-  "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
+  "services/api/config/settings.py": "sha256:241a51b5e7bdf223a1163635664a4a4829f8d83013bce958dc6c877ea64e5131"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
@@ -106,7 +106,7 @@ source_hashes:
   "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
-  "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
+  "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
   "services/api/middleware/middleware.py": "sha256:b8bcae87dd212525d3fe07da40eae61756b5db3df04923e165d44d55ee39fc26"
   "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
@@ -118,7 +118,7 @@ source_hashes:
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
-  "services/api/workers/runtime/specs.py": "sha256:bed3da6f0117ac5a47f856c6405b6e2553bf0ad568c740e5716d14f3c0b9b884"
+  "services/api/workers/runtime/specs.py": "sha256:4ff2c134a396e6e253f56a0c3b6d46768c2f648eee0dc04230e6d3bc5fa797b1"
 ---
 # Aether vNext — Architecture Guide
 
@@ -1566,9 +1566,9 @@ All events — human and agent — flow through the existing Unified Pipeline vi
 All Intelligence Graph layers are **disabled by default** behind
 `IntelligenceGraphConfig` feature flags (`IG_AGENT_LAYER` for L2,
 `IG_COMMERCE_LAYER` for L3a, `IG_X402_LAYER` for L3b, `IG_ONCHAIN_LAYER` for
-L0, plus `IG_TRUST_SCORING`). The
-one exception is the Agentic Commerce control plane
-(`COMMERCE_CONTROL_PLANE_ENABLED`), which defaults on. See
+L0, plus `IG_TRUST_SCORING`). The former Agentic Commerce control plane and
+its `COMMERCE_CONTROL_PLANE_ENABLED` flag were retired by ADR-012; x402 is
+capture plus on-chain settlement observation under `IG_X402_LAYER`. See
 `docs/architecture/INTELLIGENCE-GRAPH.md` for the full specification, edge schemas, and
 rollout guide.
 

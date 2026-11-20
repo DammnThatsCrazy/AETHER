@@ -20,12 +20,12 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:0f5968d9a03c8924c2f35571a670e2e35077cccd2c934a73332214d833f3504d"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
-  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
+  "services/api/actions/agent/user_agents.py": "sha256:6e8c6935786206280889003297253f1401cd67573ff490a78349840555b1af20"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:ce75e7b9566aead77908aed4764a361d12d5bd1783516fd3adb29cd3c26d5414"
   "services/api/ingestion/ingestion/validation.py": "sha256:e1b0f93623d488060b70de9c217062bb52b77ba2dbfe8c632c040e4953a963ee"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
@@ -33,8 +33,8 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
-  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
-  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
+  "services/api/value/x402/commerce_store.py": "sha256:c55caae3f9e9f81830f493b729c8bc5ef8ba1f4f6244628c7059580e429f216e"
+  "services/api/value/x402/provenance.py": "sha256:fe227df986d4c03f770d97d6236bc4c5c5ee4410db66415dd38b7a697779d556"
 ---
 
 # Events / Kafka Subsystem
@@ -165,8 +165,11 @@ receipt ID as part of validation. The receipt is passed to the projector only
 when the evaluated consent decision allows the event; the connector bridge
 keeps that receipt separate from provider-reported identity and consent fields.
 
-When AETHER's own execution endpoint creates an `agent_executions` row, it
-records the authenticated initiating principal separately from the target
+AETHER's own execution endpoint and its status callback were retired by
+ADR-012, so no new `agent_executions` rows or `AGENT_EXECUTION_*` events are
+produced; observed agent runs arrive as canonical agent events through
+`POST /v1/batch`. Historical rows remain readable. When the endpoint created a
+row, it recorded the authenticated initiating principal separately from the target
 agent and stores the server-recorded delegation decision, evaluated tenant,
 and constraints. A
 rejected attempt is still an execution-denial record; this local policy record
@@ -183,7 +186,7 @@ path can claim a new ID without overwriting an existing record; those
 references remain correlation evidence until their own authorities are joined
 and verified.
 
-When that run uses an execution-bound x402 approval, the server-owned execution
+When such a historical run used an execution-bound x402 approval, the execution
 row and its start event also carry the exact `approval_id` and
 `approval_decision_id`. The decision history remains in the commerce approval
 authority and is joined by exact tenant and execution ID for Execution360. This

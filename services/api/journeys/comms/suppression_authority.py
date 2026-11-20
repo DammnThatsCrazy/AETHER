@@ -7,10 +7,10 @@ and it keeps four facts deliberately separate:
     (``provider_reported`` when we learned it from a provider event,
     ``provider_confirmed`` after reconciliation, ``unknown`` otherwise);
   * ``aether_enforcement_state`` — what *Aether* is doing
-    (``enforced`` = the canonical ledger honors it; ``write_back_pending`` /
-    ``write_back_failed`` / ``write_back_disabled`` describe provider write-back,
-    which is OFF by default — Aether observes, it does not mutate the provider,
-    ADR-C1);
+    (always ``write_back_disabled``: Aether observes and never mutates a
+    provider's suppression list, ADR-C1 / ADR-012; the other historical values
+    ``enforced`` / ``write_back_pending`` / ``write_back_failed`` may still
+    appear on rows written before write-back was removed);
   * the canonical suppression record itself (Aether-observed + canonical); and
   * reconciliation (``last_reconciled_at``).
 
@@ -53,18 +53,6 @@ def _suppression_id(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def write_back_enabled() -> bool:
-    """Provider suppression write-back is a separately-authorized capability.
-
-    Read permission never implies suppression-write permission; default OFF.
-    """
-    try:
-        from config.settings import settings
-        return bool(getattr(settings.comms, "suppression_write_back_enabled", False))
-    except Exception:  # pragma: no cover - default closed
-        return False
-
-
 class SuppressionAuthorityService:
     """Canonical scoped suppression authority (record · read · reconcile)."""
 
@@ -93,15 +81,15 @@ class SuppressionAuthorityService:
     ) -> dict[str, Any]:
         """Record a canonical suppression (idempotent by deterministic id).
 
-        ``aether_enforcement_state`` is ``enforced`` (the canonical ledger is
-        authoritative); provider write-back stays disabled unless separately
-        authorized.
+        ``aether_enforcement_state`` is ``write_back_disabled``: the canonical
+        ledger records the suppression, and Aether never writes it back to the
+        provider (observation-only, ADR-012).
         """
         subject = entity_id or recipient_alias_id or "unknown"
         supp_id = _suppression_id(
             tenant_id, subject, scope, scope_ref or "", reason, provider or "",
         )
-        aether_state = "enforced" if write_back_enabled() else "write_back_disabled"
+        aether_state = "write_back_disabled"
         record = {
             "suppression_id": supp_id,
             "tenant_id": tenant_id,
@@ -218,9 +206,9 @@ class SuppressionAuthorityService:
     ) -> dict[str, Any]:
         """Compare provider-reported suppressions against Aether's canonical set.
 
-        Observe-only: this reports drift and stamps ``last_reconciled_at``; it
-        does NOT write back to the provider unless write-back is separately
-        authorized (and even then only via an explicit write-back path).
+        Observe-only: this reports drift and stamps ``last_reconciled_at``. It
+        never writes back to the provider (ADR-012); ``write_back_enabled`` is
+        kept in the response, always False, for client compatibility.
         """
         aether = await self.repo.list_active_for_tenant(tenant_id)
         aether_subjects = {
@@ -240,9 +228,9 @@ class SuppressionAuthorityService:
             "only_in_provider": only_provider,
             "only_in_aether": only_aether,
             "in_sync": not only_provider and not only_aether,
-            "write_back_enabled": write_back_enabled(),
+            "write_back_enabled": False,
             "reconciled_at": _now_iso(),
         }
 
 
-__all__ = ["SuppressionAuthorityService", "write_back_enabled"]
+__all__ = ["SuppressionAuthorityService"]

@@ -357,25 +357,25 @@ AREAS: list[Area] = [
         "tenant-scoped repositories, AgentProfile360Composer and Kyber operator "
         "observability are implemented and tested, with tenant isolation enforced "
         "(all repository reads require explicit tenant_id). "
-        "Consumers are wired and unit-tested for authority rules: "
-        "project_sdk_lifecycle_observation (validated SDK events; x402 request and "
-        "intent stages only, recorded as observed), project_authoritative_x402_lifecycle "
-        "(server-owned commerce topics from a closed source registry) and "
-        "project_agent_execution_lifecycle (agent execution topics from the 'agents' "
-        "service only). Public-SDK settlement/terminal x402 claims and agent authority "
-        "events are deliberately NOT projected. Not proven end-to-end: no running "
-        "deployment has exercised these consumers, so which mapper-owned tables "
-        "(payment_intents, settlement_events, economic_resources, facilitators, "
-        "agent_economic_identity, delegation rows) actually populate is unverified; "
-        "agent execution facts also reach Silver through the separate "
-        "AgentExecutionProjector path.",
+        "Aether is observation-only (ADR-012): the commerce control plane and the "
+        "backend agent lifecycle consumer were retired. Consumers are wired and "
+        "unit-tested for authority rules: project_sdk_lifecycle_observation "
+        "(validated SDK events; x402 request and intent stages only, recorded as "
+        "observed) and project_authoritative_x402_lifecycle (settlement verified "
+        "on-chain by the x402 settlement observer, the only live producer). Agent run "
+        "state is owned by the Silver AgentExecutionProjector alone. Public-SDK "
+        "settlement/terminal x402 claims and agent authority events are deliberately "
+        "NOT projected. Not proven end-to-end: no running deployment has exercised "
+        "the settlement observer, so on-chain verification against a live RPC and "
+        "which mapper-owned tables (payment_intents, settlement_events) populate is "
+        "unverified.",
         [
             "packages/shared/events.ts",
             "packages/shared/agent.ts",
             "packages/shared/x402-lifecycle.ts",
             "packages/sdk/web/src/index.ts",
             "services/api/value/x402/lifecycle_mapper.py",
-            "services/api/actions/agent/lifecycle_mapper.py",
+            "services/api/value/x402/settlement_observer.py",
             "services/api/identity/profile/agent.py",
             "services/api/repositories/repos.py",
             "services/api/governance/admin/routes.py",
@@ -913,14 +913,14 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "x402 and agent lifecycle consumers are wired but have never run against a "
-        "deployment, so which mapper-owned tables populate (payment_intents, "
-        "settlement_events, economic_resources, facilitators, agent_economic_identity, "
-        "agent delegation rows) is unverified",
+        "The x402 settlement observer and lifecycle consumers are wired but have "
+        "never run against a deployment, so on-chain verification against a live "
+        "tenant RPC and which mapper-owned tables populate (payment_intents, "
+        "settlement_events) is unverified",
         "agentic_x402_productization",
-        "Run the x402 and agent flows in staging, record which tables populate, and "
-        "decide the overlap between the agent lifecycle consumer and the "
-        "AgentExecutionProjector Silver path",
+        "Report a real x402 payment through POST /v1/x402/capture in staging with a "
+        "tenant RPC credential, and record the settlement verdict and which tables "
+        "populate"
     ),
     Blocker(
         "pre-production-blocker",
@@ -1098,11 +1098,11 @@ def _check_agentic_x402_files() -> list[str]:
         "packages/shared/x402-lifecycle.ts",
         "packages/sdk/web/src/index.ts",
         "services/api/value/x402/lifecycle_mapper.py",
-        "services/api/actions/agent/lifecycle_mapper.py",
+        "services/api/value/x402/settlement_observer.py",
         "services/api/identity/profile/agent.py",
         "services/api/tests/agentic_x402/test_tenant_isolation.py",
         "services/api/tests/agentic_x402/test_x402_lifecycle_mapper.py",
-        "services/api/tests/agentic_x402/test_agent_lifecycle_mapper.py",
+        "services/api/tests/agentic_x402/test_settlement_observer.py",
     ]
     missing = [p for p in required if not (ROOT / p).exists()]
     return missing

@@ -23,8 +23,8 @@ source_hashes:
 > provider **API key**, stored per-tenant under the reference
 > `connector:{tenant_id}:klaviyo` (backend `aws_secrets_manager` maps this to
 > `aether/credentials/{tenant_id}/connector:{tenant_id}:klaviyo`).
-> Read access never implies suppression write-back, which is a separately
-> authorized capability (`AETHER_COMMS_SUPPRESSION_WRITE_BACK`, off by default).
+> Read access never implies suppression write-back, and Aether never writes a
+> suppression back to a provider (observation-only, ADR-012).
 
 Which secret each first-release provider needs to move off `credential_waiting`,
 and where it lives. This guide is a per-provider index; the mechanics of storing

@@ -111,7 +111,7 @@ async def _read_execution_tool_receipt(
     if not execution_id or not agent_id or not principal_id:
         return None
     try:
-        from actions.agent.invocation_runtime import (
+        from actions.agent.invocation_receipts import (
             InvocationReceiptRepository,
             validated_agent_receipt,
         )

@@ -30,20 +30,20 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  "services/api/actions/": "sha256:f56cc32e5aea69b1f386c121eb3881952540a1cd92ce65c94bd4d77cf7410ce6"
+  "services/api/actions/": "sha256:0eb5116a1fa01187b754d905e98159b9f5d7c49cae2c08c751912f2be6938408"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:51f72b87ef8db8f17887dec8e03982edad27e78486ce6db0b5424640813a737e"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:47c5efad9f19e50367a0c6f9d01fb21fbeb611999c607f43868ddd91f1dc008a"
-  "services/api/intelligence/": "sha256:a1371d546f1a62b17f349cf6374cf0e2e000dfcf81e3c565d92ca34bbbe168fa"
-  "services/api/journeys/": "sha256:c3e647829f3988c929ace6946d834c3d10e3a7ec5002b832ce08064c62297876"
+  "services/api/ingestion/": "sha256:b6213f37eb693cbd8217b682b05b14d62c6a31a034d06bf026b5f093d420a14e"
+  "services/api/intelligence/": "sha256:f7d73beb404b3de3e110a36f5bbc0799a5bf1528556ac005e51a6445ab9abd5d"
+  "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:90c89d0135932f020cf0b8d33bbe34ce983ed8d2420827c726c88a6c5115bd2f"
-  "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
+  "services/api/value/": "sha256:8b1a53f21ac22b49dce0be2fb2dcc9662d45657cc8e54b240606ba85ea53218d"
+  "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1520,38 +1520,32 @@ applied because the action's graph mutations do not share a transaction.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/x402/capture` | Ingest captured x402 payment |
-| POST | `/v1/x402/approval/request` | Request a commerce approval; optional `execution_action` binds it to a server-generated execution ID returned in the approval record |
+| POST | `/v1/x402/capture` | Ingest an x402 exchange a tenant's server observed; when the report carries a payment proof, verify it on-chain and return `settlement.state` (`settled` / `failed` / `pending` / `not_observable`) |
 | GET | `/v1/x402/graph` | Economic graph snapshot |
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
 
-### Approvals Control Plane (`/v1/approvals`)
-
-Kyber operator review queue for the x402 commerce control plane. All endpoints require `approvals:read` (GET) or `approvals:write` / `commerce:approve` (POST).
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/v1/approvals` | List approval queue — filterable by `status`, `assigned_to` |
-| GET | `/v1/approvals/{id}` | Get single approval request with full audit trail |
-| POST | `/v1/approvals/{id}/assign` | Assign approval to a reviewer (`assignee_id`, `assigned_by`) |
-| POST | `/v1/approvals/{id}/decide` | Apply decision: `approve`, `reject`, or `escalate` with `reason` and optional `is_override` |
-| POST | `/v1/approvals/{id}/escalate` | Shorthand escalate — calls decide with `action=escalate` |
-| POST | `/v1/approvals/{id}/revoke` | Revoke a previously approved request (`revoked_by`, `reason`) |
-| GET | `/v1/approvals/{id}/evidence` | Evidence bundle: approval audit trail, policy decisions, graph impact |
-| GET | `/v1/approvals/{id}/preview` | Deterministic preview of graph mutations if approved (read-only, no side effects) |
+Aether is observation-only for x402 (ADR-012): it issues no 402 challenge,
+approves no spend and grants no entitlement. The capture route's settlement
+observer is the only authoritative producer of x402 settlement facts; a
+`pending` verdict records nothing terminal, and reporting the same payment
+again re-checks the chain. The former commerce control plane
+(`/v1/approvals`, `/v1/entitlements`, the challenge middleware and its
+diagnostics) was retired; its historical records stay readable through the
+diagnostics and intelligence reads below and through Agent 360.
 
 ### Agent Extensions (added to /v1/agent/)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/agent/register` | Register agent in the Intelligence Graph |
-| POST | `/v1/agents/{agent_id}/executions/{execution_id}/resources/read` | Read one explicitly enabled, observed MCP resource URI under a distinct active `read_resource` grant. Requires authenticated write/dispatch permission and a running tenant-owned execution. Persist an immutable receipt only after the remote attempt; successful contents must match the requested URI exactly. Resource mutations and independent effects are unsupported. |
 | POST | `/v1/ml/model-governance/profile-evaluations` | Authenticated tenant-admin evaluation of an exact model artifact over closed prediction horizons and canonical adjudicated outcomes. Records dataset manifest, sample references, split, window, policy provenance and computed accuracy, Brier score and calibration error; not a calibration certification. |
 | GET | `/v1/ml/model-governance/profile-evaluations/{evaluation_id}` | Tenant-admin read of the exact persisted Profile evaluation. |
 | POST | `/v1/economic/attribution-runs/{run_id}/model-approval` | Authenticated tenant-admin approval or rejection bound to the completed run, model config and lineage decision. Does not establish calibration or attribution correctness. |
-| POST | `/v1/agents/{agent_id}/execute` | Admit and record run bookkeeping after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly. This route does not invoke a tool/resource operation or create an invocation receipt. |
-| POST | `/v1/agents/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke` | Require authenticated principal, write and dispatch permissions, tenant-owned running execution, enabled exact observed MCP tool and active invoke grant. Perform public HTTPS MCP initialization and `tools/call` through DNS-pinned transport with redirects disabled. Persist immutable scoped completion receipts; durable claims prevent duplicate calls. Private/credentialed endpoints and resource mutations are unsupported; exact resource reads use the separate endpoint above. |
+| POST | `/v1/agents` | Declare a tenant-owned agent (model, tools, resource URIs, constraints, owner). A declaration only: Aether never runs, admits or gates the agent (ADR-012) |
+| GET / PATCH | `/v1/agents/{agent_id}` | Read or update a declared agent |
+| GET | `/v1/agents/{agent_id}/executions` | Historical execution rows written before ADR-012; observed runs now arrive through `POST /v1/batch` |
+| GET | `/v1/agents/{agent_id}/executions/{execution_id}` | One historical execution row |
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
@@ -1580,20 +1574,18 @@ Persisted evaluation reads decode metric and sample-reference JSONB together.
 | GET | `/v1/diagnostics/commerce/approval-expirations` | Approval requests expired without a decision (`commerce:read`) |
 | GET | `/v1/diagnostics/commerce/duplicate-payments` | Potential duplicate payment attempts within a time window (`commerce:read`) |
 | GET | `/v1/diagnostics/commerce/reconciliation-drift` | Payment intents with no corresponding settlement event (`commerce:read`) |
-| GET | `/v1/diagnostics/commerce/reconciliation` | Read-only reconciliation of the tenant's commerce state against Silver and the graph: rebuild counts, graph consistency and drift (`x402:read`) |
 
 All diagnostics endpoints require a platform operator; general diagnostics also
 require the `admin` permission and commerce diagnostics `commerce:read`. Only
 the tenant's own SDK heartbeat, health and silent-SDK routes are open to tenants.
 
-**x402 environment & credential-only verification.** Every authorization,
-receipt, and settlement carries a credential `environment` (`sandbox` | `live`)
-resolved server-side from the tenant's x402 capability activation state — never
-from the client. Verification resolves the tenant's own RPC endpoint+key pair
-from the credential authority (atomic `{url, api_key, auth_mode}`); a deployed
+**x402 environment & credential-only verification.** Every observed settlement
+check carries a credential `environment` (`sandbox` | `live`) resolved
+server-side from the tenant's x402 capability activation state — never from the
+client. Verification resolves the tenant's own RPC endpoint+key pair from the
+credential authority (atomic `{url, api_key, auth_mode}`); a deployed
 environment with no configured pair yields the `verification_unavailable`
-verdict (fail-closed). `GET /v1/x402/commerce/health` derives its status from
-real facilitator health + settlement backlog (never a hardcoded healthy).
+verdict (fail-closed), which the capture route reports as `pending`.
 Provision RPC/facilitator credentials via the credential API (providers
 `rpc_evm_base` / `rpc_svm_mainnet` / … slot `rpc_endpoint_pair`; facilitator
 providers slot `facilitator_api_key`).
@@ -1871,13 +1863,13 @@ failure and can be retried after repository access recovers.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/siwx/bind` | Bind a SIWX session to an identity for entitlement reuse (`write`) |
+| POST | `/v1/identity/siwx/bind` | Bind a SIWX wallet session to an identity (identity evidence only; `write`) |
 | GET | `/v1/identity/siwx/status/{session_id}` | Check SIWX session binding status |
 | DELETE | `/v1/identity/siwx/{session_id}` | Revoke a SIWX session binding (`write`) |
 | POST | `/v1/identity/staging-proof-scenarios` | Staging only (mounted and served only when `AETHER_ENV=staging`). Records one identity-continuity scenario result for the calling tenant (`admin` permission, own tenant only; route policy marks both proof routes sensitive and audited) |
 | GET | `/v1/identity/staging-proof-capture` | Staging only. Reads the calling tenant's recorded scenario evidence and identity runtime state for the proof pack (`admin` permission). Answers `503` unless `AETHER_DEPLOYMENT_ID` is set; delivery sets it to the running backend image digest |
 
-SIWX (Sign-In With X) session bindings allow the entitlement service to reuse active payment entitlements for a wallet session without requiring a new payment challenge.
+SIWX (Sign-In With X) session bindings record which identity a wallet session belongs to. Aether no longer issues payment challenges or entitlements (ADR-012), so a binding is identity evidence only; it grants no access.
 
 ---
 
@@ -2058,13 +2050,13 @@ one active tenant `USER_ID` alias and identity evidence resolve the registrar.
 Historical `asOf` frames leave that identity unknown; registration does not
 identify a workflow run initiator or approver.
 
-`POST /v1/agents/{agent_id}/execute` may include
+Execution rows written by the former `POST /v1/agents/{agent_id}/execute`
+route (retired by ADR-012) may carry a caller-reported association with
 `workflow_definition_id`, `workflow_definition_revision`, and
-`workflow_definition_digest` together with an exact execution ID. The server
-requires a same-tenant AI invocation run link, a complete bounded as-of
-definition read, matching active revision/digest, and an Agent step before it
-persists the caller-reported association. Workflow360 run frames revalidate
-those records and show a degraded `workflow_summary` with the definition
+`workflow_definition_digest`, accepted at the time only with a same-tenant AI
+invocation run link, a complete bounded as-of definition read, matching active
+revision/digest, and an Agent step. Workflow360 run frames revalidate those
+historical records and show a degraded `workflow_summary` with the definition
 record and execution evidence. Trigger, step, and external-effect execution
 remain unknown; historical run-definition replay is unavailable.
 
@@ -2318,8 +2310,9 @@ facts carrying the exact episode ID; the complete message spine and conversation
 membership are not joined. These additions remain partial provider paths and do
 not complete their respective 360 surfaces.
 
-Execution360 `tool_calls` also exposes bounded server-owned MCP invocation
-receipts independently of `CALLED_TOOL` lifecycle edges. Receipt-backed results
+Execution360 `tool_calls` also exposes bounded historical server-owned MCP
+invocation receipts (written before ADR-012 retired Aether-side invocation)
+independently of `CALLED_TOOL` lifecycle edges. Receipt-backed results
 require exact execution, agent, initiating principal, tool, resource, grant,
 operation-time policy and timestamp validation. Canonical receipt evidence is
 included in interactions and evidence; lifecycle observations remain separate.
@@ -2464,18 +2457,19 @@ resource scopes with delegation evidence on a complete grant read. Ambiguous
 dual-target grants are rejected. It also exposes bounded persisted
 `capability.invoke` evaluations linked to exact tenant, Agent, capability, grant,
 result, and evaluation time. These records describe prior policy evaluations,
-not current authorization or actual tool invocations. The separate authenticated
-tool invocation endpoint now produces server-owned MCP completion receipts.
+not current authorization or actual tool invocations. Aether no longer invokes
+MCP tools or reads MCP resources for an agent (ADR-012); MCP completion receipts
+written by the former invocation endpoints stay readable as history.
 Agent360 capabilities and Workflow360 actions admit those receipts only with
 exact tenant, agent, execution, tool, grant, policy and workflow scope and valid
 invocation timing. Failed initialization cannot become a tool invocation claim;
-observations and executor callbacks cannot produce these receipts. This binds
-supported invoke actions. The separate resource-read endpoint uses the configured
-`resource_uris` allowlist, exact observed resource identity, a distinct active
-`read_resource` grant, and MCP `resources/list` followed by `resources/read`.
-Registration persists that allowlist; updates advance the agent policy version.
-Only attempted reads with exact requested-URI contents can report successful
-resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
+observations and executor callbacks cannot produce these receipts. Historical
+resource-read receipts were bound to the configured `resource_uris` allowlist,
+exact observed resource identity, a distinct active `read_resource` grant, and
+MCP `resources/list` followed by `resources/read`. Registration still persists
+that allowlist as part of the agent declaration; updates advance the agent
+policy version. Only attempted reads with exact requested-URI contents report
+successful resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
 standing authorization, independent external effects and complete producer
 coverage remain unknown. Neither surface nor
 the full 18-surface contract is complete.
@@ -2483,14 +2477,12 @@ The `resources` registry reference is bound for this exact observed read path,
 not for general resource operations. Resource inventory pagination is bounded;
 repeated cursors, duplicate matching URIs and malformed or overflowing listings
 fail closed before the read.
-MCP initialization, tool calls, and resource listing/reads accept JSON or SSE
-responses only when exactly one JSON-RPC response matches the request ID.
 Valid resource-read grants remain separate from invoke-grant coverage.
 
 Journey360 and Risk360 can also include an associated agent execution's
 recorded delegation decision when its tenant, grant reference, status and decision time
-match the execution record. The execute endpoint supplies the request tenant to
-the delegation engine and records that scope; older records without it stay unknown.
+match the execution record. The former execute endpoint recorded the request
+tenant it gave the delegation engine; records without it stay unknown.
 Associated lifecycle requests must not predate the Journey intent's occurrence
 or the Risk decision's observation and effective time, or their recording time.
 Agent360 and Execution360 likewise suppress recorded decision claims without
@@ -4529,8 +4521,8 @@ Communications tenant surface (`/v1/comms/*`):
   connection usage, and quota state (`allowed` / `quota_approaching` /
   `quota_reached` / `upgrade_required`).
 - `GET /v1/comms/suppressions` — the canonical suppression ledger, exposing
-  provider-reported vs Aether-enforced state per row (write-back is a separately
-  authorized capability, off by default).
+  provider-reported vs Aether-enforced state per row. Aether never writes a
+  suppression back to the provider (ADR-012).
 - `GET /v1/comms/identities/provisional` — provider identities awaiting mapping
   review; `POST /v1/comms/identities/{id}/resolve` maps one to a canonical entity.
 - `GET /v1/comms/health` — comms pipeline health plus turnkey activation signals
@@ -4546,7 +4538,7 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 - `GET /v1/comms/admin/sync-runs?tenant_id=…` — sync-run history for a tenant.
 - `POST /v1/comms/admin/suppressions/reconcile` — observe-only reconciliation of
   provider-reported suppressions against Aether's canonical set (reports drift;
-  never writes back unless write-back is separately authorized).
+  never writes back, ADR-012).
 - `GET /v1/comms/admin/coverage?tenant_id=…` — per-provider coverage for one
   tenant, or a fleet aggregate across all observed tenants when unscoped.
 - Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,

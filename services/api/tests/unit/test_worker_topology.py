@@ -74,7 +74,6 @@ DOCUMENTED_ORPHANS: frozenset[str] = frozenset(
         "stablecoin_provider_polling",
         "interop_scan",
         "derivatives_venue_sweep",
-        "x402_settlement_reconciliation",
         "credential_expiry_sweep",
         "dead_letter_sweeper",
         "reward_reservation_release",
@@ -95,9 +94,6 @@ EXISTING_BUILDER_MODULES: dict[str, str] = {
     # Authored by INT-C during the credential-turnkey integration pass.
     "stablecoin_provider_polling": "value.stablecoins.polling",
     "derivatives_venue_sweep": "value.derivatives.multi_venue",
-    # Main's canonical x402 settlement spec (the old branch-only
-    # settlement_reconciliation / x402_reconciliation split folded into one).
-    "x402_settlement_reconciliation": "value.rewards.workers",
     "credential_expiry_sweep": "value.rewards.workers",
     "dead_letter_sweeper": "workers.runtime.dead_letter_sweeper",
     "reward_reservation_release": "value.rewards.workers",

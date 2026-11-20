@@ -638,76 +638,6 @@ def test_rpc_provider_resolved_by_chain_not_environment():
     assert rpc_provider_for_chain("eip155:8453") == "rpc_evm_base"
 
 
-@pytest.mark.asyncio
-async def test_reconciliation_per_env_skip_and_terminal_verdict_fail(monkeypatch):
-    """r795 + N12: the reconciliation kill switch is per settlement environment
-    (suspending sandbox must not halt live), and a terminal verdict fails the
-    settlement instead of leaving it PENDING forever."""
-    from value.x402.reconciliation import X402ReconciliationWorker
-
-    class _S:  # minimal settlement stub
-        def __init__(self, sid, env, tx):
-            self.settlement_id = sid
-            self.environment = env
-            self.receipt_id = f"rc-{sid}"
-            self.tx_hash = tx
-
-    class _Auth:
-        authorization_id = "a1"
-
-    sandbox_s = _S("s-sandbox", "sandbox", "0x1")
-    live_terminal = _S("s-live-term", "live", "0x2")
-    live_retryable = _S("s-live-retry", "live", "0x3")
-
-    worker = X402ReconciliationWorker()
-
-    class _Store:
-        async def list_settlements(self, tenant_id, state=None):
-            return [sandbox_s, live_terminal, live_retryable]
-
-        async def get_receipt(self, tenant_id, rid):
-            return type("R", (), {"authorization_id": "a1"})()
-
-        async def get_authorization(self, tenant_id, aid):
-            return _Auth()
-
-    verdicts = {
-        "0x2": (False, "no_matching_transfer: no transfer to recipient"),  # terminal
-        "0x3": (False, "not_finalized: 1/2 confirmations"),                # retryable
-    }
-
-    class _Verify:
-        async def _verify_locally(self, auth, tx):
-            return verdicts[tx]
-
-    failed_ids = []
-    settled_ids = []
-
-    class _Tracker:
-        async def fail(self, tenant_id, sid, err):
-            failed_ids.append(sid)
-
-        async def mark_settled_reconciled(self, tenant_id, sid):
-            settled_ids.append(sid)
-
-    worker._store = _Store()
-    worker._verify = _Verify()
-    worker._tracker = _Tracker()
-
-    async def _susp(tenant_id, environment):
-        return environment == "sandbox"  # only sandbox suspended
-
-    monkeypatch.setattr(worker, "_capability_suspended", _susp)
-    monkeypatch.setattr(worker, "_write_cursor", lambda *a, **k: _noop())
-
-    result = await worker.reconcile_tenant("t_recon")
-
-    assert result["skipped"] == 1          # sandbox settlement skipped
-    assert live_terminal.settlement_id in failed_ids  # terminal verdict → failed
-    assert result["failed"] == 1
-    assert result["still_pending"] == 1    # retryable live settlement stays pending
-
-
 async def _noop():
     return None
 
@@ -829,58 +759,6 @@ def test_receipt_id_is_deterministic_per_authorization():
     assert a.startswith("rcpt_")
 
 
-@pytest.mark.asyncio
-async def test_reconciliation_keeps_settlement_pending_when_mint_fails(monkeypatch):
-    """N17: if the entitlement mint fails after verification, the settlement
-    must stay PENDING (retried next tick), never SETTLED-without-entitlement."""
-    import value.x402.control_plane as cp_mod
-    from value.x402.reconciliation import X402ReconciliationWorker
-
-    class _S:
-        settlement_id = "s-mintfail"
-        environment = "sandbox"
-        receipt_id = "rc"
-        tx_hash = "0x9"
-
-    class _Store:
-        async def list_settlements(self, tenant_id, state=None):
-            return [_S()]
-
-        async def get_receipt(self, tenant_id, rid):
-            return type("R", (), {"authorization_id": "a1"})()
-
-        async def get_authorization(self, tenant_id, aid):
-            return type("A", (), {"authorization_id": "a1"})()
-
-    class _Verify:
-        async def _verify_locally(self, auth, tx):
-            return True, None  # verified
-
-    marked = {"settled": False}
-
-    class _Tracker:
-        async def mark_settled_reconciled(self, tenant_id, sid):
-            marked["settled"] = True
-
-    class _FailingPlane:
-        async def mint_entitlement_for_reconciled_settlement(self, tenant_id, settlement):
-            raise RuntimeError("transient mint outage")
-
-    monkeypatch.setattr(cp_mod, "get_control_plane", lambda: _FailingPlane())
-
-    worker = X402ReconciliationWorker()
-    worker._store = _Store()
-    worker._verify = _Verify()
-    worker._tracker = _Tracker()
-    monkeypatch.setattr(worker, "_capability_suspended", lambda t, e: _false())
-    monkeypatch.setattr(worker, "_write_cursor", lambda *a, **k: _none())
-
-    result = await worker.reconcile_tenant("t-mintfail")
-    assert result["settled"] == 0
-    assert result["still_pending"] == 1
-    assert marked["settled"] is False  # settlement never flipped to SETTLED
-
-
 async def _false():
     return False
 
@@ -897,7 +775,6 @@ async def test_retryable_reverification_does_not_downgrade_verified_receipt(monk
     receipt is kept."""
     from value.x402.verification import get_verification_engine, _receipt_id_for
     from value.x402.commerce_models import PaymentAuthorization, PaymentReceipt
-    from value.x402.commerce_store import get_commerce_store
 
     engine = get_verification_engine()
     # Seed via the engine's OWN store (the one verify() reads) — the singleton

@@ -84,35 +84,3 @@ async def test_approved_resources_reports_truncation_for_more_than_200_access_ro
     assert read.complete is False
     assert read.truncated is True
     assert read.reason == "approved_resource_access_read_truncated"
-
-
-@pytest.mark.asyncio
-async def test_executor_callback_record_flows_to_workflow_result(monkeypatch):
-    from types import SimpleNamespace
-    from actions.agent import user_agents, runtime_repository
-
-    row = {"tenant_id": "tenant-a", "workflow_run_id": "run-1", "execution_id": "exec-1",
-           "id": "exec-1", "agent_id": "agent-1", "status": "running", "created_at": "2026-10-18T10:00:00Z",
-           "input_snapshot": {"action": "pay", "resource": "resource-1"}}
-    class Executions:
-        async def find_by_id(self, key): return dict(row)
-        async def update(self, key, fields):
-            row.update(fields)
-            return dict(row)
-    class Configs:
-        async def find_by_id(self, key): return {}
-    class Producer:
-        events = []
-        async def publish(self, event): self.events.append(event)
-    producer = Producer()
-    monkeypatch.setattr(user_agents, "_executions", Executions())
-    monkeypatch.setattr(user_agents, "_configs", Configs())
-    monkeypatch.setattr(runtime_repository, "utc_now", lambda: "2026-10-18T10:00:03Z")
-    tenant = SimpleNamespace(tenant_id="tenant-a", require_permission=lambda permission: None)
-    await user_agents.update_execution_status("agent-1", "exec-1", user_agents.AgentExecutionOutcome(status="completed"),
-                                              SimpleNamespace(state=SimpleNamespace(tenant=tenant)), producer=producer)
-    assert len(producer.events) == 1
-    result = execution_result(tenant_id="tenant-a", workflow_run_id="run-1", execution=row,
-                              called_at="2026-10-18T10:00:01Z")
-    assert result["state"] == "recorded_executor_completion"
-    assert result["recordedEventId"] == row["outcome_event_id"]

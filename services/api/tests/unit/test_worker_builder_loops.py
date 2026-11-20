@@ -13,11 +13,9 @@ Covered builders (all registered by the runtime WorkerSpec in
 - ``build_venue_sweep_coro``          (services/api/value/derivatives/multi_venue.py)
 - ``build_dead_letter_sweeper_coro``  (services/api/workers/runtime/dead_letter_sweeper.py)
 
-PORT-ADAPT: main's canonical x402 settlement reconciliation loop is
-``value.rewards.workers.build_x402_settlement_reconciliation_worker`` (the
-``x402_settlement_reconciliation`` spec), so it is NOT re-tested here — the
-worker-topology suite pins its registration, and this suite pins the loop shape
-for the sweep/poll builders that live in their domain modules.
+The x402 settlement reconciliation loop that once lived in
+``value.rewards.workers`` was retired with the commerce control plane
+(ADR-012); x402 settlement is now observed on the capture request instead.
 
 The no-orphan / module-registration proof lives in ``test_worker_topology.py``;
 this suite pins the loop *shape* for the same workers.

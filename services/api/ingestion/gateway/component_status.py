@@ -240,21 +240,17 @@ COMPONENTS: tuple[ComponentSpec, ...] = (
     ),
     ComponentSpec(
         name="commerce",
-        route_prefixes=(
-            "/v1/x402",
-            "/v1/approvals",
-            "/v1/entitlements",
-            "/v1/diagnostics/commerce",
-        ),
+        # Observation only (ADR-012): x402 capture plus on-chain settlement
+        # observation, inline on the capture request, and read-only diagnostics
+        # over historical commerce records. The former control plane
+        # (/v1/approvals, /v1/entitlements and its own commerce diagnostics) and
+        # its supervised loops were retired, so no worker role backs this surface.
+        route_prefixes=("/v1/x402", "/v1/diagnostics/commerce"),
         dependencies=("database",),
-        # x402_settlement_reconciliation (materializer) advances verified
-        # settlements to on-chain finality.
-        worker_roles=("materializer",),
         work_counters=(
             "commerce_verifications",
-            "commerce_settlements",
             "x402_payments_captured",
-            "commerce_entitlements_granted",
+            "x402_settlement_observations_total",
         ),
     ),
     ComponentSpec(
