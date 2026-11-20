@@ -712,10 +712,119 @@ ad_manifest_by_family: dict[str, ProviderManifest] = {
 }
 
 
+# ── Derivatives and prediction-market venues ─────────────────────────────────
+#
+# Each venue declares separate capabilities for separate data relationships:
+# ``<venue>.account.<capability>`` is a subject's or tenant's own account
+# activity (tenant data, linked through a venue account link with its own
+# connection and grant), and ``<venue>.markets.market_data`` is public market
+# and instrument data that Olympus Labs reads under the reserved ``olympus``
+# scope as reference context. Availability says where a capability may be
+# provisioned; it never says who owns the data.
+
+DERIVATIVES_CATEGORY = "derivatives"
+DERIVATIVES_ACCOUNT_OUTPUTS: list[str] = ["bronze.provider_records", "derivatives_fills"]
+DERIVATIVES_MARKET_OUTPUTS: list[str] = ["reference.derivatives_instruments"]
+DERIVATIVES_ACCOUNT_CURSOR = "executed_at"
+
+# Venues whose adapters replay live-captured provider payloads; the rest replay
+# hand-built fixtures. Both are replay-level proof, never sandbox or live.
+_DERIVATIVES_LIVE_CAPTURED = frozenset({"hyperliquid", "polymarket"})
+
+
+def _derivatives_readiness() -> ManifestReadiness:
+    state = CredentialReadiness.REPLAY_VALIDATED
+    return ManifestReadiness(state=state, level=_READINESS_LEVEL[state])
+
+
+def _derivatives_replay_step(venue: str) -> str:
+    if venue in _DERIVATIVES_LIVE_CAPTURED:
+        return "Replay proof: pseudonymized live captures (scripts/capture_venue_fixtures.py)."
+    return "Replay proof: recorded fixtures only; no live capture yet."
+
+
+def manifest_from_venue_account(profile) -> ProviderManifest:
+    """Account-activity capability for one venue (tenant self-service)."""
+    from value.derivatives.venue_sources import WALLET_ACCESS
+
+    wallet = profile.account_access == (WALLET_ACCESS,)
+    return ProviderManifest(
+        provider_family=profile.venue,
+        product_id="account",
+        capability_id=profile.account_capability,
+        display_name=f"{profile.display_name} account activity",
+        category=DERIVATIVES_CATEGORY,
+        readiness=_derivatives_readiness(),
+        availability=Availability(
+            tenant_self_service=True,
+            kyber_managed=True,
+            olympus_system=False,
+            environments=EnvironmentAvailability(local=True, integration=True),
+        ),
+        authentication=Authentication(
+            type="none" if wallet else "api_key",
+            credential_schema=[] if wallet else [
+                CredentialFieldSpec(name="api_key", type="secret", secret=True),
+            ],
+        ),
+        accounts=Accounts(discovery_supported=False, selection_required=True),
+        sync=Sync(initial_backfill=True, incremental=True, cursor=DERIVATIVES_ACCOUNT_CURSOR),
+        data_outputs=list(DERIVATIVES_ACCOUNT_OUTPUTS),
+        product_destinations=[],
+        deployment=Deployment(provider_registration_steps=[
+            "Linked per subject through /v1/derivatives/account-links "
+            + ("(wallet ownership proof)." if wallet else "(read-only key)."),
+            _derivatives_replay_step(profile.venue),
+        ]),
+    )
+
+
+def manifest_from_venue_market(profile) -> ProviderManifest:
+    """Public market-data capability for one venue (Olympus reference scope).
+
+    Kyber provisions it under the reserved ``olympus`` scope. ``olympus_system``
+    stays false until the capability is certified for Olympus system use.
+    """
+    return ProviderManifest(
+        provider_family=profile.venue,
+        product_id="markets",
+        capability_id="market_data",
+        display_name=f"{profile.display_name} market data",
+        category=DERIVATIVES_CATEGORY,
+        readiness=_derivatives_readiness(),
+        availability=Availability(
+            tenant_self_service=False,
+            kyber_managed=True,
+            olympus_system=False,
+            environments=EnvironmentAvailability(local=True, integration=True),
+        ),
+        authentication=Authentication(type="none"),
+        data_outputs=list(DERIVATIVES_MARKET_OUTPUTS),
+        product_destinations=[],
+        deployment=Deployment(provider_registration_steps=[
+            "Olympus reference source: granted under the reserved olympus scope only.",
+            _derivatives_replay_step(profile.venue),
+        ]),
+    )
+
+
+def build_derivatives_venue_manifests() -> list[ProviderManifest]:
+    """Account and market-data manifests for every linkable venue, validated."""
+    from value.derivatives.venue_sources import VENUE_SOURCE_PROFILES
+
+    manifests: list[ProviderManifest] = []
+    for profile in VENUE_SOURCE_PROFILES.values():
+        manifests.append(validate_manifest(manifest_from_venue_account(profile)))
+        if profile.market_identity:
+            manifests.append(validate_manifest(manifest_from_venue_market(profile)))
+    return manifests
+
+
 # ── Combined catalog ─────────────────────────────────────────────────────────
 
 # Computed once at import — each list is already honesty-validated at build.
 PAYMENT_RAIL_MANIFESTS: list[ProviderManifest] = build_payment_rail_manifests()
+DERIVATIVES_VENUE_MANIFESTS: list[ProviderManifest] = build_derivatives_venue_manifests()
 DEFERRED_CREDIT_BUREAU_MANIFESTS: list[ProviderManifest] = (
     build_deferred_credit_bureau_manifests()
 )
@@ -726,6 +835,7 @@ ALL_MANIFESTS: list[ProviderManifest] = [
     *CONNECTOR_MANIFESTS,
     *AD_MANIFESTS,
     *PAYMENT_RAIL_MANIFESTS,
+    *DERIVATIVES_VENUE_MANIFESTS,
     *DEFERRED_CREDIT_BUREAU_MANIFESTS,
 ]
 
@@ -768,10 +878,12 @@ __all__ = [
     "DEFAULT_DATA_OUTPUTS",
     "DEFAULT_INCREMENTAL_CURSOR",
     "DEFERRED_CREDIT_BUREAU_MANIFESTS",
+    "DERIVATIVES_VENUE_MANIFESTS",
     "PAYMENT_RAIL_MANIFESTS",
     "build_ad_platform_manifests",
     "build_connector_manifests",
     "build_deferred_credit_bureau_manifests",
+    "build_derivatives_venue_manifests",
     "build_payment_rail_manifests",
     "deferred_manifests",
     "manifest_by_family",
@@ -780,4 +892,6 @@ __all__ = [
     "manifest_from_connector_descriptor",
     "manifest_from_credit_bureau",
     "manifest_from_payment_rail_adapter",
+    "manifest_from_venue_account",
+    "manifest_from_venue_market",
 ]

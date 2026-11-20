@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from shared.common.common import (
     APIResponse,
@@ -188,8 +188,47 @@ class TenantPushLinkRequest(BaseModel):
     consent_receipt_id: str
 
 
+class CredentialLinkRequest(BaseModel):
+    """A subject's read-only venue key. The secret is stored by the credential
+    broker under the link's connection and never returned."""
+
+    subject_id: str
+    venue: str
+    account_ref: str
+    api_key: SecretStr
+    api_secret: SecretStr | None = None
+    passphrase: SecretStr | None = None
+    scopes: list[str] = Field(..., min_length=1)
+    consent_receipt_id: str
+
+
 class RevokeLinkRequest(BaseModel):
     reason: str = ""
+
+
+def _actor(request: Request) -> str:
+    tenant = request.state.tenant
+    return getattr(tenant, "user_id", None) or getattr(tenant, "tenant_id", None) or "system"
+
+
+def _venue_credential(body: "CredentialLinkRequest"):
+    from shared.credentials.types import (
+        ApiKeyCredential,
+        KeyIdSecretCredential,
+        MultiCredential,
+    )
+
+    key = body.api_key.get_secret_value()
+    if body.api_secret is None:
+        primary = ApiKeyCredential(api_key=key)
+    else:
+        primary = KeyIdSecretCredential(key_id=key, secret=body.api_secret.get_secret_value())
+    if body.passphrase is None:
+        return primary
+    return MultiCredential(credentials={
+        "primary": primary,
+        "passphrase": ApiKeyCredential(api_key=body.passphrase.get_secret_value()),
+    })
 
 
 def _require_account_links_enabled() -> None:
@@ -233,7 +272,9 @@ async def create_wallet_account_link(body: WalletLinkRequest, request: Request) 
     _require_account_links_enabled()
     _require_derivatives_connect(request)
     try:
-        link = await _link_service().link_wallet(tenant_id=_tenant_id(request), **body.model_dump())
+        link = await _link_service().link_wallet(
+            tenant_id=_tenant_id(request), actor=_actor(request), **body.model_dump(),
+        )
     except AccountLinkError as exc:
         raise BadRequestError(exc.reason) from exc
     return APIResponse(data=link.to_record()).to_dict()
@@ -246,9 +287,35 @@ async def create_tenant_push_account_link(body: TenantPushLinkRequest, request: 
     _require_account_links_enabled()
     _require_derivatives_connect(request)
     try:
-        link = await _link_service().link_tenant_push(tenant_id=_tenant_id(request), **body.model_dump())
+        link = await _link_service().link_tenant_push(
+            tenant_id=_tenant_id(request), actor=_actor(request), **body.model_dump(),
+        )
     except AccountLinkError as exc:
         raise BadRequestError(exc.reason) from exc
+    return APIResponse(data=link.to_record()).to_dict()
+
+
+@router.post("/account-links/credential")
+async def create_credential_account_link(body: CredentialLinkRequest, request: Request) -> dict:
+    from value.derivatives.account_links import AccountLinkError, LinkMethod
+    from value.derivatives.models import ReadOnlyCredentialError
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    try:
+        link = await _link_service().link_credential(
+            tenant_id=_tenant_id(request),
+            subject_id=body.subject_id,
+            venue=body.venue,
+            account_ref=body.account_ref,
+            method=LinkMethod.READ_ONLY_API_KEY,
+            credential=_venue_credential(body),
+            scopes=body.scopes,
+            consent_receipt_id=body.consent_receipt_id,
+            actor=_actor(request),
+        )
+    except (AccountLinkError, ReadOnlyCredentialError) as exc:
+        raise BadRequestError(getattr(exc, "reason", None) or str(exc)) from exc
     return APIResponse(data=link.to_record()).to_dict()
 
 
@@ -256,7 +323,9 @@ async def create_tenant_push_account_link(body: TenantPushLinkRequest, request: 
 async def revoke_venue_account_link(link_id: str, body: RevokeLinkRequest, request: Request) -> dict:
     _require_account_links_enabled()
     _require_derivatives_connect(request)
-    link = await _link_service().revoke(tenant_id=_tenant_id(request), link_id=link_id, reason=body.reason)
+    link = await _link_service().revoke(
+        tenant_id=_tenant_id(request), link_id=link_id, reason=body.reason, actor=_actor(request),
+    )
     if link is None:
         raise NotFoundError("Venue account link")
     return APIResponse(data=link.to_record()).to_dict()

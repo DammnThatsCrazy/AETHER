@@ -40,6 +40,9 @@ class DriftAdapter(VenueDerivativesAdapter):
         "validation pending; CREDENTIAL_WAITING."
     )
 
+    # Account activity is public data keyed by address; a linked account is
+    # proved by wallet signature, not a venue credential.
+    authentication_model = "public_wallet_address"
     venue_id = "drift"
     default_deployment = "mainnet-beta"
     rest_base_url = "https://data.api.drift.trade"
