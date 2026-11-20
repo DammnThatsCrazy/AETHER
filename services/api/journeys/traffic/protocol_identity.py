@@ -23,6 +23,7 @@ See docs/architecture/AGENT-DETECTION-RELIABILITY.md.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any, Optional
 from urllib.parse import urlsplit
@@ -66,6 +67,30 @@ def _origin(url: Any) -> Optional[str]:
     return f"{parts.scheme}://{parts.hostname.lower()}" + (f":{parts.port}" if parts.port else "")
 
 
+_ISSUER_MAX = 200
+
+
+def _issuer(url: Any) -> Optional[str]:
+    """OAuth issuer identifier, kept whole.
+
+    Distinct issuers can share an origin (``https://auth.example/realms/one``
+    and ``/realms/two``); reducing them to the origin would merge their
+    subjects into one principal namespace. Keep scheme, lowercase host, port
+    and path (trailing slash dropped, query/fragment never part of an issuer).
+    An oversized identifier becomes origin + a collision-resistant digest so
+    the namespace stays bounded without collapsing distinct issuers.
+    """
+    origin = _origin(url)
+    if origin is None:
+        return None
+    path = urlsplit(str(url).strip()).path.rstrip("/")
+    issuer = origin + path
+    if len(issuer) <= _ISSUER_MAX:
+        return issuer
+    digest = hashlib.sha256(issuer.encode("utf-8")).hexdigest()[:32]
+    return f"{origin}/#sha256={digest}"
+
+
 def _known(name: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     lower = (name or "").lower()
     for needle, provider, product in KNOWN_AGENT_CLIENTS:
@@ -93,7 +118,7 @@ def _evaluate_mcp(mcp: dict[str, Any]) -> Optional[dict[str, Any]]:
         "client_version": client_version,
         "protocol_version": _s(mcp.get("protocolVersion"), 32),
         "oauth_client_id": client_id if verified else None,
-        "oauth_issuer": _origin(oauth.get("issuer")) if verified else None,
+        "oauth_issuer": _issuer(oauth.get("issuer")) if verified else None,
         "oauth_scopes": scopes if verified else [],
         # Pseudonymous principal reference (the user who authorized the client).
         "principal_subject_hash": subject_hash if verified and subject_hash and _HEX64.match(subject_hash) else None,

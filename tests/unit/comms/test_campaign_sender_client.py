@@ -102,8 +102,55 @@ class FakeSmtp:
             raise smtplib.SMTPRecipientsRefused({message["To"]: (550, b"no such user")})
         self.messages.append(message_from_bytes(bytes(message)))
 
+    def noop(self):
+        return 250, b"ok"
+
     def quit(self):
         pass
+
+
+class AcceptThenDisconnectSmtp(FakeSmtp):
+    """Queues the message, then drops before the final DATA reply arrives."""
+
+    def __init__(self, drop_for: str) -> None:
+        super().__init__()
+        self.drop_for = drop_for
+
+    def send_message(self, message):
+        super().send_message(message)
+        if message["To"] == self.drop_for:
+            raise smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+
+class StalePoolSmtp(FakeSmtp):
+    """The pooled connection goes away between messages (seen by NOOP)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.connections = 0
+        self.stale = False
+
+    def factory(self, host, port):
+        self.connections += 1
+        self.stale = False
+        return self
+
+    def send_message(self, message):
+        assert not self.stale, "sent on a dead connection"
+        super().send_message(message)
+        self.stale = True  # the relay idles out the connection after each send
+
+    def noop(self):
+        if self.stale:
+            raise smtplib.SMTPServerDisconnected("idle timeout")
+        return 250, b"ok"
+
+
+class CrashOnSecondSmtp(FakeSmtp):
+    def send_message(self, message):
+        if self.messages:
+            raise RuntimeError("relay outage mid-batch")
+        super().send_message(message)
 
 
 @pytest.fixture
@@ -211,6 +258,34 @@ class TestCampaignSenderClient:
         assert later.counts == {"duplicate": 1} and later.reported == 1
         assert aether.reported[0]["events"][0]["event_type"] == "email_sent"
         assert not (env.tmp / "send.ledger.jsonl.pending.jsonl").exists()
+
+    def test_ambiguous_disconnect_is_never_resent(self, env):
+        smtp, aether = AcceptThenDisconnectSmtp(drop_for="jane@example.com"), InProcessAether()
+        first = _run(env, smtp, aether, ["jane@example.com"])
+        assert first.counts == {"ambiguous": 1}
+        assert [m["To"] for m in smtp.messages] == ["jane@example.com"]  # one copy, no retry
+        assert not aether.reported  # neither sent nor dropped is claimed
+        ledger = (env.tmp / "send.ledger.jsonl").read_text()
+        assert '"status": "ambiguous"' in ledger
+        again = _run(env, FakeSmtp(), InProcessAether(), ["jane@example.com"])
+        assert again.counts == {"duplicate": 1}
+
+    def test_stale_pooled_connection_reconnects_before_submitting(self, env):
+        smtp = StalePoolSmtp()
+        summary = _run(env, smtp, InProcessAether(), ["jane@example.com", "sam@example.com"])
+        assert summary.counts == {"sent": 2}
+        assert smtp.connections == 2
+        assert [m["To"] for m in smtp.messages] == ["jane@example.com", "sam@example.com"]
+
+    def test_mid_batch_failure_keeps_earlier_reports(self, env):
+        with pytest.raises(RuntimeError):
+            _run(env, CrashOnSecondSmtp(), InProcessAether(), ["jane@example.com", "sam@example.com"])
+        assert (env.tmp / "send.ledger.jsonl.pending.jsonl").exists()
+        aether = InProcessAether()
+        later = _run(env, FakeSmtp(), aether, ["jane@example.com", "sam@example.com"])
+        assert later.counts == {"duplicate": 1, "sent": 1}
+        reported = [e for body in aether.reported for e in body["events"]]
+        assert [e["event_type"] for e in reported] == ["email_sent", "email_sent"]  # jane's queued + sam's
 
     def test_preview_writes_eml_files_and_reports_nothing(self, env):
         aether, preview = InProcessAether(), sender.PreviewTransport(str(env.tmp / "preview"))

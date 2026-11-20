@@ -487,7 +487,7 @@ typed field is its ONLY carrier: the captured landing page URL is sanitized
 (fragments and sensitive query params such as `aether_ref`, signed `ae` click
 tokens and click IDs stripped) so the token never travels inside a URL.
 `clickToken` is verified server-side, where it attributes the visit to the email
-recipient unless the visitor is already a different known person. The schema-versioned
+recipient unless the visitor and the recipient are both known and are different people. The schema-versioned
 `AcquisitionEvidence` helper from `@olympuslabs/aether-shared` (schema v3, including
 `entryMethod`, `destinationDomain`, and first-touch fields) remains available
 to custom integrations through

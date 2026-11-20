@@ -184,8 +184,8 @@ existing attribution engine — no second engine.
 A signed per-recipient click token (`ae`) attributes the landing touchpoint to
 the recipient as `signed_click` (0.9) only with identity-stitching consent and
 on the first device that opens the link. A second device, or a visitor already
-bound to a different entity, is recorded as `forwarded_link` (0.4) and never
-reassigns identity. A link without a token carries no recipient.
+bound to an entity different from the known recipient, is recorded as
+`forwarded_link` (0.4) and never reassigns identity. A link without a token carries no recipient.
 
 **Enforcement.** `tests/unit/comms/test_comms_attribution_policy.py`.
 

@@ -494,10 +494,13 @@ async def _session_subject_entity(
         if entity:
             return entity
     if anonymous_id:
+        # Same transformation as identity.signals.extract_signals: the resolver
+        # stores the namespace-scoped anonymous id, so the lookup must too.
+        scoped_anon = f"{namespace}:{anonymous_id}" if namespace else anonymous_id
         return await resolve_unique_tenant_entity_for_alias(
             tenant_id,
             IdentitySignalType.ANONYMOUS_ID,
-            normalize_anonymous_id(anonymous_id, tenant_id),
+            normalize_anonymous_id(scoped_anon, tenant_id),
         )
     return None
 
@@ -518,7 +521,7 @@ async def evaluate_click_recipient(
     * no identity-stitching consent on the event → ``consent_required``
       (the same rule the identity resolver applies to email hashes);
     * another visitor already presented this token first → ``forwarded``;
-    * the visitor is already a different known entity → ``forwarded``;
+    * the visitor and the recipient are different known entities → ``forwarded``;
     * the alias maps to exactly one tenant-owned entity → ``resolved``;
     * otherwise → ``unresolved`` (identity may still link the alias).
     """
@@ -553,7 +556,10 @@ async def evaluate_click_recipient(
     session_entity = await _session_subject_entity(
         tenant_id, user_id, anonymous_id, identity_namespace
     )
-    if session_entity and session_entity != recipient:
+    # A conflict needs two known, different entities. An unregistered
+    # recipient with a known visitor stays unresolved so identity can link the
+    # recipient alias to that first-device visitor.
+    if session_entity and recipient is not None and session_entity != recipient:
         return forwarded
     if recipient is None:
         return ClickRecipientDecision("unresolved")

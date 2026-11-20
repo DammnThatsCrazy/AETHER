@@ -143,6 +143,10 @@ class Transport(Protocol):
     def close(self) -> None: ...
 
 
+class AmbiguousDeliveryError(Exception):
+    """The relay may or may not have accepted a message; never resend it."""
+
+
 class SmtpTransport:
     """One SMTP connection reused for a run. Raises on refusal."""
 
@@ -183,11 +187,27 @@ class SmtpTransport:
         return conn
 
     def send(self, message: EmailMessage) -> None:
+        reused = self._conn is not None
+        conn = self._connect()
+        noop = getattr(conn, "noop", None)  # custom smtp_factory objects may lack it
+        if reused and noop is not None:
+            # A stale pooled connection is detected *before* submission, where a
+            # reconnect cannot duplicate anything.
+            try:
+                code, _ = noop()
+            except smtplib.SMTPServerDisconnected:
+                code = 0
+            if code != 250:
+                self._conn = None
+                conn = self._connect()
         try:
-            self._connect().send_message(message)
-        except smtplib.SMTPServerDisconnected:
+            conn.send_message(message)
+        except smtplib.SMTPServerDisconnected as exc:
+            # The relay may have queued the message before the connection
+            # dropped (the final DATA reply was lost). Resending could deliver
+            # it twice, so surface the ambiguity instead of retrying.
             self._conn = None
-            self._connect().send_message(message)
+            raise AmbiguousDeliveryError(str(exc) or "connection closed during DATA") from exc
 
     def close(self) -> None:
         if self._conn is not None:
@@ -231,9 +251,14 @@ class SendLedger:
     def already_sent(self, message_id: str) -> bool:
         return message_id in self._sent
 
-    def record_sent(self, message_id: str) -> None:
+    def record_sent(self, message_id: str, status: str = "sent") -> None:
+        """Record a message as handed to the relay (``sent``) or possibly
+        delivered (``ambiguous``). Both block a resend on a later run."""
+        entry: dict[str, str] = {"external_message_id": message_id}
+        if status != "sent":
+            entry["status"] = status
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"external_message_id": message_id}) + "\n")
+            handle.write(json.dumps(entry) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
         self._sent.add(message_id)
@@ -368,30 +393,16 @@ def run_send(
                 ],
             })
             events: list[dict[str, Any]] = []
-            for copy in tagged.get("recipients", []):
-                index = int(copy["index"])
-                email, message_id = batch[index], ids[index]
-                copy.setdefault("external_message_id", message_id)
-                status = copy.get("status") or ("tagged" if copy.get("tagged") else "untagged")
-                if status == "suppressed":
-                    summary.add("suppressed")
-                    continue
-                if status != "tagged" or not copy.get("recipient_alias_id"):
-                    # No recipient on the copy: sending it would be a shared link.
-                    summary.add("invalid")
-                    continue
-                if ledger.already_sent(message_id):
-                    summary.add("duplicate")
-                    continue
-                try:
-                    transport.send(build_email(message, email, copy.get("html"), copy.get("text"), message_id))
-                except (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError) as exc:
-                    summary.add("refused")
-                    events.append(_event("email_dropped", message, copy, drop_reason=type(exc).__name__))
-                    continue
-                ledger.record_sent(message_id)
-                summary.add("sent")
-                events.append(_event("email_sent", message, copy))
+            try:
+                _send_batch(tagged, batch, ids, message, transport, ledger, summary, events, log)
+            except BaseException:
+                # Earlier messages in this batch are already in the send-once
+                # ledger, so a rerun skips them: queue their reports before the
+                # failure propagates or those delivery facts are lost for good.
+                if report and events:
+                    ledger.keep_pending(events)
+                    summary.pending_reports += len(events)
+                raise
             if report and events:
                 try:
                     client.report(events)
@@ -403,6 +414,51 @@ def run_send(
     finally:
         transport.close()
     return summary
+
+
+def _send_batch(
+    tagged: dict[str, Any],
+    batch: list[str],
+    ids: list[str],
+    message: Message,
+    transport: Transport,
+    ledger: SendLedger,
+    summary: RunSummary,
+    events: list[dict[str, Any]],
+    log: Callable[[str], None],
+) -> None:
+    """Deliver one tagged batch, appending report events as messages go out."""
+    for copy in tagged.get("recipients", []):
+        index = int(copy["index"])
+        email, message_id = batch[index], ids[index]
+        copy.setdefault("external_message_id", message_id)
+        status = copy.get("status") or ("tagged" if copy.get("tagged") else "untagged")
+        if status == "suppressed":
+            summary.add("suppressed")
+            continue
+        if status != "tagged" or not copy.get("recipient_alias_id"):
+            # No recipient on the copy: sending it would be a shared link.
+            summary.add("invalid")
+            continue
+        if ledger.already_sent(message_id):
+            summary.add("duplicate")
+            continue
+        try:
+            transport.send(build_email(message, email, copy.get("html"), copy.get("text"), message_id))
+        except (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError) as exc:
+            summary.add("refused")
+            events.append(_event("email_dropped", message, copy, drop_reason=type(exc).__name__))
+            continue
+        except AmbiguousDeliveryError as exc:
+            # Possibly delivered: block any resend and leave it for
+            # reconciliation; no sent/dropped fact is reported.
+            ledger.record_sent(message_id, status="ambiguous")
+            summary.add("ambiguous")
+            log(f"ambiguous delivery for {message_id} (not resent): {exc}")
+            continue
+        ledger.record_sent(message_id)
+        summary.add("sent")
+        events.append(_event("email_sent", message, copy))
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

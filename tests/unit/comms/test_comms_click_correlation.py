@@ -311,6 +311,33 @@ class TestDispatcherCorrelation:
         assert row["profile_id"] is None
         assert _outcome(row) == "forwarded"
 
+    async def test_namespaced_known_visitor_is_forwarded(self, monkeypatch, cache):
+        # The resolver stores <identity_namespace>:<anonymous_id>; the click
+        # lookup must use the same key or a known visitor looks unknown.
+        from identity.identity.normalization import normalize_anonymous_id
+
+        _identity(monkeypatch, {
+            ("email_hash", _alias()): RECIPIENT,
+            ("anonymous_id", normalize_anonymous_id("app-1:anon-friend", TENANT)): "entity-friend",
+        })
+        event = _page_event(_token(), anon="anon-friend")
+        event["context"]["identity_namespace"] = "app-1"
+        row = await _project(monkeypatch, event)
+        assert row["profile_id"] is None
+        assert _outcome(row) == "forwarded"
+
+    async def test_known_visitor_with_unregistered_recipient_stays_unresolved(self, monkeypatch, cache):
+        # No conflict without two known, different entities: the visitor can
+        # still acquire the recipient alias through identity.
+        from identity.identity.normalization import normalize_anonymous_id
+
+        _identity(monkeypatch, {
+            ("anonymous_id", normalize_anonymous_id("anon-known", TENANT)): "entity-known",
+        })
+        row = await _project(monkeypatch, _page_event(_token(), anon="anon-known"))
+        assert _outcome(row) == "unresolved"
+        assert row["identity_resolution_method"] is None
+
     async def test_authenticated_recipient_keeps_own_profile(self, monkeypatch, cache):
         from identity.identity.normalization import normalize_user_id
 
