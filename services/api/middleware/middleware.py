@@ -1252,6 +1252,12 @@ def _evaluate_kyber_capability(request: Request, path: str, pol) -> Optional[Aet
 # read under /sdk/journey-handoff/journeys/{id} is deliberately NOT here, so a
 # publishable key (which ships in page HTML) can never read handoff records.
 _SDK_HANDOFF_PATHS = frozenset({"/sdk/journey-handoff", "/sdk/journey-handoff/redeem"})
+# Mobile app attestation is called by the native SDKs with the same ingest
+# credential they send events with: issue a challenge, then verify it. Exact
+# paths only; neither route reads tenant records.
+_SDK_DEVICE_INTEGRITY_PATHS = frozenset(
+    {"/sdk/device-integrity/challenge", "/sdk/device-integrity/verify"}
+)
 
 
 def _evaluate_route_policy(
@@ -1352,6 +1358,7 @@ def _evaluate_route_policy(
                 path not in ("/v1/batch", "/v1/track")
                 and not path.startswith("/v1/ingest")
                 and path not in _SDK_HANDOFF_PATHS
+                and path not in _SDK_DEVICE_INTEGRITY_PATHS
             ):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
         if credential_class == CREDENTIAL_CLASS_PUBLISHABLE:

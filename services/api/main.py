@@ -347,6 +347,7 @@ from graph.readiness_graph.routes import (
 from billing.metering_evidence.routes import router as metering_evidence_router
 from ingestion.events.routes import router as events_router
 from ingestion.sdk.routes import router as sdk_router
+from ingestion.device_integrity.routes import router as device_integrity_router
 from ingestion.sdk.lifecycle_routes import router_lifecycle as sdk_lifecycle_router
 from journeys.journeys.routes import admin_router as journey_health_router
 from ingestion.sdk_health.routes import router as sdk_health_router
@@ -1011,6 +1012,7 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    app.include_router(device_integrity_router)  # Mobile app attestation (App Attest / Play Integrity)
     if settings.identity_continuity.journey_handoff_enabled:
         from journeys.handoff.routes import router as journey_handoff_router
         app.include_router(journey_handoff_router)  # SDK + tenant: /sdk/journey-handoff

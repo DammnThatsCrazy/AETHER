@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:4fdd835bbf082c9c3a21d51eb524b4824d574a7a611eddd873afb416c6b41cc7"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:b6ed08552e078fffda9b5d7817376d3ac0510c273cb44c613c3c38001ca11962"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -144,6 +144,16 @@ UiAutomator2 server loaded in the app process) and `emulator`. Aether
 classifies `testHarness: true` as automation; `emulator` is evidence only.
 Accessibility services are never inspected. See
 [Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md).
+
+### Device Integrity (Play Integrity)
+
+Opt in with `AetherConfig(deviceIntegrity = true)` and add
+`com.google.android.play:integrity` to the app (the SDK links it `compileOnly`;
+set `playIntegrityCloudProjectNumber` outside Play distribution). The SDK
+requests an integrity token with a single-use Aether challenge as its nonce once
+per token lifetime and attaches the server-issued token to every event as
+`device.integrity.token`. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md) §4.7.
 
 ## Wallet Tracking
 

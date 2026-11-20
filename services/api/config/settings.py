@@ -1593,6 +1593,35 @@ class ExternalAgentTelemetryConfig:
 
 
 @dataclass(frozen=True)
+class DeviceIntegrityConfig:
+    """Mobile app attestation: Apple App Attest and Google Play Integrity (default OFF).
+
+    The SDKs request a single-use challenge, attest, and receive a short-lived
+    signed integrity token that ingestion verifies on every event. Verification
+    proves a genuine app on a genuine device; it is device-integrity evidence,
+    never proof that a human (rather than an agent) is acting.
+    See docs/architecture/AGENT-DETECTION-RELIABILITY.md.
+    """
+    enabled: bool = _env_bool("AETHER_DEVICE_INTEGRITY_ENABLED", False)
+    #: App Attest app IDs, "<TEAM_ID>.<bundle id>" (comma-separated).
+    apple_app_ids: list[str] = field(default_factory=lambda: _env_list("AETHER_APP_ATTEST_APP_IDS", ""))
+    #: "production" or "development" (the App Attest environment the app is signed for).
+    apple_environment: str = _env("AETHER_APP_ATTEST_ENVIRONMENT", "production")
+    #: Android package names allowed for Play Integrity (comma-separated).
+    play_package_names: list[str] = field(default_factory=lambda: _env_list("AETHER_PLAY_INTEGRITY_PACKAGES", ""))
+    #: Base64url SHA-256 digests of the app signing certificate (comma-separated).
+    play_certificate_digests: list[str] = field(
+        default_factory=lambda: _env_list("AETHER_PLAY_INTEGRITY_CERT_DIGESTS", "")
+    )
+    #: Google service-account JSON with the Play Integrity API enabled (secret).
+    play_service_account_json: str = _env("AETHER_PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON", "")
+    #: HMAC key for issued integrity tokens (secret).
+    token_secret: str = _env("AETHER_DEVICE_INTEGRITY_TOKEN_SECRET", "")
+    token_ttl_hours: int = max(1, min(24 * 30, _env_int("AETHER_DEVICE_INTEGRITY_TOKEN_TTL_HOURS", 168)))
+    challenge_ttl_seconds: int = max(30, min(900, _env_int("AETHER_DEVICE_INTEGRITY_CHALLENGE_TTL_SECONDS", 300)))
+
+
+@dataclass(frozen=True)
 class PaymentRailsConfig:
     """Payment Rail Observability V1 rollout flags (default OFF).
 
@@ -2243,6 +2272,7 @@ class Settings:
 
     # External Agent Telemetry Plane rollout flags
     external_agent_telemetry: ExternalAgentTelemetryConfig = field(default_factory=ExternalAgentTelemetryConfig)
+    device_integrity: DeviceIntegrityConfig = field(default_factory=DeviceIntegrityConfig)
 
     # Payment Rail Observability rollout flags
     payment_rails: PaymentRailsConfig = field(default_factory=PaymentRailsConfig)

@@ -11,11 +11,11 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:091ce96b8c65438b4176e0e8910fed824262f2ced75ebe93ca2c59ce1dff37e4"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:77e6e36dfde58f3bd7f01974af2b55ac783f19189137c600cf15c617f31fcda5"
   "packages/sdk/react-native/src/index.tsx": "sha256:25cad4024a1305c105b5517f9fd2495cd7de9d4948147dbdc2dd448d70e8a0fc"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
@@ -412,6 +412,9 @@ interface AetherRNConfig {
   };
   manifestPublicKey?: string;  // base64url P-256 key; verifies signed remote-config manifests
                                // (unsigned/invalid manifests rejected, last-known-good kept)
+  deviceIntegrity?: boolean;   // App Attest (iOS) / Play Integrity (Android) device-integrity
+                               // evidence, forwarded to the native SDKs (default off)
+  playIntegrityCloudProjectNumber?: number;  // Play Integrity outside Play distribution
 }
 ```
 

@@ -37,7 +37,7 @@ source_hashes:
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:9b49cba43135c6cec7c75775ed4e0143c3472fdcebdb64cf974edeb956fb8228"
+  "services/api/ingestion/": "sha256:e4d96a1192a29f06fedbbb2a10d4c171402064c5768698850ef7f7940a017e73"
   "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
   "services/api/journeys/": "sha256:ceca43e0daa9da4b8f410ca680d82a3f9f221d430fe61487f926da490fc6f6bf"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -1002,6 +1002,17 @@ SHA-256 hash.
 `context.device.automation.{testHarness, emulator}`. `testHarness: true`
 classifies the touchpoint as `machine` (evidence `actor:mobile_test_harness`);
 `emulator` is recorded as evidence only. Accessibility state is never collected.
+
+**Mobile device integrity.** `POST /sdk/device-integrity/challenge`
+(`{platform, anonymousId}`) issues a single-use challenge;
+`POST /sdk/device-integrity/verify` checks an App Attest attestation (iOS,
+offline against the pinned Apple root) or a Play Integrity token (Android,
+decoded through Google with the configured service account) and returns
+`{verdict, integrityToken, expiresAt}`. Both accept the mobile SDK's ingest
+credential and are off unless `AETHER_DEVICE_INTEGRITY_ENABLED`. Events carry
+the token as `context.device.integrity.token`; ingestion verifies it (tenant,
+anonymous id, expiry), records `server_context.device_integrity` and removes the
+token. A `failed` verdict classifies the touchpoint as `machine`.
 
 **Actor evidence.** `actor_type` is set only from evidence: a declared actor,
 an `agentId`, a verified agent user-agent, or the web SDK's

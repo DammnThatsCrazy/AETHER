@@ -18,7 +18,7 @@ source_files:
   - scripts/release/check_staging_task_definition_contract.py
 canonical_owner: platform@aether
 source_hashes:
-  "config/environments/.env.example": "sha256:ae8f2b39ef8f8bff01720a93e6a4e8ee3d9d1d0b34a6d987cb1f3cc322ec73bb"
+  "config/environments/.env.example": "sha256:741dc6076413ab116fad0f893947c9ce295a91c20c5192f192947459ddefdc4c"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:e5ab231da8aac54b09d595f9068b49265f4bbe8fa27d26a44def030be2216d7a"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/outputs.tf": "sha256:5c5a051e56e3e00f811c86663f6a2e8a9f8fd34df133723fef76e7ea1338f816"
@@ -26,7 +26,7 @@ source_hashes:
   "scripts/bootstrap_aws_secrets.py": "sha256:ae5e53eee269aad3fa855ad2b2494d99738b32532fe6101cf9d2f86134f81d9c"
   "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
-  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
+  "services/api/config/settings.py": "sha256:ef5619e44b900c71039bf397d50cdda28717100d3cc50447c6c2a3e34ef0c7b9"
 ---
 
 # Deployment Profile Matrix

@@ -55,6 +55,10 @@ dependencies {
     compileOnly("androidx.compose.ui:ui:1.6.8")
     compileOnly("androidx.compose.foundation:foundation:1.6.8")
     compileOnly("androidx.navigation:navigation-runtime-ktx:2.7.7")
+    // Optional Play Integrity device-integrity evidence — compileOnly: only
+    // linked when the host app opts in and depends on the library itself.
+    compileOnly("com.google.android.play:integrity:1.3.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.23")
     // Real org.json for JVM unit tests (the mockable android.jar stubs throw)
