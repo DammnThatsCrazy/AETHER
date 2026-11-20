@@ -18,7 +18,7 @@ source_hashes:
   "packages/access-kit/src/profile360-tools.mjs": "sha256:98c417ee9ceb5987a41c1a79916e047b29dfdd422886460d1a64664a30235a3a"
   "packages/access-kit/src/profile360.mjs": "sha256:32c8c44211d7330c269a7ffa34832cf44e1dc796e94a10d9348275ab42cb9b05"
   "scripts/prune_auth0_mcp_clients.py": "sha256:eff4697c57eb53a965e0e1f7a6c125b674746c42a4d6990f0dbd39d51336584e"
-  "scripts/release/staging_customer_services.py": "sha256:16bb7756b4e2534c6ceb5d289b7cddb0f01b4062d72fcabd5285735e7d08deca"
+  "scripts/release/staging_customer_services.py": "sha256:8b1b76f8e1ed5685ebcb52f1cf923984e55bc89a0f91ba9321c32a4c79bd4169"
 ---
 
 # Access Kit W3 certification (design partner)
@@ -53,8 +53,8 @@ recorded by hand.
    `AetherStagingDeploy` policy updated to the reviewed manifest, then
    `customer_services.access-mcp` with `repository: true`, the `image_digest`,
    `enabled: true` and `oauth: true` (and `dcr: true` for host
-   self-registration). The lifecycle carries that entry into every wake and
-   sleep plan.
+   self-registration). Every staging planner (lifecycle wake and sleep,
+   pilot plan, remote CI plan) carries that entry.
 3. Two synthetic tenants exist in staging (created by the staging admin
    bootstrap), each with a read API key. Tenant A also has an admin API key,
    used only for the audit/usage reconciliation route, which requires `admin`. Tenant A also has a site and a

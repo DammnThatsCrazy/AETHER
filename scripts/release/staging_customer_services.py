@@ -10,6 +10,8 @@ must equal the ``enabled`` flag (an output precondition enforces it).
 
 The lifecycle workflow imports :func:`enabled_customer_services`; the CLI prints
 one ECS service name per line for shell steps that build an expected list.
+Every staging planner (lifecycle wake/sleep, pilot plan, remote CI plan) passes
+the declared MCP state through ``--promote-inputs`` or ``--terraform-vars``.
 """
 from __future__ import annotations
 
@@ -121,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
         "--promote-inputs", action="store_true",
         help="print `-f name=value` workflow inputs, one token per line, for the staging MCP state",
     )
+    parser.add_argument(
+        "--terraform-vars", action="store_true",
+        help="print `-var=name=value` Terraform arguments, one per line, for the staging MCP state",
+    )
     args = parser.parse_args(argv)
     try:
         if args.promote_inputs:
@@ -128,8 +134,12 @@ def main(argv: list[str] | None = None) -> int:
                 print("-f")
                 print(f"{name}={value}")
             return 0
+        if args.terraform_vars:
+            for name, value in access_mcp_promote_inputs(args.profile):
+                print(f"-var={name}={value}")
+            return 0
         if not args.cluster:
-            parser.error("--cluster is required unless --promote-inputs is given")
+            parser.error("--cluster is required unless --promote-inputs or --terraform-vars is given")
         services = enabled_customer_services(args.profile)
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)
