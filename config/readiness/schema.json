@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.network/schemas/readiness-feature.schema.json",
+  "$id": "https://olympuslabsml.com/schemas/readiness-feature.schema.json",
   "title": "Aether Feature Readiness Record",
   "description": "Canonical multidimensional readiness record for a single feature/capability. One file per feature under config/readiness/features/. Validated structurally here and semantically by scripts/validate_readiness_model.py. Closed vocabularies are defined in config/readiness_model.yaml.",
   "type": "object",

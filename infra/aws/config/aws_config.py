@@ -65,8 +65,8 @@ VPC_CONFIGS = {
 
 DNS_DOMAINS = {
     "api":       "api.olympuslabsml.com",
-    "dashboard": "dashboard.aether.network",
-    "websocket": "ws.aether.network",
+    "dashboard": "dashboard.olympuslabsml.com",
+    "websocket": "ws.olympuslabsml.com",
     "cdn":       "cdn.olympuslabsml.com",
 }
 

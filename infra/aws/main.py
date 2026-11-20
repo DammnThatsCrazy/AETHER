@@ -282,7 +282,7 @@ def main(argv: list[str] | None = None) -> None:
         f"  \u2713 {len(VPC_ENDPOINTS)} VPC Endpoints     -- S3, DynamoDB (Gateway) + 10 Interface (PrivateLink)",
         f"  \u2713 {len(SECRETS)} Managed Secrets   -- Secrets Manager, KMS rotation, cross-region replication",
         "  \u2713 2 CDN Distributions -- SDK (cdn.olympuslabsml.com), Dashboard SPA",
-        "  \u2713 2 API Gateways      -- HTTP (api.olympuslabsml.com), WebSocket (ws.aether.network)",
+        "  \u2713 2 API Gateways      -- HTTP (api.olympuslabsml.com), WebSocket (ws.olympuslabsml.com)",
         "  \u2713 WAF                 -- Rate limiting, bot control, DDoS protection",
         "  \u2713 ML Serving          -- SageMaker multi-model endpoint, autoscaling, feature store",
         f"  \u2713 {len(MONITORING_STACK)} Monitoring Layers -- Metrics, logs, tracing, alerting, dashboards, cost, security",

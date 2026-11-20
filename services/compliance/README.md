@@ -252,7 +252,7 @@ Technical controls enforced at the infrastructure level before any data reaches 
 
 **Severity levels:** LOW, MEDIUM, HIGH, CRITICAL with automatic escalation.
 
-**Notification channels:** PagerDuty (immediate), Slack #security-incidents, Email (security@aether.network), DPA authority notification, affected data subjects (if high risk).
+**Notification channels:** PagerDuty (immediate), Slack #security-incidents, Email (security@olympuslabsml.com), DPA authority notification, affected data subjects (if high risk).
 
 #### Record of Processing Activities -- ROPA (Art. 30)
 

@@ -158,8 +158,8 @@ def failover_dns(ctx: RecoveryContext) -> bool:
 
     domains = {
         "api.olympuslabsml.com":       "DR ALB endpoint",
-        "ws.aether.network":        "DR WebSocket endpoint",
-        "dashboard.aether.network": "DR CloudFront",
+        "ws.olympuslabsml.com":        "DR WebSocket endpoint",
+        "dashboard.olympuslabsml.com": "DR CloudFront",
     }
 
     for domain, target in domains.items():
@@ -327,8 +327,8 @@ def validate_recovery(ctx: RecoveryContext) -> bool:
         "identity_query":  "curl -sf https://api.olympuslabsml.com/v1/identity/profiles/test",
         "analytics_query": "curl -sf -X POST https://api.olympuslabsml.com/v1/analytics/events/query -d '{}'",
         "ml_models":       "curl -sf https://api.olympuslabsml.com/v1/ml/models",
-        "websocket":       "curl -sf https://ws.aether.network",
-        "dashboard":       "curl -sf https://dashboard.aether.network",
+        "websocket":       "curl -sf https://ws.olympuslabsml.com",
+        "dashboard":       "curl -sf https://dashboard.olympuslabsml.com",
         "cdn_sdk":         "curl -sf https://cdn.olympuslabsml.com/sdk/latest/aether-sdk.esm.min.js",
     }
 

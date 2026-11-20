@@ -14,7 +14,7 @@ Coming soon:
   `visibility:` frontmatter (`P` public · `C` customer · `I` internal).
 - Three deployable build outputs (`out-public/`, `out-portal/`,
   `out-internal/`) so the same source can ship to
-  `docs.aether.network`, `portal.aether.network`, or the team-only
+  `docs.olympuslabsml.com`, `portal.olympuslabsml.com`, or the team-only
   internal tier.
 - Navigation tree generated from `docs/nav.config.ts` (also TBD).
 - Pages that render the structured artifacts in `docs/_generated/`
@@ -40,8 +40,8 @@ docs/                     ← canonical authored MDX (frontmatter declares tier)
 apps/docs/                ← this app
   src/                    ← React shell + (planned) MDX renderer
   dist/                   ← shared dev build
-  out-public/             ← public bundle for docs.aether.network
-  out-portal/             ← customer bundle for portal.aether.network
+  out-public/             ← public bundle for docs.olympuslabsml.com
+  out-portal/             ← customer bundle for portal.olympuslabsml.com
 ```
 
 ## Scripts

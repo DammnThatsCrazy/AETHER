@@ -78,8 +78,8 @@ registry's `implementationBlueprint` convention points at
 
 | Tier | Meaning | Destination |
 |------|---------|-------------|
-| `P` | Public | `docs.aether.network` (anonymous) |
-| `C` | Customer | `portal.aether.network` (customer SSO) |
+| `P` | Public | `docs.olympuslabsml.com` (anonymous) |
+| `C` | Customer | `portal.olympuslabsml.com` (customer SSO) |
 | `I` | Internal | repo only — never deployed to a site |
 
 This page is `I`.
