@@ -56,6 +56,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      # A real publish commits the version bump back to development (the
+      # integration branch; main only receives promotions), so it must start
+      # from development: the bumped files are built from the dispatched ref.
+      # Dry runs may start anywhere.
+      - name: Require development for a real publish
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/development" ]; then
+            echo "::error::Dispatch a real publish from development (got $GITHUB_REF). Use dry_run elsewhere."
+            exit 1
+          fi
+
       - name: Validate semver
         id: ver
         env:
@@ -98,7 +110,7 @@ jobs:
 
   # ── Tag (must precede CocoaPods — podspec source URL requires the tag) ────
   tag:
-    name: Commit version bump & push tag
+    name: Commit version bump to development & push tag
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: validate
@@ -110,9 +122,11 @@ jobs:
       TAG:     ${{ needs.validate.outputs.tag }}
 
     steps:
+      # The exact commit the release was validated and built from.
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.sha }}
 
       - name: Download bumped files
         uses: actions/download-artifact@v4
@@ -139,10 +153,14 @@ jobs:
                   packages/sdk/web/src packages/sdk/react-native/src packages/sdk/android/src packages/sdk/ios/Sources
           git commit -m "chore(sdk): bump version to $VERSION"
 
-      - name: Create and push tag
+      # Fast-forward only: if development moved while the release ran, this
+      # push is rejected rather than overwriting newer commits, and the tag is
+      # not published either (one atomic push). main gets the bump through the
+      # normal development -> staging -> main promotion.
+      - name: Push bump to development and tag
         run: |
           git tag "$TAG" -m "SDK release $VERSION"
-          git push origin HEAD:main "$TAG"
+          git push --atomic origin HEAD:refs/heads/development "refs/tags/$TAG"
 
   # ── npm ──────────────────────────────────────────────────────────────────
   publish-npm:

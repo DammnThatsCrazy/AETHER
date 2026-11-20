@@ -1259,6 +1259,37 @@ _SDK_DEVICE_INTEGRITY_PATHS = frozenset(
     {"/sdk/device-integrity/challenge", "/sdk/device-integrity/verify"}
 )
 
+# SDK-facing POSTs a native app makes beside its batches, admitted for a
+# site-bound publishable key so iOS, Android and React Native can ship one
+# instead of a secret key. Each is safe for a publicly readable credential:
+#   * the SDK health heartbeat writes the SDK's own diagnostics and returns
+#     nothing tenant-wide;
+#   * deferred attribution resolve consumes a handoff only for the exact secret
+#     identifier the app presents, and answers unmatched, expired and consumed
+#     handoffs identically, so it is no oracle;
+#   * Apple Ads resolve exchanges a token only the device's AdServices issues.
+# Canonical consent receipts (/v1/consent/records) and identity lookups stay
+# off this list: they assert or read compliance and identity state, which a
+# key anyone can lift out of an app binary must not do.
+# The SDK manifest is public-safe configuration (see the site check below), and
+# every SDK reads it on start. A publishable key may GET it and nothing else
+# under /v1/config.
+_PUBLISHABLE_MANIFEST_PATH = "/v1/config/sdk/manifest"
+
+_PUBLISHABLE_SDK_POST_PATHS = frozenset({
+    "/v1/diagnostics/sdk/heartbeat",
+    "/v1/attribution/deferred/resolve",
+    "/v1/attribution/apple-ads/resolve",
+})
+
+
+def _is_publishable_manifest_read(request, path: str, credential_class: str) -> bool:
+    return (
+        credential_class == CREDENTIAL_CLASS_PUBLISHABLE
+        and path == _PUBLISHABLE_MANIFEST_PATH
+        and getattr(request, "method", "GET").upper() == "GET"
+    )
+
 
 def _evaluate_route_policy(
     request: Request, path: str, context, *, platform_operator: bool = False
@@ -1354,10 +1385,17 @@ def _evaluate_route_policy(
 
         credential_class = getattr(context, "credential_class", "legacy")
         if credential_class in ("public_ingest_identifier", CREDENTIAL_CLASS_PUBLISHABLE):
+            publishable_sdk_post = (
+                credential_class == CREDENTIAL_CLASS_PUBLISHABLE
+                and path in _PUBLISHABLE_SDK_POST_PATHS
+                and getattr(request, "method", "GET").upper() == "POST"
+            )
             if (
                 path not in ("/v1/batch", "/v1/track")
                 and not path.startswith("/v1/ingest")
                 and path not in _SDK_HANDOFF_PATHS
+                and not publishable_sdk_post
+                and not _is_publishable_manifest_read(request, path, credential_class)
                 and path not in _SDK_DEVICE_INTEGRITY_PATHS
             ):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
@@ -1414,7 +1452,14 @@ def _evaluate_route_policy(
                 permission = "write"
             if not context.has_permission(permission):
                 return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
-        elif pol.tenant_scoped and credential_class != "legacy" and not context.has_permission("read"):
+        elif (
+            pol.tenant_scoped
+            and credential_class != "legacy"
+            and not context.has_permission("read")
+            # A publishable key carries ingest authority only, yet must read
+            # the public-safe SDK manifest; that one GET is admitted above.
+            and not _is_publishable_manifest_read(request, path, credential_class)
+        ):
             return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
 
         if pol.audit_required:

@@ -50,9 +50,13 @@ from ingestion.sdk_distribution.install_verifier import (
 from ingestion.sdk_distribution.sites import (
     STATUS_ACTIVE,
     STATUS_REVOKED,
+    PLATFORM_WEB,
+    SITE_PLATFORMS,
     SDKSiteRepository,
+    SiteAppIdError,
     SiteOriginError,
     new_site_id,
+    normalize_app_ids,
     normalize_origins,
 )
 from ingestion.sdk_distribution.snippet import LOADER_URL, build_snippet
@@ -63,15 +67,32 @@ router = APIRouter(prefix="/v1/sdk", tags=["SDK — Distribution"])
 _sites = SDKSiteRepository()
 
 
+_PLATFORM_PATTERN = "^(" + "|".join(SITE_PLATFORMS) + ")$"
+
+
 class SiteCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    origins: list[str] = Field(
-        ...,
+    platform: str = Field(
+        default=PLATFORM_WEB,
+        pattern=_PLATFORM_PATTERN,
+        description="Where the SDK runs. 'web' sites declare origins; 'ios', "
+        "'android' and 'react_native' sites declare app_ids instead, because "
+        "native apps send no Origin.",
+    )
+    origins: Optional[list[str]] = Field(
+        default=None,
         min_length=1,
         max_length=50,
-        description="Origins the snippet is installed on, e.g. "
+        description="Web only. Origins the snippet is installed on, e.g. "
         "['https://example.com', 'www.example.com']. Bare hosts are read as "
         "https; wildcards are refused (list each subdomain).",
+    )
+    app_ids: Optional[list[str]] = Field(
+        default=None,
+        min_length=1,
+        max_length=20,
+        description="Native only. iOS bundle IDs and/or Android application "
+        "IDs, e.g. ['com.example.app']. A React Native site lists both builds.",
     )
     environment: str = Field(
         default="production",
@@ -83,6 +104,7 @@ class SiteCreateRequest(BaseModel):
 class SiteUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     origins: Optional[list[str]] = Field(default=None, min_length=1, max_length=50)
+    app_ids: Optional[list[str]] = Field(default=None, min_length=1, max_length=20)
     environment: Optional[str] = Field(
         default=None, pattern="^(production|staging|development)$"
     )
@@ -97,6 +119,44 @@ class SiteUpdateRequest(BaseModel):
 
 class SiteKeyCreateRequest(BaseModel):
     name: str = Field(default="Install key", min_length=1, max_length=100)
+
+
+def _site_platform(record: dict) -> str:
+    # Sites registered before platforms existed are web sites.
+    return record.get("platform") or PLATFORM_WEB
+
+
+def _bindings_for(
+    platform: str,
+    origins: Optional[list[str]],
+    app_ids: Optional[list[str]],
+) -> dict:
+    """Validate the binding a site of ``platform`` declares.
+
+    Exactly one kind per platform: a web site with app ids, or a native site
+    with origins, would hold a binding nothing on its traffic can match, and
+    an operator reading the record would believe it confines something.
+    """
+    try:
+        if platform == PLATFORM_WEB:
+            if app_ids:
+                raise BadRequestError("web sites declare origins, not app_ids")
+            if not origins:
+                raise BadRequestError("web sites must declare at least one origin")
+            return {"origins": normalize_origins(origins)}
+        if origins:
+            raise BadRequestError(
+                f"{platform} sites declare app_ids (bundle ID / package name), "
+                "not origins: native apps send no Origin"
+            )
+        if not app_ids:
+            raise BadRequestError(
+                f"{platform} sites must declare at least one app id "
+                "(iOS bundle ID or Android application ID)"
+            )
+        return {"app_ids": normalize_app_ids(app_ids)}
+    except (SiteOriginError, SiteAppIdError) as exc:
+        raise BadRequestError(str(exc)) from exc
 
 
 def _tenant(request: Request):
@@ -192,10 +252,7 @@ async def create_site(body: SiteCreateRequest, request: Request):
     ctx = trace_request(request, service="sdk_distribution")
     tenant = _require_operator(request)
 
-    try:
-        origins = normalize_origins(body.origins)
-    except SiteOriginError as exc:
-        raise BadRequestError(str(exc)) from exc
+    bindings = _bindings_for(body.platform, body.origins, body.app_ids)
 
     from shared.common.common import utc_now
 
@@ -203,7 +260,9 @@ async def create_site(body: SiteCreateRequest, request: Request):
     record = await _sites.insert(new_site_id(), {
         "tenant_id": tenant.tenant_id,
         "name": body.name,
-        "origins": origins,
+        "platform": body.platform,
+        "origins": bindings.get("origins", []),
+        "app_ids": bindings.get("app_ids", []),
         "environment": body.environment,
         "status": STATUS_ACTIVE,
         "created_by": getattr(tenant, "user_id", None) or tenant.tenant_id,
@@ -254,7 +313,7 @@ async def get_site(site_id: str, request: Request):
 
 @router.patch("/sites/{site_id}")
 async def update_site(site_id: str, body: SiteUpdateRequest, request: Request):
-    """Rename a site, change its origins, or revoke it."""
+    """Rename a site, change its origins or app ids, or revoke it."""
     ctx = trace_request(request, service="sdk_distribution")
     tenant = _require_operator(request)
     record = await _load_site(tenant.tenant_id, site_id)
@@ -262,11 +321,12 @@ async def update_site(site_id: str, body: SiteUpdateRequest, request: Request):
     changes: dict = {}
     if body.name is not None:
         changes["name"] = body.name
-    if body.origins is not None:
-        try:
-            changes["origins"] = normalize_origins(body.origins)
-        except SiteOriginError as exc:
-            raise BadRequestError(str(exc)) from exc
+    if body.origins is not None or body.app_ids is not None:
+        # The platform is fixed at creation, so only its own binding kind may
+        # change; _bindings_for refuses the other one.
+        changes.update(
+            _bindings_for(_site_platform(record), body.origins, body.app_ids)
+        )
     if body.environment is not None:
         changes["environment"] = body.environment
     if body.status is not None:
@@ -291,6 +351,11 @@ async def update_site(site_id: str, body: SiteUpdateRequest, request: Request):
                 f"{len(bound)} publishable key(s) still bound to this site; "
                 "revoke them via DELETE /v1/me/api-keys/{id} to stop them working"
             )
+    if "app_ids" in changes:
+        warnings.append(
+            "app id changes apply to new installs; app builds already shipped "
+            "keep sending the site id they were built with"
+        )
     if "origins" in changes:
         warnings.append(
             "origin changes apply to new installs; already-installed snippets "
@@ -434,6 +499,7 @@ async def create_site_key(site_id: str, body: SiteKeyCreateRequest, request: Req
             "issuing install keys"
         )
 
+    platform = _site_platform(record)
     issued = await mint_api_key(
         tenant=tenant,
         name=body.name,
@@ -442,7 +508,7 @@ async def create_site_key(site_id: str, body: SiteKeyCreateRequest, request: Req
         # Bound to this one site, and to no other: the key is public, and the
         # site is the only thing that confines it.
         site_ids=[site_id],
-        platform="web",
+        platform=platform,
         source="sdk_install",
     )
 
@@ -454,10 +520,26 @@ async def create_site_key(site_id: str, body: SiteKeyCreateRequest, request: Req
         "key_class": KEY_CLASS_PUBLISHABLE,
         "site_id": site_id,
         "permissions": issued["permissions"],
-        "snippet": build_snippet(site_id=site_id, api_key=issued["raw_key"]),
+        "platform": platform,
+        # The HTML snippet is a web install; a native app is configured in code
+        # with the key and the site id instead (the onboarding snippets render
+        # that per platform).
+        "snippet": (
+            build_snippet(site_id=site_id, api_key=issued["raw_key"])
+            if platform == PLATFORM_WEB
+            else None
+        ),
         "message": (
-            "Paste the snippet into the site's HTML. Store the key separately — "
-            "it is publishable, so it will be visible in the page, but it is "
-            "still the credential that authorises this site's ingestion."
+            (
+                "Paste the snippet into the site's HTML. Store the key separately — "
+                "it is publishable, so it will be visible in the page, but it is "
+                "still the credential that authorises this site's ingestion."
+            )
+            if platform == PLATFORM_WEB
+            else (
+                "Configure the SDK with this key and site id. The key is "
+                "publishable: it ships inside the app binary and can be read "
+                "out of it, so it can only send events for this site."
+            )
         ),
     }).to_dict()

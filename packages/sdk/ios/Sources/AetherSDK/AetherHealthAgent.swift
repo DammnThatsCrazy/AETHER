@@ -55,6 +55,8 @@ public final class AetherHealthAgent {
     /// last-known-good manifest is kept (fail-closed). A public key is safe to
     /// ship in the app. When unset, manifests are applied without verification.
     private let manifestPublicKey: String?
+    /// Site a publishable key is bound to; sent as `X-Aether-Site`.
+    private let siteId: String?
 
     private var heartbeatTimer: Timer?
     private var manifestTimer: Timer?
@@ -83,7 +85,8 @@ public final class AetherHealthAgent {
         appVersion: String = "",
         heartbeatIntervalSec: TimeInterval = 60,
         manifestRefreshSec: TimeInterval = 300,
-        manifestPublicKey: String? = nil
+        manifestPublicKey: String? = nil,
+        siteId: String? = nil
     ) {
         self.endpoint = endpoint
         self.apiKey = apiKey
@@ -92,6 +95,7 @@ public final class AetherHealthAgent {
         self.heartbeatIntervalSec = heartbeatIntervalSec
         self.manifestRefreshSec = manifestRefreshSec
         self.manifestPublicKey = manifestPublicKey
+        self.siteId = siteId
         self.sdkId = Self.loadOrCreateSdkId(defaults: defaults)
     }
 
@@ -169,6 +173,7 @@ public final class AetherHealthAgent {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(siteId)
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.httpBody = body
         request.timeoutInterval = 5.0
@@ -181,6 +186,7 @@ public final class AetherHealthAgent {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(siteId)
         request.timeoutInterval = 5.0
 
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in

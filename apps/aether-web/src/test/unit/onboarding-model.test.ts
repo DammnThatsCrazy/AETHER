@@ -91,11 +91,20 @@ describe('SDK fleet helpers', () => {
     expect(sdkIdsForPlatforms(['web'], ['Web SDK · onboarding', 'React wrapper · onboarding'])).toEqual(['web', 'react']);
   });
 
-  it('gives browser SDKs publishable keys and tags server keys with the accepted platform', () => {
+  it('gives browser and app SDKs publishable keys and tags server keys with the accepted platform', () => {
     const byId = Object.fromEntries(SDK_OPTIONS.map(sdk => [sdk.id, sdk]));
     expect(byId['web']?.keyKind).toBe('publishable');
     expect(byId['react']?.keyKind).toBe('publishable');
-    expect(byId['ios']?.keyKind).toBe('secret');
+    // Native apps ship their key inside the binary, so they get a site-bound
+    // publishable key, bound by app id rather than origin.
+    for (const id of ['ios', 'android', 'react-native']) {
+      expect(byId[id]?.keyKind).toBe('publishable');
+      expect(byId[id]?.site?.binding).toBe('app_ids');
+    }
+    expect(byId['react-native']?.site?.platform).toBe('react_native');
+    expect(byId['web']?.site?.binding).toBe('origins');
+    // Only server code keeps a secret key.
+    expect(SDK_OPTIONS.filter(sdk => sdk.keyKind === 'secret').map(sdk => sdk.id)).toEqual(['server']);
     expect(byId['server']?.keyPlatform).toBe('node');
     const accepted = ['web', 'ios', 'android', 'react-native', 'node', 'other'];
     for (const sdk of SDK_OPTIONS) expect(accepted).toContain(sdk.keyPlatform);
@@ -131,7 +140,11 @@ describe('SDK fleet helpers', () => {
     const web = SDK_OPTIONS.find(sdk => sdk.id === 'web')!;
     const android = SDK_OPTIONS.find(sdk => sdk.id === 'android')!;
     expect(snippetFor(web, null, 'site_1')).toContain("apiKey: 'pk_YOUR_PUBLISHABLE_KEY', siteId: 'site_1'");
-    expect(snippetFor(android, null, null)).toContain('AetherConfig(apiKey = "YOUR_API_KEY")');
+    expect(snippetFor(android, null, null)).toContain('AetherConfig(apiKey = "pk_YOUR_PUBLISHABLE_KEY", siteId = "site_YOUR_SITE_ID")');
+    const ios = SDK_OPTIONS.find(sdk => sdk.id === 'ios')!;
+    const shown = snippetFor(ios, { key: 'pk_live_1', siteId: 'site_ios' }, null);
+    expect(shown).toContain('AetherConfig(apiKey: "pk_live_1")');
+    expect(shown).toContain('config.siteId = "site_ios"');
     const tag = '<script async src="https://cdn.aether.network/v1.js" data-key="pk_x" data-site="site_1"></script>';
     expect(snippetFor(web, { key: 'pk_x', siteId: 'site_1', snippet: tag }, null)).toBe(tag);
   });

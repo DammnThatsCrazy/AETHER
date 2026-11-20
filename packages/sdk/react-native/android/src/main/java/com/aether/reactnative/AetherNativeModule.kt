@@ -52,6 +52,9 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
             playIntegrityCloudProjectNumber = if (config.hasKey("playIntegrityCloudProjectNumber")) {
                 config.getDouble("playIntegrityCloudProjectNumber").toLong()
             } else null,
+            // Site a publishable key is bound to; the native SDK sends it as
+            // X-Aether-Site on every request.
+            siteId = if (config.hasKey("siteId")) config.getString("siteId") else null,
             onJourneyResumed = { anonymousId, userId ->
                 reactContext.runOnUiQueueThread {
                     sendEvent("AetherJourneyResumed", Arguments.createMap().apply {

@@ -180,6 +180,21 @@ def main() -> int:
         "durable crash-safe queue [§2.6]",
     )
 
+    # Native consent purposes must be exactly the shared registry's. A purpose
+    # missing from a native list is one grantConsent() still accepts but the
+    # event context never stamps, and one missing from the explicit list would
+    # be granted by grantAll() without its own opt-in UI.
+    _check_native_consent_purposes()
+
+    # Publishable keys are site-bound: the backend refuses a request carrying
+    # one that declares no site, so every client SDK must send X-Aether-Site.
+    for label, text in (("web", web), ("ios", ios), ("android", android), ("react-native", rn)):
+        _require(label, text, ["X-Aether-Site"], "publishable-key site declaration")
+    _check_native_requests_declare_site()
+    _require("ios", ios, ["var siteId: String?"], "publishable-key site declaration")
+    _require("android", android, ["val siteId: String?"], "publishable-key site declaration")
+    _require("react-native", rn, ["siteId?: string"], "publishable-key site declaration")
+
     # §2.6 — the canonical, machine-checkable parity matrix must exist and parse.
     parity = PKG / "shared" / "sdk-parity.json"
     if not parity.exists():
@@ -209,6 +224,88 @@ def main() -> int:
     return _report()
 
 
+def _quoted_list(text: str, start_marker: str, end_marker: str) -> list[str] | None:
+    """The quoted strings between ``start_marker`` and the next ``end_marker``."""
+    import re
+
+    start = text.find(start_marker)
+    if start < 0:
+        return None
+    end = text.find(end_marker, start + len(start_marker))
+    if end < 0:
+        return None
+    return re.findall(r"['\"]([a-z0-9_]+)['\"]", text[start + len(start_marker):end])
+
+
+def _check_native_consent_purposes() -> None:
+    shared = PKG / "shared" / "consent.ts"
+    if not shared.exists():
+        fail("missing packages/shared/consent.ts (canonical consent purposes)")
+        return
+    shared_text = shared.read_text(encoding="utf-8")
+    canonical = _quoted_list(shared_text, "export const CONSENT_PURPOSES", "] as const")
+    explicit = _quoted_list(shared_text, "export const EXPLICIT_OPT_IN_PURPOSES", "] as const")
+    if not canonical or not explicit:
+        fail("packages/shared/consent.ts: could not read CONSENT_PURPOSES / EXPLICIT_OPT_IN_PURPOSES")
+        return
+
+    natives = (
+        ("ios", SDK_PKG / "ios" / "Sources" / "AetherSDK" / "Aether.swift",
+         "canonicalConsentPurposes: [String] = [", "explicitOptInPurposes: [String] = [", "]"),
+        ("android", SDK_PKG / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt",
+         "canonicalConsentPurposes: List<String> = listOf(", "explicitOptInPurposes: List<String> = listOf(", ")"),
+    )
+    for label, path, canon_marker, explicit_marker, end in natives:
+        if not path.exists():
+            fail(f"{label}: {path.relative_to(ROOT)} not found for consent purpose parity")
+            continue
+        text = path.read_text(encoding="utf-8")
+        got_canon = _quoted_list(text, canon_marker, end)
+        got_explicit = _quoted_list(text, explicit_marker, end)
+        if got_canon != canonical:
+            fail(f"{label}: canonicalConsentPurposes {got_canon} != shared CONSENT_PURPOSES {canonical}")
+        if got_explicit != explicit:
+            fail(f"{label}: explicitOptInPurposes {got_explicit} != shared EXPLICIT_OPT_IN_PURPOSES {explicit}")
+
+    bridge = SDK_PKG / "react-native" / "src" / "bridge.ts"
+    if bridge.exists():
+        grant_all = _quoted_list(
+            bridge.read_text(encoding="utf-8"),
+            "export const GRANT_ALL_PURPOSES: readonly ConsentPurpose[] = [",
+            "]",
+        )
+        expected = [p for p in canonical if p not in explicit]
+        if grant_all != expected:
+            fail(f"react-native: GRANT_ALL_PURPOSES {grant_all} != canonical minus explicit {expected}")
+
+
+def _check_native_requests_declare_site() -> None:
+    """Every native request that carries the key must also declare the site.
+
+    A publishable key is refused on any request that declares no site, so a
+    new native call that sets Authorization without X-Aether-Site works with a
+    secret key and silently fails for every app onboarded with a publishable
+    one. The header is set by the setAetherSite helper next to Authorization.
+    """
+    import re
+
+    for label, base, ext in (
+        ("ios", SDK_PKG / "ios" / "Sources", ".swift"),
+        ("android", SDK_PKG / "android" / "src" / "main", ".kt"),
+    ):
+        for path in sorted(base.rglob(f"*{ext}")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for i, line in enumerate(lines):
+                if not re.search(r'"Authorization"', line):
+                    continue
+                window = "\n".join(lines[max(0, i - 3): i + 4])
+                if "setAetherSite(" not in window:
+                    fail(
+                        f"{label}: {path.relative_to(ROOT)}:{i + 1} sets Authorization "
+                        "without setAetherSite (publishable keys are refused without X-Aether-Site)"
+                    )
+
+
 def _report() -> int:
     if ERRORS:
         print("SDK runtime parity validation FAILED:")
@@ -220,7 +317,7 @@ def _report() -> int:
             "See docs/reference/source-of-truth/SDK_RUNTIME_PARITY.md."
         )
         return 1
-    print("SDK runtime parity validation OK (observe / manifest-verify / batch-health / native durability present).")
+    print("SDK runtime parity validation OK (observe / manifest-verify / batch-health / native durability / consent purposes / site declaration present).")
     return 0
 
 
