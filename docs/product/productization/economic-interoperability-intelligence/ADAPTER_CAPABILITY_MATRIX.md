@@ -38,8 +38,9 @@ environment. The machine-readable, source-generated matrix lives at
 | `gmx` | `CREDENTIAL_WAITING` | Public on-chain read path (subgraph GraphQL, timestamp pagination); no private API/WS (declared) | Subgraph endpoint + staging validation |
 | `drift` | `CREDENTIAL_WAITING` | REST read path (trades/funding) by authority wallet; WebSocket declared not-supported | Tenant wallet link + staging validation |
 | `polymarket` | `CREDENTIAL_WAITING` | Event contracts: Data API v2 trades and positions by public wallet (cursor pagination); outcome token = market, outcome = side; no WebSocket | Tenant wallet link + staging validation (no credential) |
+| `kalshi` | `CREDENTIAL_WAITING` | Event contracts: Trade API v2 portfolio fills and market positions with the member's read-only key (RSA-PSS signed requests, cursor pagination); `<ticker>:<yes|no>` = market, outcome = side; no WebSocket | Member read-only key via key link + staging validation |
 
-All five venue adapters implement the conformance-tested `DerivativesAdapter`
+All six venue adapters implement the conformance-tested `DerivativesAdapter`
 interface, pass `run_conformance` + `run_certification` with zero failures,
 reject mutating scopes, use exact `Decimal` arithmetic, and yield nothing until
 a REST/WS client is injected (honest credential-waiting). Each adapter names

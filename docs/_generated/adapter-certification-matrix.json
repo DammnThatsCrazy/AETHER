@@ -444,6 +444,41 @@
       ],
       "unsupported": []
     },
+    "derivatives:kalshi": {
+      "adapter": "kalshi",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "position"
+      ],
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "permissions": [],
+      "provider": "kalshi",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed"
+      ],
+      "unsupported": []
+    },
     "derivatives:polymarket": {
       "adapter": "polymarket",
       "adapter_version": "0.1.0",
@@ -1060,18 +1095,18 @@
   "summary": {
     "by_domain": {
       "communications": 8,
-      "derivatives": 5,
+      "derivatives": 6,
       "interop": 7,
       "payments": 5,
       "prediction_market": 2,
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 29
+      "credential_waiting": 30
     },
-    "first_release": 29,
+    "first_release": 30,
     "import_errors": {},
-    "total": 29
+    "total": 30
   },
   "version": "0.1.0-alpha.0"
 }

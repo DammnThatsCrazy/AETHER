@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
-  "services/api/shared/certification/registry.py": "sha256:d7c2255829f0ccd7e5551e8a3590222e7bc6008e63046f51d8581c0d47b4300f"
+  "services/api/shared/certification/registry.py": "sha256:df889d283e63a520e0e3037fb39afcb9821903f9048b99d5a2d6a5084bfea795"
 ---
 
 # Credential & Secret Reference
@@ -44,11 +44,15 @@ Polling-capable providers (Coinbase, MoonPay, Bridge) additionally need a
 verified polling endpoint + read credential before `_fetch_poll_records` returns
 data. No secret ⇒ the provider stays observation-only via SDK signals.
 
-### Derivatives (5) — read-only
-Hyperliquid, dYdX, GMX, Drift each require a `read_only_api_key`. The
-Polymarket event-contract adapter needs no credential: it reads public wallet
-activity, and the wallet comes from a verified tenant venue account link
-(`/v1/derivatives/account-links`, flag `AETHER_VENUE_ACCOUNT_LINKS_ENABLED`). The read-only
+### Derivatives (6) — read-only
+Hyperliquid, dYdX, GMX, Drift and Polymarket need no credential: they read
+public account activity by wallet address, and the wallet comes from a
+verified tenant venue account link (`/v1/derivatives/account-links`, flag
+`AETHER_VENUE_ACCOUNT_LINKS_ENABLED`). Kalshi needs the member's own read-only
+key (key id plus PEM private key), supplied per subject through
+`POST /v1/derivatives/account-links/credential` and stored by the credential
+broker under that link's connection; it is the member's credential, not an
+Aether environment secret. The read-only
 authority is enforced: an adapter rejects `authority_type: trade` and any
 mutating scope (`orders:write`, `withdraw`). Never provision a key with trade or
 withdraw scope.

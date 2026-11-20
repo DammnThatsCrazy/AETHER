@@ -7,7 +7,7 @@ Two registries, one canonical interface (:class:`DerivativesAdapter`):
   waiting readiness of the real venues is derived from their own honest
   descriptors rather than being asserted here.
 * ``VENUE_ADAPTERS`` — the real read-only venue adapters (Hyperliquid, dYdX,
-  GMX, Drift, Polymarket). Each is CREDENTIAL_WAITING: production-shaped, offline-safe, and
+  GMX, Drift, Polymarket, Kalshi). Each is CREDENTIAL_WAITING: production-shaped, offline-safe, and
   awaiting only a read-only credential/endpoint to observe live data.
 
 No adapter may hold anything beyond read-only credential authority; the
@@ -53,10 +53,12 @@ def _register_defaults() -> None:
     from value.derivatives.adapters.dydx import DydxAdapter
     from value.derivatives.adapters.gmx import GmxAdapter
     from value.derivatives.adapters.hyperliquid import HyperliquidAdapter
+    from value.derivatives.adapters.kalshi import KalshiAdapter
     from value.derivatives.adapters.polymarket import PolymarketAdapter
 
     for adapter in (
         HyperliquidAdapter(), DydxAdapter(), GmxAdapter(), DriftAdapter(), PolymarketAdapter(),
+        KalshiAdapter(),
     ):
         register_venue_adapter(adapter)
 

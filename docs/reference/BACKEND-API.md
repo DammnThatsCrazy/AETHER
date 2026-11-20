@@ -38,11 +38,11 @@ source_hashes:
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:47c5efad9f19e50367a0c6f9d01fb21fbeb611999c607f43868ddd91f1dc008a"
-  "services/api/intelligence/": "sha256:25918f45684cffffc679bd82c6c1c5c920625b263222752e62ebf903d1cad35a"
+  "services/api/intelligence/": "sha256:776d378cd5b524bfd7885512a9e30d0f37205054cd055fd50dcdd353106050ef"
   "services/api/journeys/": "sha256:c3e647829f3988c929ace6946d834c3d10e3a7ec5002b832ce08064c62297876"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:ea8bbe46e8fbd077a442655d8e2d5344d0510b0cf4335d7587b0cc5646de07ea"
+  "services/api/value/": "sha256:12e059ab2cf7d14737bfd76d3a315725b70b8eceddab48fd1ad28d5f9bf30c2e"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5568,7 +5568,9 @@ only after the Rights Authority admits them under that grant. Each link
 response carries `connection_id`, `source_id`, `grant_id` and
 `source_relationship`; a key is never returned. Wallet venues (Hyperliquid,
 Polymarket, dYdX, GMX, Drift) accept only wallet and tenant-push links
-(`400` `venue_does_not_accept_read_only_api_key` otherwise). The reserved
+(`400` `venue_does_not_accept_read_only_api_key` otherwise); Kalshi accepts
+key and tenant-push links (`api_key` = key id, `api_secret` = the PEM private
+key; requests are signed per Kalshi's RSA-PSS scheme). The reserved
 `olympus` scope cannot hold a link (`400` `olympus_scope_not_linkable`).
 
 | Method | Path | Permission | Summary |
@@ -5588,7 +5590,7 @@ provision the Olympus market sources that fill the registry:
 
 | Method | Path | Permission | Summary |
 |---|---|---|---|
-| GET | `/v1/admin/kyber/derivatives/runtime/market-sources` | Kyber operator | Olympus market-reference source per supported venue (Hyperliquid, dYdX, Polymarket), or `null` when none is provisioned or its grant was revoked |
+| GET | `/v1/admin/kyber/derivatives/runtime/market-sources` | Kyber operator | Olympus market-reference source per supported venue (Hyperliquid, dYdX, Polymarket, Kalshi), or `null` when none is provisioned or its grant was revoked |
 | POST | `/v1/admin/kyber/derivatives/runtime/market-sources/{venue}` | Kyber operator | Provision the venue's source under the reserved `olympus` scope: a connection for `<venue>.markets.market_data` and a `public_reference` grant of class `olympus_provider`. Idempotent; `400` `market_reference_not_supported` for venues without a public market fetcher |
 
 DSR erasure revokes each of the subject's link grants, deletes their

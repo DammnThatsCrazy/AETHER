@@ -80,10 +80,17 @@ def default_adapter_factory(venue: str, account_ref: str, credential: Any = None
 
     from value.derivatives.adapters import VENUE_ADAPTERS
 
+    import inspect
+
     adapter_cls = type(VENUE_ADAPTERS[venue])
-    return adapter_cls(
-        http_transport=httpx.AsyncHTTPTransport(), account_ref=account_ref, max_pages=SYNC_MAX_PAGES,
-    )
+    kwargs: dict[str, Any] = {
+        "http_transport": httpx.AsyncHTTPTransport(), "account_ref": account_ref, "max_pages": SYNC_MAX_PAGES,
+    }
+    if "credential" in inspect.signature(adapter_cls.__init__).parameters:
+        kwargs["credential"] = credential
+    elif credential is not None:
+        raise ValueError(f"{venue} adapter takes no credential")
+    return adapter_cls(**kwargs)
 
 
 class VenueAccountSync:

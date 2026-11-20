@@ -86,6 +86,7 @@ VENUE_SOURCE_PROFILES: dict[str, VenueSourceProfile] = {
         VenueSourceProfile("dydx", "dYdX v4", "fills_read", (WALLET_ACCESS,)),
         VenueSourceProfile("gmx", "GMX", "positions_read", (WALLET_ACCESS,)),
         VenueSourceProfile("drift", "Drift", "fills_read", (WALLET_ACCESS,)),
+        VenueSourceProfile("kalshi", "Kalshi", "portfolio_read", (API_KEY_ACCESS,)),
     )
 }
 

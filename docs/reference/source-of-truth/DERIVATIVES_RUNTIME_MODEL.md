@@ -79,7 +79,7 @@ Orders, fills and positions reference the global market registry
 (`derivatives_markets`, with its venue, deployment and instrument rows). That
 registry is Olympus reference data, filled by `value/derivatives/market_reference.py`
 from each venue's public market endpoint (Hyperliquid `meta`, dYdX
-`perpetualMarkets`, Polymarket Gamma markets by outcome token) under the
+`perpetualMarkets`, Polymarket Gamma markets by outcome token, Kalshi markets by ticker) under the
 reserved `olympus` scope: a Kyber operator provisions one source per venue
 (`POST /v1/admin/kyber/derivatives/runtime/market-sources/{venue}`), each raw
 market record is admitted under that source's `public_reference` grant, and

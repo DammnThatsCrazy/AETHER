@@ -33,7 +33,7 @@ source_hashes:
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
   "config/storage_policies.yaml": "sha256:58e2ed6c49220a7e31bec5fd6dcf39a86899b17a268eb66d3b0293ab3d7d1b81"
-  "docs/_generated/adapter-certification-matrix.json": "sha256:d3973ff39e724aac7e0f8ff414f4a13374633d5227eacb53658eb135a051129c"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:4eea5d0a9bdac2ee03f5ec94d5a75364fc088912c49edcc86c6bd97421041e59"
   "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
   "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
@@ -234,7 +234,8 @@ conservative relative to its code and tests (§4).
   staging run has been recorded. Nothing writes the global
   `derivatives_markets` reference registry yet, and `derivatives_fills`
   references it, so synced fills need market reference rows before PostgreSQL
-  accepts them. Kalshi account data, live polling, and order
+  accepts them. Kalshi account data is read with a member's read-only key
+  (signed requests) through a key link; live market polling and order
   execution are unsupported.
 - **Activation:** `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` and
   `AETHER_PROPAGATION_LENS_ENABLED` default off in settings and are turned on
@@ -257,11 +258,11 @@ conservative relative to its code and tests (§4).
 
 - **Implementation evidence:** generated matrix at
   `docs/_generated/adapter-certification-matrix.json`.
-- **Current state:** 29 first-release providers on development, all
-  `credential_waiting`, zero live. Domains: communications 8, derivatives 5
-  (all five venue adapters read account activity by public wallet, so they
-  need a tenant wallet link rather than a credential and declare no required
-  credential), interop 7, payments 5,
+- **Current state:** 30 first-release providers on development, all
+  `credential_waiting`, zero live. Domains: communications 8, derivatives 6
+  (five venue adapters read account activity by public wallet and need a
+  tenant wallet link rather than a credential; the Kalshi account adapter
+  needs the member's read-only key), interop 7, payments 5,
   prediction_market 2, stablecoin_chain 2. No import errors.
 - **Rule:** `credential_waiting` is not production-ready. The generated matrix is
   authoritative for counts and per-provider state; the guide no longer hardcodes

@@ -155,12 +155,44 @@ async def _polymarket(client: Any, wanted: set[str], deployment: str) -> list[Ma
     return facts
 
 
+async def _kalshi(client: Any, wanted: set[str], deployment: str) -> list[MarketFact]:
+    """Kalshi markets are public; each ticker yields a ``yes`` and a ``no`` side."""
+    tickers = sorted({m.rsplit(":", 1)[0] for m in wanted if ":" in m})
+    if not tickers:
+        return []
+    response = await client.get(
+        "https://api.elections.kalshi.com/trade-api/v2/markets",
+        params={"tickers": ",".join(tickers), "limit": len(tickers)},
+    )
+    response.raise_for_status()
+    facts = []
+    for market in (response.json() or {}).get("markets") or []:
+        ticker = str(market.get("ticker") or "")
+        for side in ("yes", "no"):
+            venue_market_id = f"{ticker}:{side}"
+            if venue_market_id not in wanted:
+                continue
+            status = str(market.get("status") or "unknown").lower()
+            facts.append(MarketFact(
+                venue="kalshi", deployment=deployment, venue_market_id=venue_market_id,
+                instrument_type="event_contract", underlying_asset_id=ticker,
+                quote_asset_id="USD", settlement_asset_id="USD", contract_type="binary_outcome",
+                inverse_or_linear="linear", price_precision=Decimal("0.01"),
+                size_precision=Decimal("1"), status=status,
+                expiry_at=market.get("close_time") or market.get("expiration_time") or None,
+                first_seen_at=market.get("open_time") or None,
+                raw=dict(market),
+            ))
+    return facts
+
+
 MarketFetcher = Callable[[Any, set[str], str], Awaitable[list[MarketFact]]]
 
 MARKET_FETCHERS: dict[str, MarketFetcher] = {
     "hyperliquid": _hyperliquid,
     "dydx": _dydx,
     "polymarket": _polymarket,
+    "kalshi": _kalshi,
 }
 
 _VENUE_TYPES = {"polymarket": "prediction_market"}
