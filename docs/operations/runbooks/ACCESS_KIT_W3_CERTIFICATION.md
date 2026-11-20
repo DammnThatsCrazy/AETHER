@@ -53,8 +53,8 @@ recorded by hand.
    `AetherStagingDeploy` policy updated to the reviewed manifest, then
    `customer_services.access-mcp` with `repository: true`, the `image_digest`,
    `enabled: true` and `oauth: true` (and `dcr: true` for host
-   self-registration). The lifecycle carries that entry into every wake and
-   sleep plan.
+   self-registration). Every staging planner (lifecycle wake and sleep,
+   pilot plan, remote CI plan) carries that entry.
 3. Two synthetic tenants exist in staging (created by the staging admin
    bootstrap), each with a read API key. Tenant A also has an admin API key,
    used only for the audit/usage reconciliation route, which requires `admin`. Tenant A also has a site and a

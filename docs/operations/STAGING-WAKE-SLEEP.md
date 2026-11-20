@@ -124,9 +124,14 @@ matrix, under `profiles.staging.customer_services.access-mcp` in
 
 Enabling it is ordered, because the staging account owns its own
 `aether-access-mcp` repository. Every step is a reviewed change to
-`profiles.staging.customer_services.access-mcp`, which the lifecycle passes to
-each wake and sleep plan (`staging_customer_services.py --promote-inputs`), so
-the applied MCP state survives every wake and sleep:
+`profiles.staging.customer_services.access-mcp`. Every staging planner reads
+that entry: the lifecycle wake and sleep plans and the `pilot-staging.yml` plan
+pass it as workflow inputs (`staging_customer_services.py --promote-inputs`),
+and the `infrastructure.yml` remote CI plan passes it as Terraform variables
+(`--terraform-vars`). The applied MCP state therefore survives every wake, sleep
+and pilot plan. A direct `terraform-promote.yml` staging dispatch must pass the
+same values (print them with `--promote-inputs`), or the agreement precondition
+fails the plan:
 
 1. Set `repository: true` and plan and apply staging (which passes
    `enable_access_mcp_repository=true`). *Declared in the runtime matrix; the
