@@ -122,9 +122,12 @@ Runs require the `derivatives.enabled` entitlement and are metered
 population, report `stale` when either changes, can be recomputed, and are
 erased with any subject they name.
 
-- Fill the reserved Social360 `social_contagion` / `propagation` and Risk360
-  `financial_contagion` slots from propagation runs once those providers are
-  live; today the computation is served by its own route.
+- Social360 `social_contagion` and Risk360 `financial_contagion` are not
+  reserved for this lens: they already carry risk transmission along observed
+  follow paths and transfer paths linked to risk evidence. Propagation runs are
+  adoption diffusion, a different claim, so they are not written into those
+  slots. They reach Profile360 and Social360 through the propagation overlay
+  lens in `lens-registry.json`, read from `/v1/social360/propagation/runs`.
 - A tenant-linked staging rehearsal (account links on, propagation lens on).
 - Recompute saved runs automatically on identity merges and relationship
   corrections (today a saved run reports itself stale and is recomputed on
