@@ -1304,12 +1304,13 @@ run "access_mcp_origin_accepts_dns_ipv4_and_valid_ports" {
       "https://console.example.test:65535",
       "https://192.0.2.10:1",
     ]
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = false
-    log_retention_days  = 3
+    enable_access_mcp_repository = true
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
   }
 
   assert {
@@ -1323,7 +1324,8 @@ run "aether_app_url_with_trailing_slash_is_rejected" {
   command = plan
 
   variables {
-    aether_app_url = "https://app.ci.aether.invalid/"
+    aether_app_url               = "https://app.ci.aether.invalid/"
+    enable_access_mcp_repository = true
   }
 
   expect_failures = [var.aether_app_url]
