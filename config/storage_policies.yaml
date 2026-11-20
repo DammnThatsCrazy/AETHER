@@ -1109,6 +1109,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Tenant subject <-> read-only venue account links. Personal data (wallet
+  # address / credential reference tied to a subject); revocation is a status
+  # change and DSR erasure hard-deletes via delete_by_principal.
+  - resource_type: venue_account_links
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: false
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   - resource_type: overage_invoices
     authoritative_store: postgres
     metadata_store: postgres

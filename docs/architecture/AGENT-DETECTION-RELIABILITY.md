@@ -6,14 +6,15 @@ visibility: I
 audience: [architect, dev-senior, exec]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/agent_verification.py, services/api/journeys/traffic/web_bot_auth.py, services/api/journeys/traffic/forwarded_evidence.py, services/api/journeys/traffic/protocol_identity.py, packages/sdk/server/src/protocol-identity.ts, packages/sdk/python/aether_agentic/protocol_identity.py, packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift, packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt, config/release/feature_flags/staging.yaml, config/release/feature_flags/production.yaml, packages/sdk/server/src/request-evidence.ts, packages/sdk/python/aether_agentic/request_evidence.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/metrics.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/silver_adapters.py, packages/sdk/web/src/utils/index.ts, packages/sdk/web/src/types.ts, packages/sdk/server/src/agentic.ts, services/api/actions/agent/attestation.py, services/api/actions/agent_lineage/engine.py, services/api/actions/agent_lineage/evidence.py, services/api/config/settings.py]
+source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/agent_verification.py, services/api/journeys/traffic/web_bot_auth.py, services/api/journeys/traffic/forwarded_evidence.py, services/api/journeys/traffic/protocol_identity.py, packages/sdk/server/src/protocol-identity.ts, packages/sdk/python/aether_agentic/protocol_identity.py, packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift, packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt, config/release/feature_flags/staging.yaml, config/release/feature_flags/production.yaml, infra/aws/terraform/modules/ecs/main.tf, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/actions/agent/agent360_provider.py, packages/sdk/server/src/request-evidence.ts, packages/sdk/python/aether_agentic/request_evidence.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/metrics.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/silver_adapters.py, packages/sdk/web/src/utils/index.ts, packages/sdk/web/src/types.ts, packages/sdk/server/src/agentic.ts, services/api/actions/agent/attestation.py, services/api/actions/agent_lineage/engine.py, services/api/actions/agent_lineage/evidence.py, services/api/config/settings.py]
 related: [operations/agent-layer-production, plans/public-agent-registry]
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "config/release/feature_flags/production.yaml": "sha256:933ab695bd60d8a2af0d4602cfdb31a74036a86194895a2830521bb96051dd1f"
-  "config/release/feature_flags/staging.yaml": "sha256:47d94f289eec1685f86df6fd99f822a17ba573741b20c4297b4b181cc79808c6"
+  "config/release/feature_flags/production.yaml": "sha256:11012b061ec3f670dcacf00daf813331fd05f69f69a723f6b991fd4e25aa668f"
+  "config/release/feature_flags/staging.yaml": "sha256:6098ad6d5f99b2f2e9678ce4ca2ee2e956967e553e0af5b9a55f4e4df78cf2c8"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:e5ab231da8aac54b09d595f9068b49265f4bbe8fa27d26a44def030be2216d7a"
   "packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt": "sha256:e4b92160a166df33266838a65d5b2fb54627362f1f408ba0b866696aede9d21e"
   "packages/sdk/ios/Sources/AetherSDK/AutomationSignals.swift": "sha256:3ec9083a9cc6588e755cd53e04f9e6ccc5e3bc2f39a9536c4f36e27c9fb02e58"
   "packages/sdk/python/aether_agentic/protocol_identity.py": "sha256:a0a54e7ebf79f939042d6caacb7f1043c8de4bf812ba8745cf5f5676f42bbdb0"
@@ -23,12 +24,14 @@ source_hashes:
   "packages/sdk/server/src/request-evidence.ts": "sha256:0c6673b18f400d3e73e36d004650d8a915e38652839aab168a638263a20fcdf9"
   "packages/sdk/web/src/types.ts": "sha256:0b12cb075729098df014e453361ce3d42c47b016db643350bc8a44dfd03344a9"
   "packages/sdk/web/src/utils/index.ts": "sha256:69d575c70eba14c95cd7f0b82659bf7db7c8c3151dbb63d05fefcb4b137412ce"
+  "services/api/actions/agent/agent360_provider.py": "sha256:946143c4503b65def6e61157ca2776a63fd1d6a1cbd06473ac7373d704bcae49"
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
-  "services/api/actions/agent_lineage/engine.py": "sha256:7892db12bd711f33c57ab75829afd018a9866c610856249a0d1cf8b135fac1c5"
+  "services/api/actions/agent_lineage/engine.py": "sha256:da90a532b17db5e7359823c15ad44b7c45583038c5f40cf8edbcf6eda2fc3f04"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
-  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
+  "services/api/config/settings.py": "sha256:80931a86ffe4e0b07546770e71e69ff05a1007779bcc8e2033b63c7e3a466ae2"
   "services/api/ingestion/ingestion/batch.py": "sha256:1fa8050dea04b2d5a4ed95048f6ca50f705e56c03f12a48e1d95666edea2a711"
   "services/api/ingestion/silver/dispatcher.py": "sha256:f1ac1e82dd95a777fdc182b5f5c1451548c9cf3208b5bd0651d99f299910a4fb"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
   "services/api/ingestion/silver/projectors/touchpoint_projector.py": "sha256:e2e8bd16bdb6cb83085176757d5c1e9fb41e413743cf5f4b1a4b72f5d095ba91"
   "services/api/journeys/measurement/engine/attribution_engine.py": "sha256:a4d7048ab540db38e948daf17c411ec610887107934d42253d0be9a2c7f252c9"
   "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:5cb88fcdb807f9dc52e1cf6e3966d81f6b9f4509a5cdc1517300bed6ce1179df"
@@ -250,8 +253,12 @@ signature and above user-agent claims.
 Known client names map to providers (Claude → anthropic, ChatGPT → openai,
 Cursor, Gemini, Copilot, Perplexity). The hashed OAuth subject is recorded as
 `principal_subject_hash`: a pseudonymous reference to the user who authorized
-the client, available for principal binding; it is not yet wired into the
-lineage resolver. Agent Card signatures are verified by the customer's server
+the client. The agent execution projector turns it into a principal *claim*
+(`reported_principal_namespace = "mcp_oauth:<issuer>"`,
+`reported_principal_ref = <hash>`) when the producer reported no principal. As
+with every claim, the lineage resolver links a human only through a claim
+binding for that (namespace, hash), for example one the tenant's identity
+resolution writes by hashing its own user ids the same way. Agent Card signatures are verified by the customer's server
 (it holds the card and fetches the signer's keys); Aether does not fetch keys.
 
 ### 4.4 Mobile automation evidence
@@ -278,9 +285,21 @@ states that it makes no compile claim); their unit tests run in the native CI.
 `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED` is ON in
 `config/release/feature_flags/staging.yaml` (also in `task_environment`, which
 the ECS module applies) and in `production.yaml`'s `on` list. The code default in
-`settings.py` stays off for local and test environments. Production's manifest
-declares intended state; as for its other default-off flags, the production task
-environment must set it.
+`settings.py` stays off for local and test environments. For every non-staging
+profile the ECS module sets it on the API and worker tasks
+(`local.agent_registry_runtime_environment`, controlled by the root variable
+`enable_agent_deployment_registry`, default `true`); staging gets it from the
+manifest only, so it is never set twice.
+
+### 4.6 Execution verification in Agent 360
+
+Lineage nodes record which verification states their own facts reached
+(`execution_verification_states`, `strongest_execution_verification`,
+`has_source_reported_facts`). Agent 360's lineage section shows them as
+`executionVerification.label`: `signed` (attested), `registry_validated`
+(deployment verified), or `source_reported` (unsigned). Any unsigned facts add a
+section warning telling the operator to sign them with an attestation key, so
+unsigned events never read as verified.
 
 ## 5. What we can claim now
 
@@ -303,11 +322,8 @@ environment must set it.
 
 | Gap | Change | Reaches |
 |---|---|---|
-| Unsigned agent events in Agent 360 | Show unsigned agent events as `source_reported` in Agent 360 now that the registry is on | Clearer high vs. medium split |
-| Production task environment | Set `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true` in the production task environment (the manifest declares it) | High for instrumented agents in production |
-| MCP principal binding | Feed `principal_subject_hash` into the lineage resolver as a principal claim | Human ↔ agent links from MCP OAuth |
 | More Web Bot Auth signers | Add signers to `refresh_web_bot_auth_directories.py` as they publish key directories | High per signer |
-| Mobile app attestation | App Attest / Play Integrity verdicts as device-integrity evidence | Medium–high |
+| Mobile app attestation | App Attest / Play Integrity verdicts as device-integrity evidence. Needs owner inputs before it can be built and verified: the Apple Team ID and bundle IDs (App Attest), a Google Cloud project with the Play Integrity API enabled and a service account for `decodeIntegrityToken`, a server-issued nonce flow, and device / native CI to test against | Medium–high |
 | Providers without published ranges | Add providers to `refresh_agent_provider_ranges.py` as they publish ranges; reverse-DNS verification where documented | High per provider |
 
 Detection with no SDK, server integration, webhook or connector installed is a

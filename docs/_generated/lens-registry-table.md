@@ -31,6 +31,7 @@ Composable viewing frames a projection applies over canonical Aether truth — o
 | `payment` | overlay | standard | payment | `entity`, `source` | `compare`, `relative`, `window` |  |
 | `policy` | overlay | standard | policy | `campaign`, `entity`, `population`, `source` | `as_of`, `relative`, `window` |  |
 | `population` | overlay | standard | population | `cluster`, `entity`, `population` | `relative`, `window` |  |
+| `propagation` | overlay | standard | propagation | `entity`, `episode`, `population`, `relationship` | `relative`, `window` |  |
 | `relationship` | overlay | standard | relationship | `entity`, `relationship` | `as_of`, `relative`, `window` |  |
 | `risk` | overlay | standard | risk | `cluster`, `entity`, `population`, `relationship` | `as_of`, `relative`, `window` |  |
 | `security` | overlay | standard | security | `deployment`, `entity`, `infrastructure` | `as_of`, `relative`, `window` |  |

@@ -30,19 +30,19 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  "services/api/actions/": "sha256:91cfc3c62393b72637056fc1608f98044dbd48be04e598c2566c8c56c0ca0f63"
+  "services/api/actions/": "sha256:f56cc32e5aea69b1f386c121eb3881952540a1cd92ce65c94bd4d77cf7410ce6"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
-  "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
+  "services/api/governance/": "sha256:337d8f8574864a1099f943e8942629570672fea3bb7db229c30ff9fa243b8a83"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:77026609f89839bf1d863510ff3cd0b2e4c979b3b5851d5e27bdffbe35691aa5"
-  "services/api/intelligence/": "sha256:e8f609bd9c3c3de3b5fadc98d9d981f1fedabeb9bc9d4f1c8f1d2c3087483540"
-  "services/api/journeys/": "sha256:ceca43e0daa9da4b8f410ca680d82a3f9f221d430fe61487f926da490fc6f6bf"
+  "services/api/ingestion/": "sha256:5650d1d6b4562540ecad8db6749d474e65ffdba6ca0f64d8eb34e25cfc682fc3"
+  "services/api/intelligence/": "sha256:d3743b13cc80df4fcfbc2bb8fc3056ee880ab1e7a0c768108d252a22a3903913"
+  "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:25b4f1a79b57e5356a1e8098d988fcad4626960892101acc4ad0cef07c9ee7c0"
-  "services/api/value/": "sha256:74173d9d940d0c8c8112bb18c742d299a420f8f7fb1a500fb0da24718a17293a"
+  "services/api/value/": "sha256:1c5aceacc350054ca9f1cdb05861ecbc923b5ec37640af70a7c586d1d7421b70"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5527,6 +5527,40 @@ Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venu
 | POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1] as strings). Stores nothing (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
 | POST | `/v1/prediction-markets/observations` | `write` | Normalize and store the observation, tenant-scoped and immutable. Resubmitting the market's latest observation is an idempotent retry (`created: false`); any other content is a new occurrence, including a quote that returns to an earlier value (0.40 → 0.60 → 0.40 stores three rows), so latest and `as_of` reads follow the observed sequence. `received_at` is strictly increasing per market |
 | GET | `/v1/prediction-markets/markets/{venue}/{market_ref}` | `read` | Latest stored observation for the tenant, with server-assigned `received_at`. Optional `as_of` (timezone-aware ISO-8601) returns the latest observation received at or before that instant. `404` when none exists |
+
+The market normalizers behind these routes now live in the derivatives plane
+(`value/derivatives/event_contracts.py`), where event contracts are
+derivatives instruments: a condition with outcome tokens, the outcome bought as
+the position side, and a venue-reported resolution state. Kalshi records are
+read from the current `last_price_dollars` / `volume_fp` fields, with the older
+integer-cent `last_price` still accepted.
+
+## Venue account links
+
+Gated by `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` (default off; `503` while off).
+A link binds one tenant subject to one read-only venue account and scopes that
+account's fills and positions to the tenant. Every link needs a consent
+receipt; no secret is stored.
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/derivatives/account-links` | `derivatives:read` | Active links for the tenant; filter by `venue` or `subject_id`; `include_revoked=true` adds revoked rows |
+| POST | `/v1/derivatives/account-links/wallet` | `derivatives:connect` | Link a wallet. `proof_evidence_id` must be active `wallet_ownership_verified` evidence of this tenant whose address, chain namespace, and bound subject match the request; otherwise `400` with a machine-readable reason (`wallet_proof_subject_mismatch`, `wallet_proof_address_mismatch`, ...) |
+| POST | `/v1/derivatives/account-links/tenant-push` | `derivatives:connect` | Record that the tenant already holds this account's activity for its own subject |
+| POST | `/v1/derivatives/account-links/{link_id}/revoke` | `derivatives:connect` | Revoke a link; later propagation runs exclude the account. `404` for another tenant's link |
+
+## Propagation & Diffusion lens
+
+Gated by `AETHER_PROPAGATION_LENS_ENABLED` (default off; `503` while off).
+Requires `analytics` and `derivatives:read`. Read-only: computes over the
+caller's own linked subjects and never writes graph truth. Responses follow
+`packages/shared/contracts/propagation-run.schema.json`.
+
+| Method | Path | Summary |
+|---|---|---|
+| POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` adds a bounded read-only pull of public-wallet venues (Hyperliquid, Polymarket) for linked accounts |
+| POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
+
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
 

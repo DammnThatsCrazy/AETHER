@@ -42,11 +42,11 @@ source_hashes:
   "services/api/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:e691acb7903a9758863e19c409d6e03847f40402191b557b39d68e7aa6f0d324"
   "services/api/alembic/versions/20260906_rcp_simulation.py": "sha256:86f635d8f06d758f8fc42b09a7ac4f853f8983483eff275e9f1190fe5c8dbaf4"
   "services/api/alembic/versions/20260906_rcp_source_authority.py": "sha256:2d01381af9228c26b5ed4c24c3ff9cc84af6d08717e771460c9a086491cca760"
-  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
+  "services/api/config/settings.py": "sha256:80931a86ffe4e0b07546770e71e69ff05a1007779bcc8e2033b63c7e3a466ae2"
   "services/api/connectors/managed_integrations/": "sha256:ce5f319f27faa25eced6bedd896c1f40d4b99581383c0e7b5ea30602e7dde195"
   "services/api/governance/kyber/access/": "sha256:23b63f5b1882f5b966c9e23f638fdcd140e4271c38241e58ecfbfb5d53f76e25"
   "services/api/ingestion/sdk_distribution/control_plane.py": "sha256:d49325a1264f40d124a17722f1742b6a08a8342cd93b9ff0b3d0bcf22b73d17b"
-  "services/api/main.py": "sha256:a70c70ae4201523e1162a5b93f95f5a8785f5d9f1a214d8fbd0d0be4f45ce8e3"
+  "services/api/main.py": "sha256:4d724bbe252cea78b579a428f5cb934f4fd61ba11510f205c2f604a2e6e38f56"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)

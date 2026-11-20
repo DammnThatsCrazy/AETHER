@@ -21,8 +21,8 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:9a66f5308e8c08ac85cc1edc084e5062008564eb5ed90cde2bb49f49cbdcf8ee"
-  "services/api/main.py": "sha256:a70c70ae4201523e1162a5b93f95f5a8785f5d9f1a214d8fbd0d0be4f45ce8e3"
+  "services/api/config/settings.py": "sha256:80931a86ffe4e0b07546770e71e69ff05a1007779bcc8e2033b63c7e3a466ae2"
+  "services/api/main.py": "sha256:4d724bbe252cea78b579a428f5cb934f4fd61ba11510f205c2f604a2e6e38f56"
 ---
 
 # Target Architecture

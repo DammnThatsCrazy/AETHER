@@ -40,7 +40,7 @@ reviewed_source_commits:
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:0d039cd6c9a8b9a9acdbdf4f39f935fa22b6126929f3e0f6661891982d5dd022"
+  "config/storage_policies.yaml": "sha256:79b44accf707f668710c02c75a09580c977822c0e9daa2e539cdf5ec6f897b8a"
   "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
   "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
@@ -58,7 +58,7 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
+  "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/attribution_model_validation.py": "sha256:d2ea75981effed3f2aaba070ddcf29c9156acbab9a285a6601cb045a48774719"
@@ -186,6 +186,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
 | `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
 | `agent_deployment_identity_bindings` | `AgentDeploymentIdentityBindingRepository` | Explicit tenant-admin binding from source namespace/reference to a same-tenant canonical Agent; uniquely scoped by tenant + namespace + source reference |
+| `venue_account_links` | `VenueAccountLinkRepository` | Tenant subject to read-only venue account links (wallet proof, read-only key reference, OAuth reference, tenant push) with consent receipt and revocation state; no secret is stored; erased by the `venue_account_links` DSR plane |
 
 The risk evidence and intervention migrations index immutable tenant and subject
 expressions. Chronological repository reads cast the recorded JSON timestamp at

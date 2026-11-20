@@ -17,7 +17,7 @@ reviewed_source_commits:
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
   "services/api/intelligence/fraud_networks/": "sha256:d5e8c0a0e46b89c971588b052c48eb357e6187f5d10b5863f902b1a5d77a4240"
-  "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
+  "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
 ---
 
 # Fraud Network Intelligence

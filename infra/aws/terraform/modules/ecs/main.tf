@@ -376,6 +376,14 @@ locals {
     for flag in local.staging_identity_runtime_flags : { name = flag, value = "true" }
   ] : []
 
+  # The agent deployment registry (signed agent events, attestation-key
+  # registration; docs/architecture/AGENT-DETECTION-RELIABILITY.md). Staging
+  # already receives it through the manifest's task_environment above, so it is
+  # added here for every other profile only, never twice.
+  agent_registry_runtime_environment = (
+    var.deployment_profile != "staging" && var.enable_agent_deployment_registry
+  ) ? [{ name = "AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED", value = "true" }] : []
+
   # Binds runtime evidence (the staging identity proof capture answers 503
   # without it) to the image this revision runs. Delivery's cloned revisions
   # replace it with the digest they deliver, so both sources agree.
@@ -631,6 +639,7 @@ resource "aws_ecs_task_definition" "backend" {
         concat(
           local.kyber_runtime_environment,
           local.identity_runtime_environment,
+          local.agent_registry_runtime_environment,
           local.deployment_identity_environment,
           local.stripe_runtime_environment_with_urls,
           local.email_runtime_environment,
@@ -859,6 +868,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
       concat(
         local.kyber_runtime_environment,
         local.identity_runtime_environment,
+        local.agent_registry_runtime_environment,
         local.deployment_identity_environment,
         local.stripe_runtime_environment_with_urls,
         local.email_runtime_environment,

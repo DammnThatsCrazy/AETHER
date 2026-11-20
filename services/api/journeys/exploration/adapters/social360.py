@@ -8,6 +8,11 @@ its three registered overlay lenses — ``socialfi``, ``engagementfi`` and
 ``incentive``, ``source``, ``evidence``, ``path``, ``narrative``, ``entity``,
 ``time``).
 
+The fourth social overlay, ``propagation``, is not run through this adapter:
+its exposure -> adoption computation is served by
+``intelligence.propagation`` (``POST /v1/social360/propagation/runs``, gated by
+``AETHER_PROPAGATION_LENS_ENABLED``) and returns the PropagationRun contract.
+
 It mirrors :class:`ProjectionSurfaceAdapter <journeys.exploration.adapters.projection.ProjectionSurfaceAdapter>`
 exactly: it composes the tenant-scoped request, runs the social360 projection
 through the fail-isolated A8 engine, and reshapes the engine result into the
