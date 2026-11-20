@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/api/shared/plans/service_catalog.py, services/api/billing/billing/revops.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/billing/billing/revops.py": "sha256:3f42aa9c50d475a8efa360f43ed8a14faebbc773e715ba34b4e2c57f1b0d82af"
+  "services/api/billing/billing/revops.py": "sha256:8b7ffeee44208f44474ca58448b5519ed81830ea5154381e4ca8144817391a27"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
 ---
 
@@ -34,6 +34,11 @@ Emission is best-effort at intake/materialization/run sites and never
 blocks the request path — the payment-rail and stablecoin observation
 meters are default-off, accept-then-meter, and fail-open (a metering-store
 failure is swallowed and never rejects or drops the observation).
+
+Propagation lens runs record `propagation_run_computed` (one usage event per
+computed run, subject summary or recompute, keyed on the run id). It is a
+separate dimension from the nine economic meters above, and a run requires the
+tenant's `derivatives.enabled` entitlement.
 
 Access Kit interaction accounting is a separate, visibility-only dimension
 (`access_interaction`). It is explicitly non-billable until a pricing contract

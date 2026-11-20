@@ -82,6 +82,7 @@ DSRComponent = Literal[
     "agent_lineage_projection",
     "pattern_discovery",
     "venue_account_links",
+    "propagation_runs",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -126,6 +127,7 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "agent_lineage_projection",
     "pattern_discovery",
     "venue_account_links",
+    "propagation_runs",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

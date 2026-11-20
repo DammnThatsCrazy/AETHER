@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from shared.auth.auth import Permissions
-from shared.common.common import APIResponse, BadRequestError, ServiceUnavailableError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError, ServiceUnavailableError
 
 router = APIRouter(prefix="/v1/social360/propagation", tags=["Propagation & Diffusion"])
 
@@ -29,6 +29,7 @@ class PropagationRunRequest(BaseModel):
     exposure_window_seconds: int = Field(default=72 * 3600, ge=60, le=30 * 24 * 3600)
     max_hops: int = Field(default=4, ge=1, le=16)
     include_live: bool = Field(default=False, description="Sync linked accounts (through rights admission) before computing")
+    save: bool = Field(default=False, description="Keep the run for later reads, staleness checks and recompute")
 
 
 def _require_enabled() -> None:
@@ -44,6 +45,28 @@ def _require_permissions(request: Request) -> str:
         tenant.require_permission(Permissions.ANALYTICS)
         tenant.require_permission(Permissions.DERIVATIVES_READ)
     return tenant.tenant_id
+
+
+async def _require_entitlement(tenant_id: str) -> None:
+    """Propagation reads derivatives account data: the tenant must hold the
+    ``derivatives.enabled`` entitlement (billing authority; missing means deny)."""
+    from value.derivatives.runtime_routes import _require_entitlement as derivatives_entitlement
+
+    await derivatives_entitlement(tenant_id)
+
+
+async def _meter(tenant_id: str, result, *, kind: str, include_live: bool) -> None:
+    """One durable usage record per computed run (idempotent on the run id)."""
+    from billing.billing.revops import MeteringService, UsageMeteringEvent
+
+    await MeteringService().record_event(UsageMeteringEvent(
+        tenant_id=tenant_id,
+        event_type="propagation_run_computed",
+        source_type="propagation_lens",
+        source_id=str(getattr(result, "run_id", "") or ""),
+        metadata={"kind": kind, "include_live": include_live,
+                  "episodes": len(getattr(result, "episodes", ()) or ())},
+    ))
 
 
 async def _run(body: PropagationRunRequest, tenant_id: str):
@@ -63,16 +86,24 @@ async def _run(body: PropagationRunRequest, tenant_id: str):
             exposure_window_seconds=body.exposure_window_seconds,
             max_hops=body.max_hops,
         )
-        return await PropagationService().run(query, include_live=body.include_live)
+        service = PropagationService()
+        run = await service.run(query, include_live=body.include_live)
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc
+    if body.save:
+        from intelligence.propagation.runs import PropagationRunStore
+
+        await PropagationRunStore().save(run, service.last_inputs, include_live=body.include_live)
+    return run
 
 
 @router.post("/runs")
 async def create_propagation_run(body: PropagationRunRequest, request: Request) -> dict:
     _require_enabled()
     tenant_id = _require_permissions(request)
+    await _require_entitlement(tenant_id)
     result = await _run(body, tenant_id)
+    await _meter(tenant_id, result, kind="run", include_live=body.include_live)
     return APIResponse(data=result.to_dict()).to_dict()
 
 
@@ -83,5 +114,53 @@ async def subject_propagation_summary(subject_id: str, body: PropagationRunReque
 
     _require_enabled()
     tenant_id = _require_permissions(request)
+    await _require_entitlement(tenant_id)
     result = await _run(body, tenant_id)
+    await _meter(tenant_id, result, kind="subject_summary", include_live=body.include_live)
     return APIResponse(data=subject_summary(result, subject_id)).to_dict()
+
+
+@router.get("/runs")
+async def list_saved_propagation_runs(request: Request) -> dict:
+    """The tenant's saved runs, newest first (summaries only)."""
+    from intelligence.propagation.runs import PropagationRunStore
+
+    _require_enabled()
+    tenant_id = _require_permissions(request)
+    items = await PropagationRunStore().list(tenant_id)
+    return APIResponse(data={"items": items}).to_dict()
+
+
+@router.get("/runs/{run_id}")
+async def get_saved_propagation_run(run_id: str, request: Request) -> dict:
+    """A saved run with ``stale`` / ``stale_reasons`` checked against current state."""
+    from intelligence.propagation.runs import PropagationRunStore
+
+    _require_enabled()
+    tenant_id = _require_permissions(request)
+    record = await PropagationRunStore().get(tenant_id, run_id)
+    if record is None:
+        raise NotFoundError("Propagation run")
+    return APIResponse(data=record).to_dict()
+
+
+@router.post("/runs/{run_id}/recompute")
+async def recompute_saved_propagation_run(run_id: str, request: Request) -> dict:
+    """Run a saved run's query again over current inputs; the new run supersedes it."""
+    from intelligence.propagation.runs import PropagationRunStore
+
+    _require_enabled()
+    tenant_id = _require_permissions(request)
+    await _require_entitlement(tenant_id)
+    record = await PropagationRunStore().recompute(tenant_id, run_id)
+    if record is None:
+        raise NotFoundError("Propagation run")
+    await _meter(tenant_id, _RunRef(record["run_id"], record["run"].get("episodes") or ()),
+                 kind="recompute", include_live=bool(record.get("include_live")))
+    return APIResponse(data=record).to_dict()
+
+
+class _RunRef:
+    def __init__(self, run_id: str, episodes) -> None:
+        self.run_id = run_id
+        self.episodes = episodes
