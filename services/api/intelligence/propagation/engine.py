@@ -80,6 +80,15 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
     return parsed
 
 
+_FAR_FUTURE = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+
+def _adoption_order(adoption: AdoptionEvent) -> tuple[datetime, str, str]:
+    """Chronological order by parsed instant (ISO strings with different
+    offsets do not sort chronologically); unparseable instants sort last."""
+    return (_parse(adoption.adopted_at) or _FAR_FUTURE, adoption.adopted_at, adoption.subject_id)
+
+
 def _digest(value: Any) -> str:
     return hashlib.sha256(
         json.dumps(_plain(value), sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
@@ -156,7 +165,7 @@ def _episode(
     population: set[str],
     any_exposure_evidence: bool,
 ) -> DiffusionEpisode:
-    adopters = sorted(adopters, key=lambda a: (a.adopted_at, a.subject_id))
+    adopters = sorted(adopters, key=_adoption_order)
     at = {a.subject_id: _parse(a.adopted_at) for a in adopters}
     seed = adopters[0]
     unknown: set[str] = set()
@@ -298,18 +307,35 @@ def _episode(
     # ── coordination ─────────────────────────────────────────────────────
     lockstep = _lockstep_groups(adopters, query.lockstep_window_seconds, query.lockstep_min_entities)
     funding: set[tuple[str, str]] = set()
+    funding_time_unknown = False
     for (a, b), exposures in exposures_by_pair.items():
-        if a in adopter_ids and b in adopter_ids and a < b and any(
-            e.channel is ExposureChannel.ONCHAIN for e in exposures
-        ):
-            ta, tb = at[a], at[b]
-            if ta and tb and abs((ta - tb).total_seconds()) <= query.lockstep_window_seconds:
+        if not (a in adopter_ids and b in adopter_ids and a < b):
+            continue
+        ta, tb = at[a], at[b]
+        if not (ta and tb and abs((ta - tb).total_seconds()) <= query.lockstep_window_seconds):
+            continue
+        # Funding is coordination evidence only when it was in force before
+        # the first of the two entries; a later payment cannot explain them.
+        first_entry = min(ta, tb)
+        for exposure in exposures:
+            if exposure.channel is not ExposureChannel.ONCHAIN:
+                continue
+            observed = _parse(exposure.observed_at)
+            valid_to = _parse(exposure.valid_to)
+            if observed is None:
+                funding_time_unknown = True
+                continue
+            if observed <= first_entry and (valid_to is None or valid_to > first_entry):
                 funding.add((a, b))
+                break
     c_reasons = []
     if lockstep:
         c_reasons.append("lockstep_entry_group")
     if funding:
         c_reasons.append("shared_onchain_funding_lockstep_entry")
+    coordinated = bool(lockstep or funding)
+    if funding_time_unknown and not funding:
+        c_reasons.append("funding_time_unknown")
     coordination = CoordinationSignal(
         lockstep_groups=tuple(lockstep),
         shared_funding_pairs=tuple(sorted(funding)),
@@ -322,8 +348,10 @@ def _episode(
     reasons: list[str]
     if len(adopters) < 2:
         classification, reasons = EpisodeClassification.INSUFFICIENT_DATA, ["single_adopter"]
-    elif coordination.reason_codes:
-        classification, reasons = EpisodeClassification.COORDINATED, list(coordination.reason_codes)
+    elif coordinated:
+        classification, reasons = EpisodeClassification.COORDINATED, [
+            r for r in coordination.reason_codes if r != "funding_time_unknown"
+        ]
     elif not exposure_known:
         classification, reasons = EpisodeClassification.INSUFFICIENT_DATA, ["no_exposure_evidence"]
     elif not sizes_ok:
@@ -382,7 +410,9 @@ def compute_propagation(
         if wanted and adoption.instrument_key not in wanted:
             continue
         key = (adoption.subject_id, adoption.instrument_key)
-        if key not in first or (adoption.adopted_at, adoption.side) < (first[key].adopted_at, first[key].side):
+        if key not in first or (_adoption_order(adoption), adoption.side) < (
+            _adoption_order(first[key]), first[key].side,
+        ):
             first[key] = adoption
 
     channels = set(query.channels)

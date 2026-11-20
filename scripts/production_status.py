@@ -111,14 +111,21 @@ AREAS: list[Area] = [
     ),
     Area(
         "SDKs",
-        4,
-        "Web + React Native SDKs at platform version with batching, retry, consent "
-        "forwarding, heartbeats; iOS/Android native cores; release alignment enforced "
-        "by validate_sdk_release_alignment.py and publish workflow.",
+        3,
+        "Web, React, React Native, iOS, Android and Server SDKs are built, tested, "
+        "documented and wired into the dry-run-capable publish workflow, and onboarding "
+        "issues site-bound publishable keys to every client SDK. None is published to a "
+        "public registry yet and no install has been observed sending a real event, so "
+        "the per-platform ladder below (SDK PLATFORM READINESS) stops at L3 everywhere. "
+        "Release alignment is enforced by validate_sdk_release_alignment.py.",
         [
             "packages/sdk/web/",
             "packages/sdk/react-native/",
+            "packages/sdk/ios/",
+            "packages/sdk/android/",
+            "packages/sdk/server/",
             "packages/shared/",
+            ".github/workflows/publish-sdk.yml",
             "scripts/validate_sdk_release_alignment.py",
         ],
     ),
@@ -950,6 +957,107 @@ BLOCKERS: list[Blocker] = [
 
 
 # ---------------------------------------------------------------------------
+# SDK platform readiness ladder
+# ---------------------------------------------------------------------------
+# One aggregate "SDKs" score hid that the platforms are at different stages,
+# and that none can be installed from a public registry yet. Each platform is
+# placed on a cumulative ladder: its level is the highest rung whose evidence
+# holds with every rung below it also holding. Rungs L0-L3 and L5 are derived
+# from the tree; L4, L6 and L7 are external facts no file can prove, so they
+# are declared here and must only be flipped with the evidence named in
+# SDK_EXTERNAL_EVIDENCE.
+
+SDK_LADDER = {
+    0: "source",
+    1: "tested",
+    2: "install documented",
+    3: "release pipeline",
+    4: "published",
+    5: "onboarding issues its key",
+    6: "first event from an install",
+    7: "production at scale",
+}
+
+# platform -> (source dir, test glob, install doc, publish job, onboarding sdk id, expected key kind)
+SDK_PLATFORMS: dict[str, tuple[str, str, str, str, str, str]] = {
+    "web": ("packages/sdk/web/src", "packages/sdk/web/test/*.test.ts",
+            "docs/reference/developers/sdk/web/verify-installation.md", "publish-npm", "web", "publishable"),
+    "react": ("packages/sdk/web/src/react.tsx", "packages/sdk/web/test/react-*.test.tsx",
+              "docs/reference/developers/sdk/react/verify-installation.md", "publish-npm", "react", "publishable"),
+    "react-native": ("packages/sdk/react-native/src", "packages/sdk/react-native/src/__tests__/*.test.ts",
+                     "docs/reference/SDK-REACT-NATIVE.md", "publish-npm", "react-native", "publishable"),
+    "ios": ("packages/sdk/ios/Sources", "packages/sdk/ios/Tests/**/*.swift",
+            "docs/reference/developers/sdk/ios/verify-installation.md", "publish-cocoapods", "ios", "publishable"),
+    "android": ("packages/sdk/android/src/main", "packages/sdk/android/src/test/**/*.kt",
+                "docs/reference/developers/sdk/android/verify-installation.md", "publish-android", "android", "publishable"),
+    "server": ("packages/sdk/server/src", "packages/sdk/server/src/*.test.ts",
+               "packages/sdk/server/README.md", "publish-npm", "server", "secret"),
+}
+
+# External rungs, declared. Flip one only with the named evidence in hand.
+SDK_EXTERNAL_EVIDENCE = {
+    4: "the package resolves from its public registry at the release version "
+       "(npm view / pod trunk info / Maven Central search)",
+    6: "first_sdk_event recorded by activation for a tenant using a key minted "
+       "for this platform",
+    7: "sustained production traffic from this platform within its SLOs",
+}
+SDK_EXTERNAL_RUNGS: dict[str, dict[int, bool]] = {
+    platform: {4: False, 6: False, 7: False} for platform in SDK_PLATFORMS
+}
+
+
+def _onboarding_key_kind(sdk_id: str) -> str | None:
+    """The keyKind onboarding gives one SDK, read from onboarding-model.ts."""
+    path = ROOT / "apps/aether-web/src/pages/onboarding/onboarding-model.ts"
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    m = re.search(r"id: '" + re.escape(sdk_id) + r"',.*?keyKind: '(publishable|secret)'", text, re.S)
+    return m.group(1) if m else None
+
+
+def _publish_job_exists(job: str) -> bool:
+    path = ROOT / ".github/workflows/publish-sdk.yml"
+    return path.exists() and re.search(rf"^  {re.escape(job)}:\s*$", path.read_text(), re.M) is not None
+
+
+def sdk_platform_readiness() -> list[dict]:
+    """Place every SDK platform on the L0-L7 ladder from tree evidence + declared facts."""
+    out: list[dict] = []
+    for platform, (src, tests, doc, job, sdk_id, key_kind) in SDK_PLATFORMS.items():
+        rungs = {
+            0: (ROOT / src).exists(),
+            1: any(ROOT.glob(tests)),
+            2: (ROOT / doc).exists(),
+            3: _publish_job_exists(job),
+            4: SDK_EXTERNAL_RUNGS[platform][4],
+            5: _onboarding_key_kind(sdk_id) == key_kind,
+            6: SDK_EXTERNAL_RUNGS[platform][6],
+            7: SDK_EXTERNAL_RUNGS[platform][7],
+        }
+        level = -1
+        for rung in sorted(rungs):
+            if not rungs[rung]:
+                break
+            level = rung
+        next_rung = level + 1 if level < 7 else None
+        out.append({
+            "platform": platform,
+            "level": level,
+            "level_name": SDK_LADDER.get(level, "none"),
+            "rungs": {f"L{k}": v for k, v in rungs.items()},
+            "met_above_level": [f"L{k}" for k, v in rungs.items() if v and k > level],
+            "next": (
+                None if next_rung is None
+                else f"L{next_rung} {SDK_LADDER[next_rung]}"
+                + (f": {SDK_EXTERNAL_EVIDENCE[next_rung]}" if next_rung in SDK_EXTERNAL_EVIDENCE else "")
+            ),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Live consistency checks (run every time; these keep the report honest)
 # ---------------------------------------------------------------------------
 
@@ -1105,6 +1213,16 @@ def main() -> None:
     print("-" * 74)
     print(f"  Historical maturity index: {overall}/5 — non-authoritative; see make readiness-status.")
 
+    # -- SDK platform ladder --------------------------------------------------
+    sdk_ladder = sdk_platform_readiness()
+    print("\nSDK PLATFORM READINESS  (L0 source .. L7 production at scale; cumulative)")
+    print("-" * 74)
+    for row in sdk_ladder:
+        extra = f"  (also met: {', '.join(row['met_above_level'])})" if row["met_above_level"] else ""
+        print(f"  L{row['level']}  {row['platform']:<14} {row['level_name']}{extra}")
+        if row["next"]:
+            print(f"        next: {row['next']}")
+
     # -- blockers -------------------------------------------------------------
     print("\nBLOCKERS")
     print("-" * 74)
@@ -1143,6 +1261,7 @@ def main() -> None:
             "canonical_readiness_model": "config/readiness_model.yaml",
             "canonical_readiness_tooling": "scripts/readiness_status.py",
             "areas": [{**asdict(a), "level": a.level} for a in AREAS],
+            "sdk_platform_readiness": sdk_ladder,
             "blockers": [asdict(b) for b in BLOCKERS],
             "live_checks": check_results,
             "missing_artifacts": missing_artifacts,

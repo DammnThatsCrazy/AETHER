@@ -32,9 +32,8 @@ reviewed_source_commits:
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
-  - {'commit': 'd8f94809', 'reason': 'Pilot and remote CI staging plans now carry the declared MCP state; MCP docs updated to name every planner, other docs describe the workflows generally and are unchanged.'}
 source_hashes:
-  ".github/workflows/": "sha256:95c1a23375eedc224030ad0ff7447c0b6fd3742ac270b7687bf368c49a631df6"
+  ".github/workflows/": "sha256:4d5fa0af6c73b98ed123d0a534551d4944abfdceec58032af911b3b0f36e03b1"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:327097c1efc7b214e8b56ead967d30dbab9376854840c20a2d59372660f2b6d5"
@@ -854,7 +853,16 @@ release-only evidence, and is validated by `make validate-required-release-check
 
 SDK publication is a manual `workflow_dispatch` run of
 `.github/workflows/publish-sdk.yml`, which takes an explicit version string,
-bumps every package manifest, and then fans out per registry:
+bumps every package manifest, and then fans out per registry. A real publish must
+be dispatched from `development` (dry runs may start anywhere): the `tag` job
+commits the bump on the dispatched commit and pushes it to `development` together
+with the `sdk/v*` tag as one atomic, fast-forward-only push, so a release never
+writes to `main` directly and fails cleanly if `development` moved meanwhile. The
+bump reaches `main` through the normal promotion.
+
+To run `make integration-durable` on a branch before promotion, dispatch
+`repo-health.yml` on that ref; its `integration-on-demand` job runs the suite
+(`main-integration` itself only runs on pushes to `main` and `staging`).
 
 The bump covers more than manifests: `scripts/bump-sdk-version.sh` rewrites the
 SDK runtime constants (web, React Native, Android, iOS), the loader's own

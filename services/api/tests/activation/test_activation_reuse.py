@@ -144,3 +144,135 @@ async def test_select_plan_performs_no_billing_write(svc):
     assert status2["billing_state"] == S.billing_active.value
     # The activation service left the billing account exactly as it found it.
     assert stripe_repository._mem_accounts[seeded] == snapshot
+
+
+# ── An installed SDK's first event is told apart from the dashboard test ─────
+
+@pytest.mark.asyncio
+async def test_dashboard_test_event_is_not_reported_as_an_installed_sdk(
+    svc, make_request, onboard_with_keys
+):
+    """The test event proves the pipeline (first value), not an install."""
+    tenant = "tenant-first-sdk-1"
+    await onboard_with_keys(svc, tenant)
+    request = make_request(tenant)
+
+    result = await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+    assert result["state"] == S.first_value_ready.value
+
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"] is None
+
+
+@pytest.mark.asyncio
+async def test_first_event_from_an_installed_sdk_is_recorded_once(
+    svc, make_request, onboard_with_keys
+):
+    tenant = "tenant-first-sdk-2"
+    await onboard_with_keys(svc, tenant)
+    request = make_request(tenant)
+    await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+
+    # An SDK sends through /v1/batch with its own event id.
+    sdk_batch = BatchRequest(
+        batch=[
+            BaseEvent(
+                id="evt-installed-sdk-1",
+                type="track",
+                timestamp="2026-07-30T00:00:00Z",
+                sessionId="sess-sdk",
+                anonymousId="anon-sdk",
+                properties={},
+            )
+        ],
+        sentAt="2026-07-30T00:00:00Z",
+    )
+    response = await ingest_batch(request, sdk_batch, get_producer())
+    assert response["accepted"] == 1
+
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"]["event_id"] == "evt-installed-sdk-1"
+
+    # Later dashboard test events never replace it.
+    await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"]["event_id"] == "evt-installed-sdk-1"
+
+
+@pytest.mark.asyncio
+async def test_old_dashboard_tests_never_become_an_install_once_their_id_ages_out(
+    svc, make_request, onboard_with_keys
+):
+    """Only the last 20 test-event ids are kept, but the scan reads 50 rows. The
+    server-stamped marker on each test row keeps the 21st-oldest from counting."""
+    tenant = "tenant-first-sdk-3"
+    await onboard_with_keys(svc, tenant)
+    request = make_request(tenant)
+    for _ in range(21):
+        await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+
+    record = await svc.repo.get_for_tenant(tenant)
+    # The oldest test id really has aged out of the kept list.
+    assert len(record["activation_test_event_ids"]) == 20
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"] is None
+
+
+@pytest.mark.asyncio
+async def test_recording_the_first_sdk_event_never_undoes_a_concurrent_transition(
+    svc, make_request, onboard_with_keys
+):
+    """get_status reads the record, then awaits Bronze. A transition made in
+    that window must survive: only the evidence is written back."""
+    tenant = "tenant-first-sdk-4"
+    await onboard_with_keys(svc, tenant, platforms=("web",))
+    request = make_request(tenant)
+    sdk_batch = BatchRequest(
+        batch=[
+            BaseEvent(
+                id="evt-installed-sdk-race",
+                type="track",
+                timestamp="2026-07-30T00:00:00Z",
+                sessionId="sess-sdk",
+                anonymousId="anon-sdk",
+                properties={},
+            )
+        ],
+        sentAt="2026-07-30T00:00:00Z",
+    )
+    assert (await ingest_batch(request, sdk_batch, get_producer()))["accepted"] == 1
+
+    # Postgres hands each read its own copy; the in-memory store hands back the
+    # stored dict itself, which would hide the stale-snapshot overwrite.
+    import copy
+
+    real_get = svc.repo.get_for_tenant
+
+    async def get_copy(tenant_id):
+        return copy.deepcopy(await real_get(tenant_id))
+
+    svc.repo.get_for_tenant = get_copy
+    real_find = svc.repo.find_by_id
+
+    async def find_copy(record_id):
+        return copy.deepcopy(await real_find(record_id))
+
+    svc.repo.find_by_id = find_copy
+
+    real_reconcile = svc._reconcile_first_sdk_event
+
+    async def reconcile_while_another_request_writes(record):
+        # Another request (e.g. issuing a key) writes the record mid-read.
+        latest = await svc.repo.get_for_tenant(tenant)
+        latest["created_key_ids"] = list(latest.get("created_key_ids", [])) + ["key-concurrent"]
+        await svc.repo.save_or_update(latest)
+        await real_reconcile(record)
+
+    svc._reconcile_first_sdk_event = reconcile_while_another_request_writes
+    status = await svc.get_status(tenant)
+    svc._reconcile_first_sdk_event = real_reconcile
+
+    assert status["first_sdk_event"]["event_id"] == "evt-installed-sdk-race"
+    stored = await svc.repo.get_for_tenant(tenant)
+    assert "key-concurrent" in stored["created_key_ids"]
+    assert stored["first_sdk_event"]["event_id"] == "evt-installed-sdk-race"

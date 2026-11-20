@@ -11,11 +11,11 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:091ce96b8c65438b4176e0e8910fed824262f2ced75ebe93ca2c59ce1dff37e4"
-  "packages/sdk/react-native/src/index.tsx": "sha256:25cad4024a1305c105b5517f9fd2495cd7de9d4948147dbdc2dd448d70e8a0fc"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:70c1c086cd0471606b52c8d41b6ef3ac3982fddc44213f2e0b5d98fd9c7bbdd2"
+  "packages/sdk/react-native/src/index.tsx": "sha256:04a3dc4d417f7ffe71ca99712bd37ce158b506100492de8b04eb0de8195864cf"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0859f13259f6172f49ad51fe7227e8a9313fdba13e9e8a7910f025fe83274f65"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
@@ -46,7 +46,8 @@ import { AetherProvider } from '@olympuslabs/aether-react-native';
 export default function App() {
   return (
     <AetherProvider config={{
-      apiKey: 'your-api-key',
+      apiKey: 'pk_live_...',   // publishable key from onboarding
+      siteId: 'site_...',      // the site the key is bound to
       environment: 'production',
     }}>
       <NavigationContainer>
@@ -56,6 +57,13 @@ export default function App() {
   );
 }
 ```
+
+Onboarding issues the publishable key and site id together, binding the site to
+the bundle ID and application ID of both builds. The key ships inside the app
+and can be read out of it, so the backend accepts it only on requests that
+declare its site: the native SDKs and the JS heartbeat send `siteId` as
+`X-Aether-Site`. Canonical consent receipts (`consent.recordReceipt`) and
+identity resolution need a secret key, so send those from your backend.
 
 ## Core API
 
@@ -237,13 +245,13 @@ payment, or finality in the graph.
 
 ## Consent Management
 
-Consent purposes are **registry-derived** — the canonical set of 12 purposes
+Consent purposes are **registry-derived** — the canonical set of purposes
 lives in `packages/shared/contracts/consent-registry.json`. Base purposes
 (`analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`) can
 be granted together; explicit opt-in purposes (`financial_activity`, `credit`,
 `location`, `economic_observability`, `cross_chain_observability`,
 `fraud_prevention`) **always require separate opt-in** and are never granted by
-`grantAll()` (which grants exactly the six base purposes). Present each
+`grantAll()` (which grants exactly the base purposes, `GRANT_ALL_PURPOSES`). Present each
 explicit opt-in purpose as a separate consent choice in your UI.
 
 ```typescript
@@ -396,6 +404,7 @@ Aether.trackPushOpened({
 ```typescript
 interface AetherRNConfig {
   apiKey: string;
+  siteId?: string;             // Site a publishable key is bound to; sent as X-Aether-Site
   environment?: 'production' | 'staging' | 'development';
   endpoint?: string;           // Default: 'https://api.aether.network'
   debug?: boolean;
@@ -412,6 +421,9 @@ interface AetherRNConfig {
   };
   manifestPublicKey?: string;  // base64url P-256 key; verifies signed remote-config manifests
                                // (unsigned/invalid manifests rejected, last-known-good kept)
+  deviceIntegrity?: boolean;   // App Attest (iOS) / Play Integrity (Android) device-integrity
+                               // evidence, forwarded to the native SDKs (default off)
+  playIntegrityCloudProjectNumber?: number;  // Play Integrity outside Play distribution
 }
 ```
 

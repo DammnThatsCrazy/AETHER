@@ -290,3 +290,38 @@ def test_offsetless_exposure_time_is_unknown_not_assumed_utc():
     episode = result.episodes[0]
     assert episode.metrics.exposed_adopters == 0
     assert "exposure_time_unknown" in episode.metrics.unknown_reasons
+
+
+def test_mixed_utc_offsets_order_chronologically():
+    early = AdoptionEvent(T, "u1", HYPE, "long", "2026-11-01T12:00:00+02:00", "hyperliquid", "0xu1", HYPE, ("f1",))
+    late = AdoptionEvent(T, "u2", HYPE, "long", "2026-11-01T11:00:00+00:00", "hyperliquid", "0xu2", HYPE, ("f2",))
+    result = compute_propagation(query(window_start="2026-11-01T00:00:00+00:00"), [late, early],
+                                 exposures_from_edges(T, [follows("u2", "u1")])[0], POP, computed_at=at(0))
+    (episode,) = result.episodes
+    assert episode.seed_subject == "u1"  # 10:00Z precedes 11:00Z despite the string order
+    assert episode.metrics.exposed_adopters == 1
+
+
+def test_funding_after_the_entries_is_not_coordination_evidence():
+    def pays(start):
+        return {"type": "PAYS", "from": "u1", "to": "u2", "properties": {
+            "tenant_id": T, "relationship_predicate": "PAYS", "valid_from": at(start),
+            "evidence_refs": [{"id": f"tx:{start}"}], "idempotency_key": f"pays:{start}"}}
+
+    later = run([adopt("u1", 0), adopt("u2", 0.5)], [pays(9 * 24 * 60)], POP)
+    episode = later.episodes[0]
+    assert episode.coordination.shared_funding_pairs == ()
+    assert episode.classification is not EpisodeClassification.COORDINATED
+    before = run([adopt("u1", 0), adopt("u2", 0.5)], [pays(-100)], POP)
+    assert before.episodes[0].classification is EpisodeClassification.COORDINATED
+
+
+def test_case_sensitive_account_refs_keep_exact_attribution():
+    links = {("hyperliquid", "Account-X"): "alice", ("hyperliquid", "account-x"): "bob",
+             ("hyperliquid", "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"): "carol"}
+    events = [
+        fill("Account-X", "1", "buy", 0, direction="Open Long"),
+        fill("0xABCDEFabcdefABCDEFabcdefABCDEFabcdefABCD", "2", "buy", 1, direction="Open Long"),
+    ]
+    adoptions, _ = adoptions_from_fill_events(T, events, links)
+    assert sorted(a.subject_id for a in adoptions) == ["alice", "carol"]

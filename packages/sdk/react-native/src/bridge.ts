@@ -22,6 +22,15 @@ import {
 export type { AcquisitionEvidence };
 
 /**
+ * Purposes `consent.grantAll()` grants: the canonical set
+ * (packages/shared/consent.ts CONSENT_PURPOSES) minus EXPLICIT_OPT_IN_PURPOSES.
+ * Pinned to the shared registry by __tests__/ConsentPurposes.test.ts.
+ */
+export const GRANT_ALL_PURPOSES: readonly ConsentPurpose[] = [
+  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce',
+];
+
+/**
  * Native attribution methods resolve with a JSON string (or null) so both
  * platforms can serialize the shared AcquisitionEvidence shape without a
  * per-field bridge marshalling contract. Objects are passed through as-is
@@ -81,6 +90,14 @@ export interface ResolvedIdentity {
 
 export interface AetherRNConfig {
   apiKey: string;
+  /**
+   * The site a publishable (`pk_`) key is bound to, sent as `X-Aether-Site` by
+   * the native SDKs and the JS heartbeat. Onboarding issues it with the key:
+   * the key ships inside the app bundle and can be read out of it, so the
+   * backend accepts it only for this site and refuses requests that declare
+   * none. Leave it unset only with a secret key used outside an app.
+   */
+  siteId?: string;
   environment?: 'production' | 'staging' | 'development';
   /** Host app version, reported in SDK fleet heartbeats. */
   appVersion?: string;
@@ -109,6 +126,16 @@ export interface AetherRNConfig {
   manifestPublicKey?: string;
   autoResumeJourney?: boolean;
   onJourneyResumed?: (identity: ResolvedIdentity) => void;
+  /**
+   * Device-integrity evidence (default off): Apple App Attest on iOS, Google
+   * Play Integrity on Android. Forwarded to the native SDKs, which attest once
+   * per token lifetime and attach the server-issued token to every event.
+   * iOS needs the App Attest capability; Android needs the host app to depend
+   * on `com.google.android.play:integrity`.
+   */
+  deviceIntegrity?: boolean;
+  /** Google Cloud project number for Play Integrity outside Play distribution. */
+  playIntegrityCloudProjectNumber?: number;
 }
 
 export interface Identity {
@@ -583,7 +610,7 @@ const Aether = {
     },
   },
 
-  // Consent — 5 canonical purposes (see packages/shared/consent.ts)
+  // Consent — the canonical purposes of packages/shared/consent.ts
   consent: {
     async getState(): Promise<ConsentState> {
       return AetherNative?.getConsentState() ?? {
@@ -593,8 +620,12 @@ const Aether = {
         web3: false,
         agent: false,
         commerce: false,
+        financial_activity: false,
         credit: false,
         location: false,
+        economic_observability: false,
+        cross_chain_observability: false,
+        fraud_prevention: false,
         updatedAt: '',
         policyVersion: '',
       };
@@ -603,14 +634,13 @@ const Aether = {
       AetherNative?.grantConsent(purposes);
     },
     /**
-     * Grant all non-explicit-opt-in purposes (excludes credit and location).
-     * Passes through to native grantAll() which enforces the same exclusion.
+     * Grant every purpose that does not require explicit opt-in. Never grants
+     * the explicit-opt-in purposes (financial_activity, credit, location,
+     * economic_observability, cross_chain_observability, fraud_prevention):
+     * grant those individually after showing their own consent UI.
      */
     grantAll(): void {
-      const grantable: ConsentPurpose[] = [
-        'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce',
-      ];
-      AetherNative?.grantConsent(grantable);
+      AetherNative?.grantConsent([...GRANT_ALL_PURPOSES]);
     },
     revoke(purposes: ConsentPurpose[]): void {
       AetherNative?.revokeConsent(purposes);

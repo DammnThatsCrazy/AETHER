@@ -70,9 +70,35 @@ data class AetherConfig(
     // ON the persisted queue file is AES-GCM encrypted with a key held in the
     // Android Keystore, and events are only removed after the server
     // acknowledges the batch (2xx), preserving order and idempotency.
-    val encryptedDurableQueue: Boolean = false
+    val encryptedDurableQueue: Boolean = false,
+    /**
+     * Google Play Integrity device-integrity evidence (default OFF). Requires the
+     * host app to depend on `com.google.android.play:integrity`. When ON the SDK
+     * attests once per token lifetime and attaches the server-issued integrity
+     * token to every event as `context.device.integrity`.
+     */
+    val deviceIntegrity: Boolean = false,
+    /** Google Cloud project number for Play Integrity (needed outside Play distribution). */
+    val playIntegrityCloudProjectNumber: Long? = null,
+    /**
+     * The site a publishable (`pk_`) key is bound to, sent as `X-Aether-Site`
+     * on every request. Onboarding issues it with the key: a native app's key
+     * ships inside the APK and can be read out of it, so the backend only
+     * accepts it for the site it was issued for and refuses requests that
+     * declare none. Leave it null only with a secret key used outside an app.
+     */
+    val siteId: String? = null
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
+}
+
+/**
+ * Declare the site a publishable key is bound to (`X-Aether-Site`). The backend
+ * refuses a publishable key on a request that declares no site or another
+ * site, so every request that carries the key carries this too.
+ */
+internal fun java.net.HttpURLConnection.setAetherSite(siteId: String?) {
+    if (!siteId.isNullOrEmpty()) setRequestProperty("X-Aether-Site", siteId)
 }
 
 /**
@@ -264,6 +290,7 @@ object Aether : DefaultLifecycleObserver {
 
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
+    private var deviceIntegrity: DeviceIntegrityManager? = null
     private var userId: String? = null
     private var email: String? = null
     private var walletAddress: String? = null
@@ -806,6 +833,20 @@ object Aether : DefaultLifecycleObserver {
         this.context = application.applicationContext
         this.prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         this.anonymousId = loadOrCreateAnonymousId()
+        val appContext = application.applicationContext
+        val integrityPrefs = prefs
+        if (config.deviceIntegrity && integrityPrefs != null && DeviceIntegrityManager.playIntegrityAvailable()) {
+            deviceIntegrity = DeviceIntegrityManager(
+                prefs = integrityPrefs,
+                post = { path, body -> postDeviceIntegrity(path, body) },
+                requestPlayToken = { nonce ->
+                    PlayIntegrityClient.requestToken(appContext, nonce, config.playIntegrityCloudProjectNumber)
+                },
+                packageName = appContext.packageName,
+            )
+            val install = anonymousId
+            scope.launch { deviceIntegrity?.refreshIfNeeded(install) }
+        }
         this.userId = prefs?.getString("userId", null)
         this.walletAddress = prefs?.getString("walletAddress", null)
         this.walletVm = prefs?.getString("walletVm", "evm") ?: "evm"
@@ -865,7 +906,8 @@ object Aether : DefaultLifecycleObserver {
             platform = "android",
             appVersion = try { application.packageManager.getPackageInfo(application.packageName, 0).versionName ?: "" } catch (_: Exception) { "" },
             prefs = prefs,
-            manifestPublicKey = config.manifestPublicKey
+            manifestPublicKey = config.manifestPublicKey,
+            siteId = config.siteId
         )
         hAgent.getDynamicState = {
             Triple(
@@ -1034,6 +1076,34 @@ object Aether : DefaultLifecycleObserver {
         return link
     }
 
+    /** POST to a device-integrity route and return the JSON body, or null on any failure. */
+    private suspend fun postDeviceIntegrity(path: String, body: JSONObject): JSONObject? {
+        val cfg = config ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val connection = URL("${cfg.endpoint.trimEnd('/')}$path")
+                    .openConnection() as HttpURLConnection
+                try {
+                    connection.requestMethod = "POST"
+                    connection.doOutput = true
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 15000
+                    connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                    connection.setAetherSite(cfg.siteId)
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("X-Aether-SDK", "android")
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    if (connection.responseCode !in 200..299) return@withContext null
+                    JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     /** POST to a journey-handoff route and return the `data` object, or null on any failure. */
     private suspend fun postJourneyHandoff(path: String, body: JSONObject): JSONObject? {
         val cfg = config ?: return null
@@ -1047,6 +1117,7 @@ object Aether : DefaultLifecycleObserver {
                     connection.connectTimeout = 10000
                     connection.readTimeout = 10000
                     connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                    connection.setAetherSite(cfg.siteId)
                     connection.setRequestProperty("Content-Type", "application/json")
                     connection.setRequestProperty("X-Aether-SDK", "android")
                     connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
@@ -1170,6 +1241,10 @@ object Aether : DefaultLifecycleObserver {
         traits.clear()
         consentState.clear()
         anonymousId = UUID.randomUUID().toString()
+        // The integrity token is bound to the install id; a new id re-attests.
+        deviceIntegrity?.clear()
+        val resetInstall = anonymousId
+        scope.launch { deviceIntegrity?.refreshIfNeeded(resetInstall) }
         sessionId = UUID.randomUUID().toString()
         eventSequence = 0
         // Acquisition evidence is identity-scoped: reset()/logout clears both
@@ -1828,23 +1903,24 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
     // CONSENT MANAGEMENT
     //
-    // Canonical purposes (see packages/shared/consent.ts):
-    //   "analytics", "marketing", "web3", "agent", "commerce"
-    // Callers SHOULD only pass these strings. Backend validator ignores others.
+    // Canonical purposes: canonicalConsentPurposes below, mirrored from
+    // packages/shared/consent.ts. Callers SHOULD only pass these strings.
+    // Backend validator ignores others.
     // =========================================================================
 
-    val canonicalConsentPurposes: List<String> =
-        listOf("analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location")
+    // Mirrors CONSENT_PURPOSES / EXPLICIT_OPT_IN_PURPOSES in
+    // packages/shared/consent.ts (held together by validate_sdk_parity).
+    val canonicalConsentPurposes: List<String> = listOf(
+        "analytics", "marketing", "personalization", "web3", "agent", "commerce",
+        "financial_activity", "credit", "location", "economic_observability",
+        "cross_chain_observability", "fraud_prevention",
+    )
 
     /** Purposes that always require explicit opt-in and are never granted by grantAll(). */
-    val explicitOptInPurposes: List<String> = listOf("credit", "location")
-
-    /**
-     * Extended opt-in purposes used by the event gating map beyond the canonical
-     * set; stamped into per-event context.consent for web ConsentState parity.
-     */
-    private val extendedConsentPurposes: List<String> =
-        listOf("financial_activity", "economic_observability", "cross_chain_observability")
+    val explicitOptInPurposes: List<String> = listOf(
+        "financial_activity", "credit", "location", "economic_observability",
+        "cross_chain_observability", "fraud_prevention",
+    )
 
     fun grantConsent(categories: List<String>) {
         consentState.addAll(categories)
@@ -1858,9 +1934,10 @@ object Aether : DefaultLifecycleObserver {
     }
 
     /**
-     * Grant all non-explicit-opt-in purposes (excludes credit and location).
-     * Call grantConsent(listOf("credit")) or grantConsent(listOf("location")) explicitly
-     * to grant those purposes after displaying required consent UI.
+     * Grant all purposes that do not require explicit opt-in. Never grants
+     * [explicitOptInPurposes] (financial_activity, credit, location,
+     * economic_observability, cross_chain_observability, fraud_prevention):
+     * call grantConsent for each after displaying its own consent UI.
      */
     fun grantAll() {
         grantConsent(canonicalConsentPurposes.filter { it !in explicitOptInPurposes })
@@ -1904,6 +1981,7 @@ object Aether : DefaultLifecycleObserver {
                 connection.requestMethod = "POST"
                 connection.doOutput = true
                 connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                connection.setAetherSite(cfg.siteId)
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.outputStream.use {
                     it.write(consentReceiptRequestJson(receipt).toString().toByteArray(Charsets.UTF_8))
@@ -2223,6 +2301,7 @@ object Aether : DefaultLifecycleObserver {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+            connection.setAetherSite(cfg.siteId)
             connection.setRequestProperty("X-Aether-SDK", "android")
             connection.doOutput = true
             connection.connectTimeout = 10000
@@ -2301,6 +2380,7 @@ object Aether : DefaultLifecycleObserver {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+            connection.setAetherSite(cfg.siteId)
             connection.setRequestProperty("X-Aether-SDK", "android")
             connection.doOutput = true
             connection.connectTimeout = 10000
@@ -2414,6 +2494,7 @@ object Aether : DefaultLifecycleObserver {
                 val url = URL("$endpoint/v1/config/sdk/manifest")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.setRequestProperty("Authorization", "Bearer ${config?.apiKey ?: ""}")
+                conn.setAetherSite(config?.siteId)
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
                 val response = conn.inputStream.bufferedReader().readText()
@@ -2438,6 +2519,14 @@ object Aether : DefaultLifecycleObserver {
             put("model", Build.MODEL)
             // Presence-only automation evidence (never accessibility state).
             put("automation", automationSignals)
+            // Server-issued Play Integrity token for this install, when attested.
+            deviceIntegrity?.let { manager ->
+                manager.currentToken(anonymousId)?.let { put("integrity", JSONObject().put("token", it)) }
+                if (manager.needsRefresh(anonymousId)) {
+                    val install = anonymousId
+                    scope.launch { manager.refreshIfNeeded(install) }
+                }
+            }
         })
         put("locale", Locale.getDefault().toLanguageTag())
         put("timezone", TimeZone.getDefault().id)
@@ -2480,7 +2569,6 @@ object Aether : DefaultLifecycleObserver {
         put("consent", JSONObject().apply {
             val granted = consentState.toSet()
             canonicalConsentPurposes.forEach { put(it, it in granted) }
-            extendedConsentPurposes.forEach { put(it, it in granted) }
         })
         // Monotonic ordering counter for gap/reorder detection at ingest.
         put("sequence", JSONObject().apply {
@@ -2659,6 +2747,7 @@ object Aether : DefaultLifecycleObserver {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("x-api-key", cfg.apiKey)
+            connection.setAetherSite(cfg.siteId)
             connection.doOutput = true
             connection.connectTimeout = 5000
             connection.readTimeout = 5000

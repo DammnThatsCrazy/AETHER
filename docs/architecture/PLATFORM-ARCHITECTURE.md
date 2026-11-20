@@ -76,7 +76,7 @@ reviewed_source_commits:
   - {'commit': '5dcf75ba', 'reason': 'Reviewed 5dcf75ba: the contract generator now types freshnessPolicy.slots and states per-slot maximum ages in the surface catalog. Generated-output typing only; this document needs no change.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "packages/shared/": "sha256:068f87b74f4b59e94f32d14db8d9f71c0a04de53b24939b61d2971d04f6eab25"
+  "packages/shared/": "sha256:d1e2bafadec8266ae7cf0cabc6ac130103b0a0597d85c0f724da7523618f936f"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:946143c4503b65def6e61157ca2776a63fd1d6a1cbd06473ac7373d704bcae49"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
@@ -93,7 +93,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
-  "services/api/config/settings.py": "sha256:80931a86ffe4e0b07546770e71e69ff05a1007779bcc8e2033b63c7e3a466ae2"
+  "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
@@ -106,8 +106,8 @@ source_hashes:
   "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
-  "services/api/main.py": "sha256:4d724bbe252cea78b579a428f5cb934f4fd61ba11510f205c2f604a2e6e38f56"
-  "services/api/middleware/middleware.py": "sha256:ff86aed1bace982417e3cad43476d0fbb02f49988432e4c960b05d24163d2408"
+  "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
+  "services/api/middleware/middleware.py": "sha256:b8bcae87dd212525d3fe07da40eae61756b5db3df04923e165d44d55ee39fc26"
   "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:edbdaa60384c89a717379f14f94182904cc02c7525ec0408e7a4757fe995f4b1"

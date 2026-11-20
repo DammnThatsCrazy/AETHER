@@ -57,6 +57,8 @@ Each episode is labelled `organic`, `viral`, `coordinated`, or
 - **Coordination.** At least `lockstep_min_entities` distinct adopters inside
   one `lockstep_window_seconds` window, or adopter pairs linked by on-chain
   `PAYS` who entered within that window, mark the episode `coordinated`. The
+  funding link counts only if it was in force before the first of the two
+  entries; a later payment is never coordination evidence. The
   defaults (60 seconds, 5 entities, 2.0 lift) are pattern discovery's
   `DetectorConfig` defaults, so lockstep means the same thing in both places.
 - **Insufficient data.** Too few linked users, no unexposed comparison group,
@@ -90,7 +92,9 @@ reserved and withheld until incrementality evidence exists.
 ## Flags and readiness
 
 - `AETHER_PROPAGATION_LENS_ENABLED` and `AETHER_VENUE_ACCOUNT_LINKS_ENABLED`
-  default off and stay off in the release manifests.
+  default off in settings. The staging manifest turns both on (listed under
+  `on` and `task_environment`); production keeps both off. No staging run
+  with linked accounts has been recorded yet.
 - Registry states for `social360` and `relationship360` stay `in_flight`.
   This slice adds code, fixtures, and live public-endpoint captures. It does
   not claim provider-backed, staging-proven, or production readiness.

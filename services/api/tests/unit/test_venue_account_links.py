@@ -159,3 +159,66 @@ async def test_dsr_erasure_plane_deletes_subject_links(service):
     assert await svc.list_links(TENANT, active_only=False) == []
     # Another tenant's link for the same subject id is untouched.
     assert len(await svc.list_links(OTHER)) == 1
+
+
+async def test_dsr_erasure_plane_honors_legal_hold(service, monkeypatch):
+    from governance.consent import erasure_planes
+    from shared.storage import lifecycle as lifecycle_module
+
+    svc, evidence = service
+    await _link(svc, evidence.add("ev_1"))
+
+    async def active_hold(self, tenant_id, resource_type, subject_ref=None):
+        assert resource_type == "venue_account_links"
+        return {"hold_id": "hold_9", "reason": "litigation"}
+
+    monkeypatch.setattr(lifecycle_module.StorageLifecycle, "active_hold", active_hold)
+    receipts = await erasure_planes.erase_venue_account_links_plane(
+        erasure_planes.ErasureSubject(tenant_id=TENANT, user_id="user_1")
+    )
+    receipt = receipts[erasure_planes.VENUE_ACCOUNT_LINKS_COMPONENT]
+    assert receipt.status == "skipped_legal_hold"
+    assert receipt.policy_decision_id == "storage_legal_hold:hold_9"
+    assert len(await svc.list_links(TENANT)) == 1
+
+
+async def test_capped_account_map_reports_truncation(service):
+    svc, _ = service
+    for i in range(3):
+        await svc.link_tenant_push(
+            tenant_id=TENANT, subject_id=f"user_{i}", venue="hyperliquid",
+            account_ref=f"0x{i}", consent_receipt_id="cr",
+        )
+    mapping, truncated = await svc.subjects_by_account_bounded(TENANT, limit=2)
+    assert len(mapping) == 2 and truncated is True
+    mapping, truncated = await svc.subjects_by_account_bounded(TENANT, limit=3)
+    assert len(mapping) == 3 and truncated is False
+
+
+async def test_one_venue_account_cannot_have_two_active_owners(service):
+    svc, _ = service
+    await svc.link_tenant_push(tenant_id=TENANT, subject_id="alice", venue="hyperliquid",
+                               account_ref="Account-X", consent_receipt_id="cr")
+    with pytest.raises(AccountLinkError) as exc:
+        await svc.link_tenant_push(tenant_id=TENANT, subject_id="bob", venue="hyperliquid",
+                                   account_ref="Account-X", consent_receipt_id="cr")
+    assert exc.value.reason == "account_already_linked_to_another_subject"
+    # Re-linking the same owner is an idempotent upsert, not a conflict.
+    await svc.link_tenant_push(tenant_id=TENANT, subject_id="alice", venue="hyperliquid",
+                               account_ref="Account-X", consent_receipt_id="cr2")
+
+
+async def test_legacy_ambiguous_accounts_are_excluded_from_the_map(service):
+    from value.derivatives.account_links import LinkMethod, VenueAccountLink, link_id_for
+
+    svc, _ = service
+    for subject in ("alice", "bob"):  # rows written before the single-owner rule
+        link = VenueAccountLink(
+            link_id=link_id_for(TENANT, subject, "hyperliquid", "Account-X"), tenant_id=TENANT,
+            subject_id=subject, venue="hyperliquid", account_ref="Account-X",
+            method=LinkMethod.TENANT_PUSH, consent_receipt_id="cr",
+        )
+        await svc._repo.insert(link.link_id, link.to_record())
+    mapping, _ = await svc.subjects_by_account_bounded(TENANT)
+    assert ("hyperliquid", "Account-X") not in mapping
+    assert svc.last_ambiguous_accounts == [("hyperliquid", "Account-X")]

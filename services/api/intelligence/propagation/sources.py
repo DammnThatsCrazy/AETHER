@@ -117,7 +117,17 @@ class RepositoryPropagationSources:
 
             self._links = VenueAccountLinkService()
         try:
-            return await self._links.subjects_by_account(tenant_id)
+            bounded = getattr(self._links, "subjects_by_account_bounded", None)
+            if bounded is None:
+                return await self._links.subjects_by_account(tenant_id)
+            mapping, truncated = await bounded(tenant_id)
+            if truncated:
+                # The population (and so adoptions and baseline denominators)
+                # is a capped subset; say so rather than present it as complete.
+                reasons.add("venue_account_link_scan_capped")
+            if getattr(self._links, "last_ambiguous_accounts", None):
+                reasons.add("venue_account_link_ownership_ambiguous")
+            return mapping
         except Exception:  # noqa: BLE001 - link authority failures stay explicit
             reasons.add("venue_account_link_authority_unavailable")
             return {}
@@ -134,8 +144,12 @@ class RepositoryPropagationSources:
         events: list[dict[str, Any]] = []
         try:
             for _venue, account in sorted(subjects):
+                # derivatives_fills has no created_at column: order explicitly.
                 rows = await self._fills.find_many(
-                    {"tenant_id": tenant_id, "trading_account_id": f"acct_{account}"}, limit=_FILL_LIMIT,
+                    {"tenant_id": tenant_id, "trading_account_id": f"acct_{account}"},
+                    limit=_FILL_LIMIT,
+                    order_by="executed_at",
+                    descending=False,
                 )
                 if len(rows) >= _FILL_LIMIT:
                     reasons.add("stored_fill_scan_capped")

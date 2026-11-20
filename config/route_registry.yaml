@@ -113,6 +113,7 @@ known_prefixes:
   - /models
   - /sdk/alias
   - /sdk/consent
+  - /sdk/device-integrity
   - /sdk/health
   - /sdk/heartbeat
   - /sdk/identity

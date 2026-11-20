@@ -160,10 +160,22 @@ export function useSdkSites() {
   });
 }
 
-export async function createSdkSite(input: { name: string; origins: readonly string[] }): Promise<SdkSite> {
+/**
+ * Register a site. Web sites declare origins; iOS, Android and React Native
+ * sites declare app ids (bundle ID / package name), because native apps send
+ * no Origin.
+ */
+export async function createSdkSite(input: {
+  name: string;
+  platform?: 'web' | 'ios' | 'android' | 'react_native';
+  origins?: readonly string[];
+  appIds?: readonly string[];
+}): Promise<SdkSite> {
+  const platform = input.platform ?? 'web';
   const res = await restClient.post('/v1/sdk/sites', wrap(z.object({ site: siteSchema })), {
     name: input.name,
-    origins: input.origins,
+    platform,
+    ...(platform === 'web' ? { origins: input.origins ?? [] } : { app_ids: input.appIds ?? [] }),
     environment: 'production',
   });
   queryCache.invalidatePrefix(SITES);
@@ -174,13 +186,14 @@ export interface PublishableKey {
   readonly id: string;
   readonly key: string;
   readonly siteId: string;
-  readonly snippet: string;
+  /** Server-rendered CDN tag; null for native sites, which configure in code. */
+  readonly snippet: string | null;
 }
 
 export async function createSitePublishableKey(siteId: string, name: string): Promise<PublishableKey> {
   const res = await restClient.post(
     `/v1/sdk/sites/${encodeURIComponent(siteId)}/keys`,
-    wrap(z.object({ api_key: z.string(), id: z.string(), site_id: z.string(), snippet: z.string() }).passthrough()),
+    wrap(z.object({ api_key: z.string(), id: z.string(), site_id: z.string(), snippet: z.string().nullable() }).passthrough()),
     { name },
   );
   queryCache.invalidatePrefix(KEYS);

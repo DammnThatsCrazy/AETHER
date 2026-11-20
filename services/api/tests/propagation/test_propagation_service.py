@@ -43,7 +43,10 @@ class FakeFills:
              "fill_id": "f3", "side": "buy", "price": "41", "quantity": "1", "executed_at": at(50)},
         ]
 
-    async def find_many(self, filters, limit=50):
+    async def find_many(self, filters, limit=50, order_by="created_at", descending=True):
+        # derivatives_fills has no created_at column; the real typed repo would
+        # fail in PostgreSQL on its default ordering.
+        assert order_by == "executed_at", order_by
         return [r for r in self.rows if all(r.get(k) == v for k, v in filters.items())]
 
 
@@ -182,3 +185,14 @@ async def test_route_runs_for_caller_tenant_only(monkeypatch):
     assert seen["tenant"] == T
     assert response["data"]["tenant_id"] == T
     assert set(granted) == {"analytics", "derivatives:read"}
+
+
+async def test_capped_link_population_is_a_run_limitation():
+    class CappedLinks(FakeLinks):
+        async def subjects_by_account_bounded(self, tenant_id):
+            return await self.subjects_by_account(tenant_id), True
+
+    src, _, _ = sources()
+    src._links = CappedLinks()
+    result = await PropagationService(src).run(query())
+    assert "venue_account_link_scan_capped" in result.limitations

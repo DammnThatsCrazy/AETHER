@@ -215,3 +215,111 @@ def test_loader_url_is_the_one_the_shipping_bundle_advertises():
     advertised = set(re.findall(r"https://cdn\.aether\.network/[A-Za-z0-9._/-]*\.js", bundle))
     assert advertised, "the loader bundle advertises no CDN URL"
     assert LOADER_URL in advertised
+
+
+# ── Native sites ─────────────────────────────────────────────────────────────
+#
+# A native app sends no Origin, so it is bound to its bundle ID / package name.
+# The binding scopes a publishable key that ships inside the app binary; it is
+# a declaration, not app authentication.
+
+def test_app_ids_accept_bundle_ids_and_package_names_and_keep_case():
+    from ingestion.sdk_distribution.sites import normalize_app_ids
+
+    assert normalize_app_ids(
+        [" com.Example.App ", "com.example.app", "com.Example.App"]
+    ) == ["com.Example.App", "com.example.app"]
+
+
+@pytest.mark.parametrize(
+    "bad", ["", "app", "com.*", "com..example", ".com.example", "https://example.com", "com.example/app"]
+)
+def test_app_ids_refuse_wildcards_and_non_reverse_dns(bad):
+    from ingestion.sdk_distribution.sites import SiteAppIdError, normalize_app_id
+
+    with pytest.raises(SiteAppIdError):
+        normalize_app_id(bad)
+
+
+class _State:
+    def __init__(self, tenant):
+        self.tenant = tenant
+
+
+class _Request:
+    def __init__(self, tenant):
+        self.state = _State(tenant)
+        self.headers = {}
+        self.url = type("U", (), {"path": "/v1/sdk/sites"})()
+        self.method = "POST"
+
+
+def _operator(tenant_id: str):
+    from shared.auth.auth import TenantContext
+
+    return TenantContext(tenant_id=tenant_id, permissions=["read", "write"])
+
+
+def test_a_native_site_declares_app_ids_and_mints_a_native_publishable_key():
+    from ingestion.sdk_distribution.routes import (
+        SiteCreateRequest,
+        create_site,
+        create_site_key,
+        SiteKeyCreateRequest,
+    )
+
+    request = _Request(_operator("t-sites-native"))
+    created = _run(create_site(
+        SiteCreateRequest(name="iOS app", platform="ios", app_ids=["com.example.app"]),
+        request,
+    ))["data"]["site"]
+    assert created["platform"] == "ios"
+    assert created["app_ids"] == ["com.example.app"]
+    assert created["origins"] == []
+
+    issued = _run(create_site_key(created["id"], SiteKeyCreateRequest(), request))["data"]
+    assert issued["api_key"].startswith("pk_")
+    assert issued["site_id"] == created["id"]
+    assert issued["platform"] == "ios"
+    # An HTML tag is a web install; a native app is configured in code.
+    assert issued["snippet"] is None
+
+
+@pytest.mark.parametrize(
+    "platform,origins,app_ids",
+    [
+        ("web", None, ["com.example.app"]),
+        ("web", None, None),
+        ("android", ["https://example.com"], None),
+        ("react_native", None, None),
+        ("ios", None, ["*.example"]),
+    ],
+)
+def test_a_site_must_declare_exactly_its_platforms_binding(platform, origins, app_ids):
+    from ingestion.sdk_distribution.routes import SiteCreateRequest, create_site
+    from shared.common.common import BadRequestError
+
+    request = _Request(_operator("t-sites-binding"))
+    with pytest.raises(BadRequestError):
+        _run(create_site(
+            SiteCreateRequest(name="x", platform=platform, origins=origins, app_ids=app_ids),
+            request,
+        ))
+
+
+def test_a_web_site_still_defaults_to_web_and_gets_its_snippet():
+    from ingestion.sdk_distribution.routes import (
+        SiteCreateRequest,
+        SiteKeyCreateRequest,
+        create_site,
+        create_site_key,
+    )
+
+    request = _Request(_operator("t-sites-web"))
+    created = _run(create_site(
+        SiteCreateRequest(name="Web", origins=["example.com"]), request
+    ))["data"]["site"]
+    assert created["platform"] == "web"
+    assert created["origins"] == ["https://example.com"]
+    issued = _run(create_site_key(created["id"], SiteKeyCreateRequest(), request))["data"]
+    assert issued["snippet"].startswith("<script")

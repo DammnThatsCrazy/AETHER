@@ -45,6 +45,12 @@ export interface ActivationStatus {
   readonly created_key_ids: readonly string[];
   readonly billing_state: string;
   readonly first_value_evidence: Record<string, unknown>;
+  /**
+   * First event an installed SDK sent, as opposed to a dashboard test event
+   * (which proves the pipeline, not an install). Null until one arrives;
+   * absent on status reads from before the field existed.
+   */
+  readonly first_sdk_event?: { readonly event_id: string; readonly event_type?: string | null; readonly received_at?: string | null } | null;
   readonly waiting_reason: string | null;
   // WS-3 (intent-driven activation): the tenant's durable ActivationIntent tokens
   // + save timestamp. Additive — absent for status reads cached before WS-3.

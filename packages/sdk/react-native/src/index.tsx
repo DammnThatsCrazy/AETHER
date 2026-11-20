@@ -82,6 +82,7 @@ export function AetherProvider({
       healthAgent = new RNHealthAgent({
         endpoint,
         apiKey: config.apiKey,
+        ...(config.siteId ? { siteId: config.siteId } : {}),
         appVersion: config.appVersion,
       });
       healthAgent.start();
@@ -139,7 +140,7 @@ export function AetherProvider({
       RNFeatureFlags.destroy();
       RNFeedback.destroy();
     };
-  }, [config.apiKey]);
+  }, [config.apiKey, config.siteId]);
 
   return (
     <AetherContext.Provider value={{ aether: Aether, isInitialized }}>

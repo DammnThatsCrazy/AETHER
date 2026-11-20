@@ -1,7 +1,7 @@
 """The site registry.
 
 A *site* is one property the SDK is installed on — a marketing site, an app
-shell, a docs domain — identified by the ``site_id`` that travels in the
+shell, a docs domain, a native iOS or Android app — identified by the ``site_id`` that travels in the
 snippet's ``data-site`` attribute and in every request's ``X-Aether-Site``
 header.
 
@@ -34,8 +34,27 @@ _LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
 _HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$")
 
 
+# Where a site's SDK runs. A web site is bound to the origins its snippet is
+# served on; a native app has no origin (iOS and Android send none), so it is
+# bound to its application identifier instead: the iOS bundle ID or the Android
+# package name. React Native apps declare the identifiers of both builds.
+PLATFORM_WEB = "web"
+NATIVE_PLATFORMS = ("ios", "android", "react_native")
+SITE_PLATFORMS = (PLATFORM_WEB, *NATIVE_PLATFORMS)
+
+# Reverse-DNS application identifier: at least two dot-separated segments,
+# each starting with a letter or digit. Covers iOS bundle IDs
+# (``com.example.App``) and Android application IDs (``com.example.app``).
+_APP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9][A-Za-z0-9_-]*)+$")
+_APP_ID_MAX_LENGTH = 255
+
+
 class SiteOriginError(ValueError):
     """An origin a snippet must never be installed on."""
+
+
+class SiteAppIdError(ValueError):
+    """An application identifier a native site cannot be bound to."""
 
 
 def new_site_id() -> str:
@@ -102,6 +121,45 @@ def normalize_origins(origins: list[str]) -> list[str]:
     seen: list[str] = []
     for origin in origins:
         normalized = normalize_origin(origin)
+        if normalized not in seen:
+            seen.append(normalized)
+    return seen
+
+
+def normalize_app_id(app_id: str) -> str:
+    """Validate one iOS bundle ID or Android application ID.
+
+    Case is kept: iOS bundle IDs are case-sensitive in practice (App Store
+    Connect treats ``com.Example.App`` and ``com.example.app`` as different
+    apps), so folding case would merge two distinct registrations.
+
+    The identifier is a declaration, not proof. A native app sends no origin a
+    browser vouches for, and anyone can put any bundle ID in a request, so this
+    binding scopes a publishable key's blast radius to one site; it does not
+    authenticate the app. Wildcards are refused for the same reason as on web
+    origins: nothing downstream implements them.
+    """
+    raw = (app_id or "").strip()
+    if not raw:
+        raise SiteAppIdError("app id must not be empty")
+    if "*" in raw:
+        raise SiteAppIdError(
+            f"app id must name one app, not a wildcard ({raw!r}); list each "
+            "bundle ID or package name"
+        )
+    if len(raw) > _APP_ID_MAX_LENGTH or not _APP_ID_RE.match(raw):
+        raise SiteAppIdError(
+            f"app id must be a reverse-DNS bundle ID or package name such as "
+            f"com.example.app, got {raw!r}"
+        )
+    return raw
+
+
+def normalize_app_ids(app_ids: list[str]) -> list[str]:
+    """Normalize a declared app-id list, preserving order and dropping repeats."""
+    seen: list[str] = []
+    for app_id in app_ids:
+        normalized = normalize_app_id(app_id)
         if normalized not in seen:
             seen.append(normalized)
     return seen

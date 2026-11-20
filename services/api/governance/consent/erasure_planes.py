@@ -1732,9 +1732,21 @@ async def erase_venue_account_links_plane(subject: ErasureSubject) -> dict[str, 
     """Hard-delete the subject's tenant venue account links (wallet / key refs).
 
     Links are keyed by the tenant's subject id, so every subject ref is tried;
-    deletion is tenant-exact and idempotent.
+    deletion is tenant-exact and idempotent. An active legal hold on
+    ``venue_account_links`` for any subject ref skips the plane.
     """
     from repositories.repos import VenueAccountLinkRepository
+    from shared.storage.lifecycle import StorageLifecycle
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(subject.tenant_id, "venue_account_links", ref)
+        if hold is not None:
+            return {VENUE_ACCOUNT_LINKS_COMPONENT: Receipt(
+                status="skipped_legal_hold",
+                policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                blocked_reason=str(hold.get("reason") or "legal hold"),
+            )}
 
     repo = VenueAccountLinkRepository()
     deleted = 0

@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from decimal import Decimal
-from typing import Any, Iterable, Mapping
+import re
+from typing import Any, Iterable, Mapping, Optional
 
 from intelligence.propagation.contracts import AdoptionEvent
 from value.derivatives.models import (
@@ -31,6 +32,16 @@ from value.derivatives.models import (
     PositionStatus,
 )
 from value.derivatives.position_engine import apply_fill
+
+
+def _instant(value: str):
+    """Parsed instant for chronological comparison; unparseable sorts last."""
+    from datetime import datetime, timezone
+
+    from shared.temporal.instant import try_parse_instant
+
+    parsed, _ = try_parse_instant(value)
+    return parsed or datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
 
 def _account_ref(trading_account_id: str) -> str:
@@ -50,6 +61,27 @@ def _fill_fact(tenant_id: str, venue: str, payload: Mapping[str, Any]) -> Normal
         quantity=Decimal(str(payload["quantity"])),
         executed_at=str(payload["executed_at"]),
     )
+
+
+_EVM_ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}")
+
+
+def _linked_subject(
+    subjects_by_account: Mapping[tuple[str, str], str], venue: str, account: str,
+) -> Optional[str]:
+    """Exact account match first; case is folded only for EVM addresses.
+
+    Tenant-push and credential account references can be case-sensitive, so a
+    lowercase lookup could hand one subject's fill to another. EVM addresses
+    are case-insensitive (checksum casing only), and wallet links store them
+    lowercase, so only they fall back to the lowercase key.
+    """
+    exact = subjects_by_account.get((venue, account))
+    if exact is not None:
+        return exact
+    if _EVM_ADDRESS.fullmatch(account):
+        return subjects_by_account.get((venue, account.lower()))
+    return None
 
 
 def _history_truncated(fact: NormalizedFillFact, payload: Mapping[str, Any]) -> bool:
@@ -79,7 +111,7 @@ def adoptions_from_fill_events(
         payload = event.get("payload") or {}
         venue = str(payload.get("venue_id") or "")
         account = _account_ref(str(payload.get("trading_account_id") or ""))
-        subject = subjects_by_account.get((venue, account.lower())) or subjects_by_account.get((venue, account))
+        subject = _linked_subject(subjects_by_account, venue, account)
         if subject is None:
             reasons.add("fill_account_not_linked")
             continue
@@ -92,7 +124,7 @@ def adoptions_from_fill_events(
 
     candidates: dict[tuple[str, str], AdoptionEvent] = {}
     for (subject, venue, _stream), items in sorted(by_stream.items()):
-        items.sort(key=lambda pair: (pair[0].executed_at, pair[0].fill_id))
+        items.sort(key=lambda pair: (_instant(pair[0].executed_at), pair[0].fill_id))
         if _history_truncated(items[0][0], items[0][1]):
             # The earliest observed fill acts on a position opened before the
             # observed history, so this subject is not a first-time entrant.
@@ -131,12 +163,12 @@ def adoptions_from_fill_events(
             )
             key = (subject, instrument_key)
             current = candidates.get(key)
-            if current is None or (adoption.adopted_at, adoption.canonical_market_id) < (
-                current.adopted_at, current.canonical_market_id,
+            if current is None or (_instant(adoption.adopted_at), adoption.canonical_market_id) < (
+                _instant(current.adopted_at), current.canonical_market_id,
             ):
                 candidates[key] = adoption
             break  # only the first opening epoch of each stream can be a first entry
-    return sorted(candidates.values(), key=lambda a: (a.adopted_at, a.subject_id)), reasons
+    return sorted(candidates.values(), key=lambda a: (_instant(a.adopted_at), a.subject_id)), reasons
 
 
 __all__ = ["adoptions_from_fill_events"]

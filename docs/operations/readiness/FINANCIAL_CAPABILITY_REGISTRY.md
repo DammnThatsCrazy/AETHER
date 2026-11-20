@@ -26,8 +26,8 @@ source_files:
 source_hashes:
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/founding_tenant_release.yaml": "sha256:d90fe5eb258ef25f87773f719e5f87b1f7c25a87b0bdb9506bfda3c7755162ec"
-  "config/route_registry.yaml": "sha256:39bd08a8cb61c64a831c476e7db4142fcacc1031f6313cca0970d1ecdf115170"
-  "config/service_classification.yaml": "sha256:2930c567acb0fc9dec5efa133b896c4b1d6eaf1bc63c84ec9e98486d2f6a4a14"
+  "config/route_registry.yaml": "sha256:2dbacab4c3d848de948bc2924f0b391229ae2b5b86d759bded830cd39d6e99f6"
+  "config/service_classification.yaml": "sha256:4664d9c87960855982d77080f9e9f733b524b01db3886b1226080b22d9adb761"
   "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
   "docs/_generated/financial-capability-matrix.json": "sha256:a196f631b28740f20ae01eb021c0e4214a85511a33c98d66fa062bd5ec05655c"
   "scripts/validate_financial_capability_registry.py": "sha256:fb11972329f20b9e8eea683c83393ae8cc66e3af9a003723da5ac75f85cd2241"

@@ -259,7 +259,9 @@ class VenueDerivativesAdapter(DerivativesAdapter):
                     plan.build_request,
                     plan.extract_page,
                     start_cursor=None,
-                    max_pages=plan.max_pages,
+                    # The adapter-level bound caps every plan (a caller can only
+                    # tighten a plan's own default, never widen it).
+                    max_pages=min(plan.max_pages, self._max_pages),
                     health=health,
                 )
             except ProviderRequestError as exc:
@@ -320,7 +322,7 @@ class VenueDerivativesAdapter(DerivativesAdapter):
         health = {"health": PROVIDER_HEALTH_OK}
         records, _ = await self._rest.paginate(
             plan.build_request, plan.extract_page,
-            start_cursor=None, max_pages=plan.max_pages, health=health,
+            start_cursor=None, max_pages=min(plan.max_pages, self._max_pages), health=health,
         )
         return [self._bronze(record_type, account, record) for record in records]
 

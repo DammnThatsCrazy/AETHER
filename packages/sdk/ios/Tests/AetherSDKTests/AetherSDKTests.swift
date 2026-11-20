@@ -383,11 +383,19 @@ final class AetherSDKTests: XCTestCase {
 
     func testTierACanonicalPurposes() {
         let purposes = Aether.canonicalConsentPurposes
-        XCTAssertEqual(Set(purposes), Set([
-            "analytics", "marketing", "personalization", "web3",
-            "agent", "commerce", "credit", "location"
-        ]))
-        XCTAssertEqual(Set(Aether.explicitOptInPurposes), Set(["credit", "location"]))
+        // Mirrors CONSENT_PURPOSES / EXPLICIT_OPT_IN_PURPOSES in packages/shared/consent.ts.
+        XCTAssertEqual(purposes, [
+            "analytics", "marketing", "personalization", "web3", "agent", "commerce",
+            "financial_activity", "credit", "location", "economic_observability",
+            "cross_chain_observability", "fraud_prevention",
+        ])
+        XCTAssertEqual(Aether.explicitOptInPurposes, [
+            "financial_activity", "credit", "location", "economic_observability",
+            "cross_chain_observability", "fraud_prevention",
+        ])
+        // grantAll() must never grant an explicit-opt-in purpose.
+        let grantable = purposes.filter { !Aether.explicitOptInPurposes.contains($0) }
+        XCTAssertEqual(grantable, ["analytics", "marketing", "personalization", "web3", "agent", "commerce"])
     }
 
     // MARK: - Manifest Signature Verification (§2.9)
@@ -609,5 +617,53 @@ final class AutomationSignalsTests: XCTestCase {
         let data = try JSONEncoder().encode(EventContext.AutomationInfo(testHarness: true, emulator: false))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Bool])
         XCTAssertEqual(json, ["testHarness": true, "emulator": false])
+    }
+}
+
+final class DeviceIntegrityManagerTests: XCTestCase {
+
+    private func makeDefaults() -> UserDefaults {
+        let suite = "aether.test.integrity.\(UUID().uuidString)"
+        return UserDefaults(suiteName: suite)!
+    }
+
+    func testStoredTokenIsBoundToInstallAndExpiry() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let manager = DeviceIntegrityManager(defaults: makeDefaults(), post: { _, _, c in c(nil) }, now: { now })
+        XCTAssertNil(manager.currentToken(for: "anon-1"))
+        XCTAssertTrue(manager.needsRefresh(for: "anon-1"))
+
+        manager.store(["integrityToken": "tok", "expiresAt": NSNumber(value: 1_000_000 + 7 * 86_400)], anonymousId: "anon-1")
+        XCTAssertEqual(manager.currentToken(for: "anon-1"), "tok")
+        XCTAssertNil(manager.currentToken(for: "anon-2"))
+        XCTAssertFalse(manager.needsRefresh(for: "anon-1"))
+        XCTAssertTrue(manager.needsRefresh(for: "anon-2"))
+    }
+
+    func testRefreshIsDueBeforeExpiryAndExpiredTokensAreNotSent() {
+        var now = Date(timeIntervalSince1970: 1_000_000)
+        let manager = DeviceIntegrityManager(defaults: makeDefaults(), post: { _, _, c in c(nil) }, now: { now })
+        manager.store(["integrityToken": "tok", "expiresAt": NSNumber(value: 1_000_000 + 3_600)], anonymousId: "a")
+        XCTAssertTrue(manager.needsRefresh(for: "a"), "inside the refresh margin")
+        XCTAssertEqual(manager.currentToken(for: "a"), "tok")
+        now = Date(timeIntervalSince1970: 1_000_000 + 3_601)
+        XCTAssertNil(manager.currentToken(for: "a"))
+    }
+
+    func testMalformedVerifyResponseStoresNothingAndClearRemovesToken() {
+        let manager = DeviceIntegrityManager(defaults: makeDefaults(), post: { _, _, c in c(nil) })
+        manager.store(["verdict": "verified"], anonymousId: "a")
+        XCTAssertNil(manager.currentToken(for: "a"))
+        manager.store(["integrityToken": "t", "expiresAt": NSNumber(value: Int(Date().timeIntervalSince1970) + 86_400)], anonymousId: "a")
+        XCTAssertNotNil(manager.currentToken(for: "a"))
+        manager.clear()
+        XCTAssertNil(manager.currentToken(for: "a"))
+    }
+
+    func testIntegrityEncodesInsideDeviceInfo() throws {
+        var device = EventContext.DeviceInfo(osName: "iOS", osVersion: "17", locale: "en_US", timezone: "UTC")
+        device.integrity = .init(token: "tok")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(device)) as? [String: Any])
+        XCTAssertEqual((json["integrity"] as? [String: String])?["token"], "tok")
     }
 }

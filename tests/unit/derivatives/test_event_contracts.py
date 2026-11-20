@@ -230,3 +230,20 @@ def test_runtime_fill_intake_keeps_event_contract_context_in_source_refs():
         "event_contract_ref=polymarket:mainnet:0xc", "outcome=Yes",
     ]
     assert _fill_source_refs({"source_refs": ["outcome=No"], "outcome": "Yes"}) == ["outcome=No"]
+
+
+def test_adapter_page_bound_caps_every_stream_plan():
+    pages = {"n": 0}
+
+    def handler(request):
+        if request.url.path.endswith("/v2/trades"):
+            pages["n"] += 1
+            body = {"data": [{**PM["trades"]["data"][0], "timestamp": 1_800_000_000 - pages["n"]}],
+                    "pagination": {"has_more": True, "next_cursor": f"c{pages['n']}"}}
+            return httpx.Response(200, json=body, request=request)
+        return httpx.Response(200, json={"data": [], "pagination": {"has_more": False}}, request=request)
+
+    adapter = PolymarketAdapter(http_transport=httpx.MockTransport(handler), account_ref=PM["account_ref"],
+                                sleeper=_noop, max_pages=3)
+    asyncio.run(adapter.pull_events())
+    assert pages["n"] == 3

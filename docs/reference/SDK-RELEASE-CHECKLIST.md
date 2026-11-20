@@ -27,7 +27,8 @@ Process for cutting an SDK release. Publishing is automated via
       (`make bump-version` / the publish workflow).
 - [ ] Backward-compatibility notes for any changed event/field.
 - [ ] Sample integration verified (Demo App / quickstart).
-- [ ] Dispatch a `workflow_dispatch` on `publish-sdk.yml` (use `dry_run` first).
+- [ ] Dispatch a `workflow_dispatch` on `publish-sdk.yml` (use `dry_run` first). A real publish must
+      be dispatched from `development`; the version bump is pushed there with the tag.
 - [ ] Verify published artifacts: npm (`@olympuslabs/aether-web`, `@olympuslabs/aether-react-native`,
       `@olympuslabs/aether-shared`), CocoaPods (`AetherSDK`), Maven (`com.olympuslabsml:aether-android`).
 - [ ] Staged rollout: set `rollout_percentage` in the SDK manifest; monitor

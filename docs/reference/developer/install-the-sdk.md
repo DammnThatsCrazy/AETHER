@@ -13,10 +13,15 @@ since_version: 0.1.0
 The SDKs are in alpha (`0.1.0-alpha.0`). Pin the exact version until 1.0, since
 pre-1.0 minor releases may contain breaking changes.
 
-Use the key Aether issues for each SDK during onboarding. Browser SDKs (Web,
-React) get a site-bound **publishable key** (`pk_…`), which is safe to ship in
-page code. The Server SDK uses a **secret key**; keep it in an environment
-variable and never send it to a browser or app.
+Use the key Aether issues for each SDK during onboarding. Browser and app SDKs
+(Web, React, React Native, iOS, Android) get a site-bound **publishable key**
+(`pk_…`) together with a **site id** (`site_…`). Configure both: the SDK sends
+the site id as `X-Aether-Site`, and the backend accepts the key only for that
+site. A web site is bound to the origins it is served from; an app is bound to
+its bundle ID or package name, because native apps send no `Origin`. The key is
+readable from page source or an app binary, so it can only send events for its
+site. The Server SDK uses a **secret key**; keep it in an environment variable
+and never ship it in a browser or app.
 
 ## Web SDK (browser, React)
 
