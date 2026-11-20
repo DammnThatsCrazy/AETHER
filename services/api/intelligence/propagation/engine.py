@@ -80,6 +80,15 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
     return parsed
 
 
+_FAR_FUTURE = datetime.max.replace(tzinfo=timezone.utc)
+
+
+def _adoption_order(adoption: AdoptionEvent) -> tuple[datetime, str, str]:
+    """Chronological order by parsed instant (ISO strings with different
+    offsets do not sort chronologically); unparseable instants sort last."""
+    return (_parse(adoption.adopted_at) or _FAR_FUTURE, adoption.adopted_at, adoption.subject_id)
+
+
 def _digest(value: Any) -> str:
     return hashlib.sha256(
         json.dumps(_plain(value), sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
@@ -156,7 +165,7 @@ def _episode(
     population: set[str],
     any_exposure_evidence: bool,
 ) -> DiffusionEpisode:
-    adopters = sorted(adopters, key=lambda a: (a.adopted_at, a.subject_id))
+    adopters = sorted(adopters, key=_adoption_order)
     at = {a.subject_id: _parse(a.adopted_at) for a in adopters}
     seed = adopters[0]
     unknown: set[str] = set()
@@ -382,7 +391,9 @@ def compute_propagation(
         if wanted and adoption.instrument_key not in wanted:
             continue
         key = (adoption.subject_id, adoption.instrument_key)
-        if key not in first or (adoption.adopted_at, adoption.side) < (first[key].adopted_at, first[key].side):
+        if key not in first or (_adoption_order(adoption), adoption.side) < (
+            _adoption_order(first[key]), first[key].side,
+        ):
             first[key] = adoption
 
     channels = set(query.channels)

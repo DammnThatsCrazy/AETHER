@@ -290,3 +290,13 @@ def test_offsetless_exposure_time_is_unknown_not_assumed_utc():
     episode = result.episodes[0]
     assert episode.metrics.exposed_adopters == 0
     assert "exposure_time_unknown" in episode.metrics.unknown_reasons
+
+
+def test_mixed_utc_offsets_order_chronologically():
+    early = AdoptionEvent(T, "u1", HYPE, "long", "2026-11-01T12:00:00+02:00", "hyperliquid", "0xu1", HYPE, ("f1",))
+    late = AdoptionEvent(T, "u2", HYPE, "long", "2026-11-01T11:00:00+00:00", "hyperliquid", "0xu2", HYPE, ("f2",))
+    result = compute_propagation(query(window_start="2026-11-01T00:00:00+00:00"), [late, early],
+                                 exposures_from_edges(T, [follows("u2", "u1")])[0], POP, computed_at=at(0))
+    (episode,) = result.episodes
+    assert episode.seed_subject == "u1"  # 10:00Z precedes 11:00Z despite the string order
+    assert episode.metrics.exposed_adopters == 1

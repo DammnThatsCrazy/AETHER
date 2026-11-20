@@ -43,7 +43,10 @@ class FakeFills:
              "fill_id": "f3", "side": "buy", "price": "41", "quantity": "1", "executed_at": at(50)},
         ]
 
-    async def find_many(self, filters, limit=50):
+    async def find_many(self, filters, limit=50, order_by="created_at", descending=True):
+        # derivatives_fills has no created_at column; the real typed repo would
+        # fail in PostgreSQL on its default ordering.
+        assert order_by == "executed_at", order_by
         return [r for r in self.rows if all(r.get(k) == v for k, v in filters.items())]
 
 

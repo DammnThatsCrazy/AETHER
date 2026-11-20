@@ -33,6 +33,16 @@ from value.derivatives.models import (
 from value.derivatives.position_engine import apply_fill
 
 
+def _instant(value: str):
+    """Parsed instant for chronological comparison; unparseable sorts last."""
+    from datetime import datetime, timezone
+
+    from shared.temporal.instant import try_parse_instant
+
+    parsed, _ = try_parse_instant(value)
+    return parsed or datetime.max.replace(tzinfo=timezone.utc)
+
+
 def _account_ref(trading_account_id: str) -> str:
     return trading_account_id[5:] if trading_account_id.startswith("acct_") else trading_account_id
 
@@ -92,7 +102,7 @@ def adoptions_from_fill_events(
 
     candidates: dict[tuple[str, str], AdoptionEvent] = {}
     for (subject, venue, _stream), items in sorted(by_stream.items()):
-        items.sort(key=lambda pair: (pair[0].executed_at, pair[0].fill_id))
+        items.sort(key=lambda pair: (_instant(pair[0].executed_at), pair[0].fill_id))
         if _history_truncated(items[0][0], items[0][1]):
             # The earliest observed fill acts on a position opened before the
             # observed history, so this subject is not a first-time entrant.
@@ -131,12 +141,12 @@ def adoptions_from_fill_events(
             )
             key = (subject, instrument_key)
             current = candidates.get(key)
-            if current is None or (adoption.adopted_at, adoption.canonical_market_id) < (
-                current.adopted_at, current.canonical_market_id,
+            if current is None or (_instant(adoption.adopted_at), adoption.canonical_market_id) < (
+                _instant(current.adopted_at), current.canonical_market_id,
             ):
                 candidates[key] = adoption
             break  # only the first opening epoch of each stream can be a first entry
-    return sorted(candidates.values(), key=lambda a: (a.adopted_at, a.subject_id)), reasons
+    return sorted(candidates.values(), key=lambda a: (_instant(a.adopted_at), a.subject_id)), reasons
 
 
 __all__ = ["adoptions_from_fill_events"]
