@@ -117,7 +117,15 @@ class RepositoryPropagationSources:
 
             self._links = VenueAccountLinkService()
         try:
-            return await self._links.subjects_by_account(tenant_id)
+            bounded = getattr(self._links, "subjects_by_account_bounded", None)
+            if bounded is None:
+                return await self._links.subjects_by_account(tenant_id)
+            mapping, truncated = await bounded(tenant_id)
+            if truncated:
+                # The population (and so adoptions and baseline denominators)
+                # is a capped subset; say so rather than present it as complete.
+                reasons.add("venue_account_link_scan_capped")
+            return mapping
         except Exception:  # noqa: BLE001 - link authority failures stay explicit
             reasons.add("venue_account_link_authority_unavailable")
             return {}

@@ -180,3 +180,16 @@ async def test_dsr_erasure_plane_honors_legal_hold(service, monkeypatch):
     assert receipt.status == "skipped_legal_hold"
     assert receipt.policy_decision_id == "storage_legal_hold:hold_9"
     assert len(await svc.list_links(TENANT)) == 1
+
+
+async def test_capped_account_map_reports_truncation(service):
+    svc, _ = service
+    for i in range(3):
+        await svc.link_tenant_push(
+            tenant_id=TENANT, subject_id=f"user_{i}", venue="hyperliquid",
+            account_ref=f"0x{i}", consent_receipt_id="cr",
+        )
+    mapping, truncated = await svc.subjects_by_account_bounded(TENANT, limit=2)
+    assert len(mapping) == 2 and truncated is True
+    mapping, truncated = await svc.subjects_by_account_bounded(TENANT, limit=3)
+    assert len(mapping) == 3 and truncated is False
