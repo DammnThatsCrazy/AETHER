@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
-  "services/api/shared/certification/registry.py": "sha256:d7c2255829f0ccd7e5551e8a3590222e7bc6008e63046f51d8581c0d47b4300f"
+  "services/api/shared/certification/registry.py": "sha256:38b3c65829db1ac44f2c422b3e540fd7e8f56f0b0a86bf5c3c314a5de2fdee08"
 ---
 
 # Credential & Secret Reference
@@ -23,8 +23,8 @@ source_hashes:
 > provider **API key**, stored per-tenant under the reference
 > `connector:{tenant_id}:klaviyo` (backend `aws_secrets_manager` maps this to
 > `aether/credentials/{tenant_id}/connector:{tenant_id}:klaviyo`).
-> Read access never implies suppression write-back, which is a separately
-> authorized capability (`AETHER_COMMS_SUPPRESSION_WRITE_BACK`, off by default).
+> Read access never implies suppression write-back, and Aether never writes a
+> suppression back to a provider (observation-only, ADR-012).
 
 Which secret each first-release provider needs to move off `credential_waiting`,
 and where it lives. This guide is a per-provider index; the mechanics of storing
@@ -44,11 +44,21 @@ Polling-capable providers (Coinbase, MoonPay, Bridge) additionally need a
 verified polling endpoint + read credential before `_fetch_poll_records` returns
 data. No secret ⇒ the provider stays observation-only via SDK signals.
 
-### Derivatives (5) — read-only
-Hyperliquid, dYdX, GMX, Drift each require a `read_only_api_key`. The
-Polymarket event-contract adapter needs no credential: it reads public wallet
-activity, and the wallet comes from a verified tenant venue account link
-(`/v1/derivatives/account-links`, flag `AETHER_VENUE_ACCOUNT_LINKS_ENABLED`). The read-only
+### Derivatives (8) — read-only
+Hyperliquid, dYdX, GMX, Drift and Polymarket need no credential: they read
+public account activity by wallet address, and the wallet comes from a
+verified tenant venue account link (`/v1/derivatives/account-links`, flag
+`AETHER_VENUE_ACCOUNT_LINKS_ENABLED`). Kalshi needs the member's own read-only
+key (key id plus PEM private key), supplied per subject through
+`POST /v1/derivatives/account-links/credential` and stored by the credential
+broker under that link's connection; it is the member's credential, not an
+Aether environment secret. Bybit (key + secret) and Coinbase Financial Markets
+futures (CDP key name + EC private key) work the same way. Coinbase can also be
+linked by OAuth: the Olympus OAuth app's `client_id` / `client_secret` are an
+Olympus credential set by a Kyber operator
+(`PUT /v1/admin/kyber/derivatives/runtime/oauth-apps/coinbase_futures`, stored
+under the reserved `olympus` scope), and the member's tokens are stored per
+link under the tenant. The read-only
 authority is enforced: an adapter rejects `authority_type: trade` and any
 mutating scope (`orders:write`, `withdraw`). Never provision a key with trade or
 withdraw scope.

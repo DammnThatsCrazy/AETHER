@@ -15,12 +15,12 @@ source_files:
   - docs/_generated/financial-capability-matrix.json
 canonical_owner: platform@aether
 source_hashes:
-  "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
-  "docs/_generated/financial-capability-matrix.json": "sha256:a196f631b28740f20ae01eb021c0e4214a85511a33c98d66fa062bd5ec05655c"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:a0905786f6c85708910a404e3a9212ca4ffcf06ef1ef48938729b87aa1c4967c"
+  "docs/_generated/financial-capability-matrix.json": "sha256:d552a55d1de78f5bb5f515e7468b8aa807a61d8ece50c224cb59df7d428c070a"
   "services/api/shared/certification/capability_records.py": "sha256:f1aa839e3b693dae77e44816c3fac6c21b8207f3c2a980957621dcd34701ed1b"
   "services/api/shared/certification/descriptor.py": "sha256:9b4a90d83b4304d4cf5be2a98df1db3abd971841b91565bc10cd4f17b0c0a198"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
-  "services/api/shared/certification/registry.py": "sha256:d7c2255829f0ccd7e5551e8a3590222e7bc6008e63046f51d8581c0d47b4300f"
+  "services/api/shared/certification/registry.py": "sha256:38b3c65829db1ac44f2c422b3e540fd7e8f56f0b0a86bf5c3c314a5de2fdee08"
 ---
 
 # Provider Capability Matrix Guide
@@ -121,8 +121,8 @@ absence, and certification gates fail on it.
 ## Current first-release scope (all `credential_waiting`)
 
 No first-release provider is live: communications (braze, customerio, hubspot, iterable,
-klaviyo, mailchimp, postmark, sendgrid), derivatives (drift, dydx, gmx,
-hyperliquid, polymarket), interop (axelar, chainlink_ccip, debridge, hyperlane, ibc,
+klaviyo, mailchimp, postmark, sendgrid), derivatives (bybit,
+coinbase_futures, drift, dydx, gmx, hyperliquid, kalshi, polymarket), interop (axelar, chainlink_ccip, debridge, hyperlane, ibc,
 layerzero, wormhole), payments (bridge, coinbase, moonpay, privy,
 stripe_onramp), prediction_market (kalshi, polymarket), stablecoin_chain (evm,
 svm). The generated matrix (`docs/_generated/adapter-certification-matrix.json`)
@@ -137,6 +137,11 @@ Iterable also declare pull (incremental pull, with campaign/message sync and/or
 historical backfill per provider); customerio, mailchimp, postmark, and sendgrid
 are webhook-only and their `capabilities` lists reflect that honestly.
 
+> Hyperliquid, dYdX, GMX, Drift and Polymarket read account activity by public
+> wallet address, so their `required_credentials` is empty: a governed tenant
+> wallet link, not a key, unlocks them. Kalshi, Bybit and Coinbase futures need
+> the member's read-only key (Coinbase also accepts OAuth).
+>
 > Field caveat: for derivatives, `capabilities` come from the live adapter but
 > `streaming_model`/`pagination_model` come from a fixed spec table, so dydx can
 > advertise `realtime_account_stream` while reporting `streaming_model: none`.

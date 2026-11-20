@@ -9,6 +9,8 @@ since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
   - services/api/value/x402/provenance.py
+  - services/api/value/x402/settlement_observer.py
+  - services/api/governance/diagnostics/routes.py
   - services/api/actions/agent/user_agents.py
   - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/actions/agent/deployment_routes.py
@@ -23,99 +25,58 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
-  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
+  "services/api/actions/agent/user_agents.py": "sha256:6e8c6935786206280889003297253f1401cd67573ff490a78349840555b1af20"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/governance/diagnostics/routes.py": "sha256:bb2f2366e46d79164868bb2df1315e1c41d704f48f0ed4d04f4ceb68039a02b9"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
-  "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
-  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
+  "services/api/value/x402/": "sha256:9adb59933e0b97374586571246ddc5aaa9c7ba2edca5d460d4d7331b906076a4"
+  "services/api/value/x402/provenance.py": "sha256:fe227df986d4c03f770d97d6236bc4c5c5ee4410db66415dd38b7a697779d556"
+  "services/api/value/x402/settlement_observer.py": "sha256:d7779f89245892329488cfc587ae4afa4988b012494e4b5acce736acec45874e"
 ---
+
 # Commerce Operator Runbook
 
+Aether is observation-only for x402 ([ADR-012](../architecture/decisions/ADR-012-observation-only-everywhere.md)).
+It records x402 exchanges a tenant's server reports and verifies their
+settlement on-chain. It issues no 402 challenge, approves no spend, grants no
+entitlement and owns no settlement state, so there is nothing to approve,
+retry, revoke or cap from Kyber. The former approval, entitlement, budget
+policy, signer authority and settlement reconciliation procedures were removed
+with the control plane.
+
 The `/v1/diagnostics/commerce/*` routes used below admit only platform
-operators (see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
+operators (see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators))
+and read historical and observed records only.
 
-## 1. Stuck approval (past SLA)
+## 1. A reported payment stays `pending`
 
-**Symptom:** Kyber Mission → Approval Backlog Summary shows items near/past SLA.
-
-**Steps:**
-1. Kyber Command → Commerce Subsystem → Approval Backlog.
-2. Filter queue by `status=assigned` or `status=pending`.
-3. If unassigned: `POST /v1/approvals/{id}/assign` with new approver.
-4. If assigned but idle: escalate with `POST /v1/approvals/{id}/escalate` (dedicated escalate endpoint; status → `escalated`, appends to escalation chain).
-5. Sweeper runs via `GET /v1/diagnostics/commerce/stuck-approvals` — marks expired items.
-
-## 2. Failed settlement
-
-**Symptom:** Diagnostics page shows settlement failure rate climbing, or explicit `commerce.settlement.failed` event.
+**Symptom:** `POST /v1/x402/capture` returns `settlement.state = "pending"`, or
+`x402_settlement_observations_total{state="pending"}` climbs.
 
 **Steps:**
-1. Fetch failure list: `GET /v1/diagnostics/commerce/health` reports aggregate
-   settlement counts (`pending`, lifetime `failed`, and `recent_failed` within the
-   health window); `GET /v1/diagnostics/commerce/stuck-approvals` sweeps expired
-   approvals.
-2. Inspect per-settlement state + `failure_reason` + `attempts`:
-   `GET /v1/admin/operator/agentic/settlements` (Kyber operator, all tenants).
-3. Retry via `SettlementTracker.retry(tenant_id, settlement_id)` or equivalent API.
-4. If facilitator is unhealthy: update health via internal API, select alternate facilitator on retry.
+1. Read `settlement.verdict`. `not_finalized` means the transaction is not yet
+   final on-chain; `verification_unavailable` means the tenant's RPC could not
+   be resolved or reached.
+2. For `verification_unavailable`, check the tenant's `rpc_endpoint_pair`
+   credential for the chain (providers `rpc_evm_base`, `rpc_svm_mainnet`, ...)
+   and the RPC's health. Deployed environments never fall back to a platform
+   RPC.
+3. A pending verdict records nothing terminal. There is no background re-check:
+   the tenant's server re-reports the same payment (same transaction hash) and
+   the observer checks the chain again. Repeated reports are idempotent.
 
-> Expected steady state outside local: newly started settlements park in
-> `PENDING` ("awaiting on-chain finality confirmation") — `SETTLED` is asserted
-> only by the reconciliation path or an explicit operator action, never
-> automatically at start. A growing PENDING backlog with no reconciliation
-> progress is the actionable signal, not PENDING itself.
+## 2. A reported payment is `failed` or `not_observable`
 
-## 3. Facilitator outage
+- `failed` is a terminal on-chain verdict: `reverted`, `payer_mismatch`,
+  `amount_below_required`, `no_matching_transfer` or `malformed`. It describes
+  the reported payment; Aether did not refuse anything.
+  `GET /v1/diagnostics/commerce/verification-failures` lists recent ones.
+- `not_observable` means the report had no payment proof, or the asset/chain
+  is one Aether cannot verify. No settlement claim is made either way.
 
-**Symptom:** `avg_latency_ms` climbing, `success_rate` dropping on Command Facilitator panel.
-
-**Steps:**
-1. Health is derived automatically from verification outcomes: a 200 verdict marks
-   the facilitator `healthy`, a non-200 response `degraded`, and a timeout or
-   connection failure `down`. Manual override via the registry's `update_health`
-   remains available for operator intervention.
-2. `authorize_payment()` excludes facilitators marked `down` and ranks
-   `healthy` ahead of unprobed (`unknown`) ahead of `degraded` on the next
-   selection — freshly seeded facilitators are selectable before their first
-   health observation.
-3. The commerce health endpoint (`GET /v1/diagnostics/commerce/health`)
-   degrades on **recent** failed settlements only (a rolling window), not the
-   lifetime failure count — so a single historical invalid payment no longer
-   pins the endpoint to `degraded` after facilitators recover. The response
-   reports both `failed` (lifetime) and `recent_failed` (in-window).
-4. If all facilitators down: verification falls back to local verification per chain.
-5. Outside the local environment, LOCAL-mode facilitators (the internal Aether
-   verifier seed) are never auto-selected and never confer verification — a
-   tenant with only the internal seed routes straight to on-chain RPC
-   verification.
-
-## 4. Duplicate payment detected
-
-**Symptom:** `commerce_duplicate_payment_detected_total` metric rising, or Kyber alert.
-
-**Steps:**
-1. Idempotency store returns cached result → client sees deterministic replay.
-2. If malicious replay: revoke approval via `POST /v1/approvals/{id}/revoke`.
-3. Revoke entitlement: `POST /v1/entitlements/{id}/revoke`.
-
-## 5. Settlement reconciliation backlog
-
-**Symptom:** PENDING settlements accumulate; `x402_reconciliation_cursor`
-`last_pending` climbs across runs.
-
-**Steps:**
-1. The `X402ReconciliationWorker` (`services/api/value/x402/reconciliation.py`) re-checks
-   each PENDING settlement against the tenant's RPC and advances it to SETTLED
-   only on confirmed finality; a reverted/underpaid/payer-mismatched payment is
-   failed. Persistent PENDING means `verification_unavailable` (RPC not
-   configured/reachable) or `not_finalized` — check the tenant's
-   `rpc_endpoint_pair` credential and RPC health, not the worker.
-2. The worker skips tenants whose x402 capability is SUSPENDED (kill switch) —
-   resume the capability to re-enable reconciliation.
-
-## 6. Agent-reported economic outcomes
+## 3. Agent-reported economic outcomes
 
 **Symptom:** An Agent run reports a payment or settlement reference, or its
 timeline shows a missing, unavailable, or unmatched economic record.
@@ -132,86 +93,16 @@ timeline shows a missing, unavailable, or unmatched economic record.
    A source-reported Agent event or a matching reference establishes neither
    causation nor a completed payment.
 3. Treat public SDK x402 observations as telemetry only. They cannot create or
-   overwrite authoritative payment, settlement, or access-grant state. The
-   server commerce event registry and x402 provenance rules determine which
-   lifecycle records count as server-observed evidence.
+   overwrite authoritative payment or settlement state. The x402 provenance
+   rules determine which lifecycle records count as server-observed evidence;
+   the settlement observer is the only live authoritative producer.
 4. Do not replay a graph projection merely because a source claim is
    unmatched. For graph evidence, use the independent Kyber state check in the
    Operations Runbook; it reports graph drift without repairing it.
 
-## 6. Agent execution approval linkage
+## 4. Historical control-plane records
 
-For an approval request bound to an agent execution, inspect the exact agent,
-action, resource, and amount before deciding. The authenticated tenant user is
-recorded as the decision actor. After approval, provide that approval ID to the
-agent execution request; the backend checks the exact run binding and latest
-decision again. Revoked, mismatched, or already-used execution IDs are rejected.
-The decision history is retained in the tenant-scoped commerce decision store.
-This check covers the x402-linked run only; it does not establish that an
-external payment or business action took place. The agent execution endpoint
-only records admission and bookkeeping; it does not invoke a tool or resource
-operation, and the run record is not an invocation receipt.
-
-## 7. Override review
-
-**Symptom:** `COMMERCE_APPROVAL_OVERRIDE` audit entry surfaces.
-
-**Steps:**
-1. Kyber Review → filter by `is_override=true`.
-2. Validate override reason, approver scope.
-3. If unauthorized: escalate to admin.
-
-## 7. Evidence export
-
-For audit/compliance:
-```bash
-curl /v1/approvals/{id}/evidence → JSON bundle
-curl /v1/x402/explain/{challenge_id} → full lifecycle trace
-```
-
-Both responses include all context needed for SOC2/GDPR evidence.
-
-## 8. Managing budget policies
-
-Budget policies short-circuit the approval queue: an over-cap spend is denied
-at policy time before an approval request is ever issued. Manage them via
-three endpoints on the commerce router (require `x402:write` for mutation,
-`x402:read` for query):
-
-```bash
-# Create or replace a per-subject policy
-curl -X POST /v1/x402/policies/budget \
-  -d '{"subject_id":"agent-42","subject_type":"agent",
-       "daily_cap_usd":100,"monthly_cap_usd":1000,"per_transaction_cap_usd":50}'
-
-# List tenant-wide policies
-curl /v1/x402/policies/budget
-
-# Get one subject's active policy
-curl /v1/x402/policies/budget/agent-42
-```
-
-**When to use it:** a runaway agent or compromised key is racking up
-charges. Set a tight `per_transaction_cap_usd` first (immediate
-limitation), then a tighter `daily_cap_usd` for cumulative protection.
-Re-issue the same `POST` with new caps to replace; there's no separate
-PATCH/DELETE — an absent policy means no caps.
-
-## 9. Signer-authority enforcement at verification
-
-A tenant that has **registered** signer references (via the x402 signer
-authority) is enforced **fail-closed** at payment-proof verification: a proof
-from an unregistered or deactivated payer is rejected with verdict
-`unauthorized_signer` even when on-chain/facilitator verification would
-otherwise succeed. A tenant with **no** signer references (the default) is
-unaffected — the authority never invents an authorized signer.
-
-Revoking the tenant's **last** active signer reference does **not** reopen the
-gate: the registry stays "configured" with zero active references, so every
-payer is rejected fail-closed (`no active signer references`) until an operator
-re-registers or re-activates a signer reference. Deactivating the final signer
-is an intentional lock-out, not a reset to the unconfigured default.
-
-If a previously-valid payment starts failing with
-`verification_verdict="unauthorized_signer"`, re-check the tenant's signer
-registry (a deactivated/rotated reference), not the facilitator or RPC.
+Approval requests, decisions, authorizations, settlements and entitlements
+written before ADR-012 remain in the commerce store. Agent 360, Workflow 360,
+analytics and `/v1/diagnostics/commerce/{settlement-timeouts,approval-expirations,duplicate-payments,reconciliation-drift}`
+read them; commerce erasure still covers them. They no longer change.

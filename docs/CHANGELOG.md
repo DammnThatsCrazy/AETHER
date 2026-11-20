@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:fcb6f5742348977fe508f78db2957c3d3a72dcb862d5cf1154b565cd1dfed9c0"
+  "CHANGELOG.md": "sha256:281e0a05c4a8440d3bb2da84c0cf1ab836fb40b4bf94efc9ef108aeb4e3bb24f"
 ---
 # Changelog
 
@@ -20,6 +20,7 @@ source_hashes:
 
 ### Added
 
+- x402 settlement observer: `POST /v1/x402/capture` now verifies a reported payment on-chain when the report carries a proof, and returns `settlement.state` (`settled` / `failed` / `pending` / `not_observable`). The observer is the only authoritative x402 producer; a pending verdict records nothing terminal and re-reporting re-checks the chain.
 - Cross-device journey continuation: a redeemed journey handoff now makes one journey span both devices (bounded, tenant-scoped walk over redeemed handoffs; the root device owns it). Redemption queues the durable `journey.handoff_continuation` rebuild. No identity is merged.
 - `JOURNEY_ACTIVITY_REBUILD_ENABLED`: newly emitted canonical activity recompiles its journey (debounced per identity), so late events reach the journey. On in staging, off in production.
 - Apple Ads attribution: `POST /v1/attribution/apple-ads/resolve` (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`) verifies the AdServices token with Apple and records `ios_apple_ads_attribution` / `platform_verified` evidence server-side. The iOS SDK adds `resolveAppleAdsAttribution`, also exposed through the React Native bridge.
@@ -50,6 +51,10 @@ source_hashes:
 - Reconciled Control Plane Program A+B: an explicit authority map (external/observed/no-interface/owned/forbidden areas, fail-closed integrity assertion) and a durable readiness-gated activation authority (`shadow→detect→plan→r0→r1→r2→fully_managed` + `emergency_frozen`, CAS + atomic evidence) land behind read-only `/authority`, `/activation` and `/activation/transitions` operator reads. All control-plane flags remain default OFF and no production activation is claimed.
 - Reconciled Control Plane Program C (first slices): the scheduler now derives runtime capabilities from the effective activation decision (`shadow` observes, `detect` reconciles, `plan` may persist a ChangeSet, `r0+` may execute, `disabled`/`emergency_frozen` stop the loop), inherits the global state for tenant scopes without a row, and never lets a tenant exceed global. While the plane is enabled, direct SDK manifest publishing is refused and admins instead request the change through `POST /v1/config/sdk/manifest/requests`, which records a planned ChangeSet plus a stage-zero rollout; a tenant-scoped GET reads the request. The request does not publish a manifest yet. SDK request execution/rollout projection and Provider Runtime convergence remain open Program C work.
 - The `reconciled_control_plane` spine moves `pending` → `in_flight` (authority/non-ownership verified; remaining checks open), and `connection360`'s stale pending-authority declaration is removed.
+
+### Removed
+
+- Aether is observation-only everywhere (ADR-012). Removed every path where Aether acted for a tenant or agent: `POST /v1/agents/{agent_id}/execute` and its `.../status` callback, server-side MCP tool invocation and resource reads, the backend agent lifecycle consumer and mapper, the x402 commerce control plane (402 challenge middleware, protected resources, pricing, budget policies, `/v1/approvals`, `/v1/entitlements`, signer authority, settlement tracker and reconciliation worker, commerce metering and sweepers, `COMMERCE_CONTROL_PLANE_ENABLED`), the Kyber commerce approval queue, and `AETHER_COMMS_SUPPRESSION_WRITE_BACK`. `/v1/agents` keeps declaration and history routes; historical receipts, executions and commerce records stay readable and erasable. Delivery (Aether's own notifications to its customers) is unchanged.
 
 ### Fixed
 

@@ -65,6 +65,7 @@ Component → store map (see ``docs/reference/privacy/dsr-erasure-coverage.md``)
                            run records listing them hard deleted); legal hold skips
   venue_account_links      venue_account_links rows of the subject (hard delete); the
                            venue's own public activity is not Aether-held data
+  propagation_runs         saved propagation runs that name the subject (hard delete)
   agent_lineage_projection principal_agent_lineage + summary, clusters, nodes,
                            restatements, tenant-declared bindings and delegations naming
                            the subject (hard delete); Delegation vertices projected from
@@ -118,6 +119,7 @@ SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT = "social_relationship_evidence_events"
 AGENT_LINEAGE_COMPONENT = "agent_lineage_projection"
 PATTERN_DISCOVERY_COMPONENT = "pattern_discovery"
 VENUE_ACCOUNT_LINKS_COMPONENT = "venue_account_links"
+PROPAGATION_RUNS_COMPONENT = "propagation_runs"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1729,7 +1731,7 @@ async def erase_pattern_discovery_plane(subject: ErasureSubject) -> dict[str, Re
 
 
 async def erase_venue_account_links_plane(subject: ErasureSubject) -> dict[str, Receipt]:
-    """Hard-delete the subject's tenant venue account links (wallet / key refs).
+    """Hard-delete the subject's tenant venue account links, revoking their grants and credentials.
 
     Links are keyed by the tenant's subject id, so every subject ref is tried;
     deletion is tenant-exact and idempotent. An active legal hold on
@@ -1748,14 +1750,49 @@ async def erase_venue_account_links_plane(subject: ErasureSubject) -> dict[str, 
                 blocked_reason=str(hold.get("reason") or "legal hold"),
             )}
 
-    repo = VenueAccountLinkRepository()
+    from value.derivatives.account_links import VenueAccountLinkService
+
+    # The service revokes each link's grant (no further raw admission) and
+    # deletes its stored credential before the rows go.
+    service = VenueAccountLinkService(repo=VenueAccountLinkRepository())
     deleted = 0
     for ref in sorted(subject.refs):
-        deleted += int(await repo.delete_by_principal(subject.tenant_id, ref))
+        deleted += int(await service.erase_subject(subject.tenant_id, ref))
     return {VENUE_ACCOUNT_LINKS_COMPONENT: Receipt(
         records_impacted=deleted,
         requires_recompute=bool(deleted),
         detail={"venue_account_links": deleted},
+    )}
+
+
+async def erase_propagation_runs_plane(subject: ErasureSubject) -> dict[str, Receipt]:
+    """Hard-delete saved propagation runs that name the subject.
+
+    A run is derived intelligence over many subjects; one naming the erased
+    subject is deleted whole rather than redacted, because its metrics and
+    classification were computed with that subject. An active legal hold on
+    ``propagation_runs`` for any subject ref skips the plane.
+    """
+    from intelligence.propagation.runs import PropagationRunStore
+    from shared.storage.lifecycle import StorageLifecycle
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(subject.tenant_id, "propagation_runs", ref)
+        if hold is not None:
+            return {PROPAGATION_RUNS_COMPONENT: Receipt(
+                status="skipped_legal_hold",
+                policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                blocked_reason=str(hold.get("reason") or "legal hold"),
+            )}
+    store = PropagationRunStore()
+    deleted = 0
+    for ref in sorted(subject.refs):
+        deleted += int(await store.erase_subject(subject.tenant_id, ref))
+    return {PROPAGATION_RUNS_COMPONENT: Receipt(
+        records_impacted=deleted,
+        requires_recompute=False,
+        detail={"propagation_runs": deleted},
     )}
 
 
@@ -1793,6 +1830,7 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
     ("agent_lineage", (AGENT_LINEAGE_COMPONENT,), erase_agent_lineage_plane),
     ("pattern_discovery", (PATTERN_DISCOVERY_COMPONENT,), erase_pattern_discovery_plane),
     ("venue_account_links", (VENUE_ACCOUNT_LINKS_COMPONENT,), erase_venue_account_links_plane),
+    ("propagation_runs", (PROPAGATION_RUNS_COMPONENT,), erase_propagation_runs_plane),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

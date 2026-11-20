@@ -48,6 +48,9 @@ class GmxAdapter(VenueDerivativesAdapter):
         "waiting configuration; CREDENTIAL_WAITING."
     )
 
+    # Account activity is public data keyed by address; a linked account is
+    # proved by wallet signature, not a venue credential.
+    authentication_model = "public_wallet_address"
     venue_id = "gmx"
     default_deployment = "arbitrum"
     rest_base_url = "https://subgraph.satsuma-prod.com/gmx/synthetics"

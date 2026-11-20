@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, SecretStr
 
 from config.settings import settings
 from repositories.derivatives_repos import (
@@ -97,3 +98,76 @@ async def run_adapter_conformance(adapter_id: str, request: Request):
         raise HTTPException(status_code=404, detail=f"unknown adapter: {adapter_id}")
     report = await run_conformance(adapter)
     return report
+
+
+@admin_router.get("/market-sources")
+async def list_market_sources(request: Request):
+    """Olympus market-reference sources (reserved ``olympus`` scope) per venue."""
+    _gate(request)
+    from value.derivatives.market_reference import MARKET_FETCHERS, OlympusMarketSourceProvisioner
+
+    provisioner = OlympusMarketSourceProvisioner()
+    items = []
+    for venue in sorted(MARKET_FETCHERS):
+        connection = await provisioner.find(venue)
+        items.append({"venue": venue, "source": _source_view(connection)})
+    return {"items": items, "count": len(items)}
+
+
+@admin_router.post("/market-sources/{venue}", status_code=201)
+async def provision_market_source(venue: str, request: Request):
+    """Provision the Olympus public-reference market source for one venue.
+
+    Creates a connection under the reserved ``olympus`` scope and a
+    ``public_reference`` grant of class ``olympus_provider``. The grant passes
+    the same classification and Rights Authority checks as every other grant;
+    it licenses nothing for any customer tenant.
+    """
+    _gate(request)
+    from governance.security.request_context import require_kyber_operator
+    from value.derivatives.market_reference import MarketReferenceError, OlympusMarketSourceProvisioner
+
+    operator = require_kyber_operator(request)
+    try:
+        return await OlympusMarketSourceProvisioner().provision(venue=venue, actor=operator.actor_id)
+    except MarketReferenceError as exc:
+        raise HTTPException(status_code=400, detail={"code": exc.reason}) from exc
+
+
+def _source_view(connection) -> Optional[dict]:
+    if connection is None:
+        return None
+    from value.derivatives.market_reference import _source_record
+
+    return _source_record(connection)
+
+
+class _OAuthAppBody(BaseModel):
+    client_id: str
+    client_secret: SecretStr
+
+
+@admin_router.get("/oauth-apps/{venue}")
+async def venue_oauth_app_status(venue: str, request: Request):
+    """Whether the Aether-hosted OAuth app for a venue is configured (no secret)."""
+    _gate(request)
+    from value.derivatives.venue_oauth import VenueOAuthError, VenueOAuthService
+
+    try:
+        return await VenueOAuthService().app_status(venue)
+    except VenueOAuthError as exc:
+        raise HTTPException(status_code=404, detail={"code": exc.reason}) from exc
+
+
+@admin_router.put("/oauth-apps/{venue}")
+async def configure_venue_oauth_app(venue: str, body: _OAuthAppBody, request: Request):
+    """Store the Olympus OAuth app credential for a venue under the olympus scope."""
+    _gate(request)
+    from value.derivatives.venue_oauth import VenueOAuthError, VenueOAuthService
+
+    try:
+        return await VenueOAuthService().configure_app(
+            venue=venue, client_id=body.client_id, client_secret=body.client_secret.get_secret_value(),
+        )
+    except VenueOAuthError as exc:
+        raise HTTPException(status_code=404, detail={"code": exc.reason}) from exc

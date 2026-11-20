@@ -20,8 +20,6 @@ from decimal import Decimal
 import pytest
 
 from value.x402.commerce_models import (
-    BudgetPolicy,
-    PolicyOutcome,
     ProtectedResource,
     ResourceClass,
 )
@@ -31,32 +29,19 @@ TENANT = "t-money"
 
 @pytest.fixture(autouse=True)
 def _reset():
-    """Reset all in-memory stores and x402 service singletons between tests."""
+    """Reset in-memory stores and the remaining x402 singletons between tests."""
     from value.x402 import (
-        approvals as apv,
         commerce_store as cs,
-        control_plane as cp,
-        entitlements as ent,
         facilitators as fac,
         idempotency as idem,
-        policies as pol,
-        resources as res,
-        settlement as stl,
         verification as ver,
     )
 
     cs.reset_commerce_store()
     idem.reset_idempotency_store()
-    cp.reset_control_plane()
-    # Reset service singletons so they pick up the new store.
-    res._registry = None
     fac._facilitator_registry = None
     fac._asset_registry = None
-    apv._service = None
     ver._engine = None
-    stl._tracker = None
-    ent._service = None
-    pol._engine = None
     yield
 
 
@@ -73,56 +58,6 @@ def _resource(tenant_id: str, price_usd: float) -> ProtectedResource:
         accepted_chains=["eip155:8453"],
     )
 
-
-# ─── Pricing: unit price x quantity / plan discount is exact Decimal ─────────
-
-async def _register_and_resolve(engine, tenant_id, price_usd, quantity=1, plan_code=None):
-    from value.x402.resources import get_resource_registry
-
-    registry = get_resource_registry()
-    resource = _resource(tenant_id, price_usd)
-    await registry.register(resource)
-    return await engine.resolve_price(
-        tenant_id, resource.resource_id, plan_code=plan_code, quantity=quantity
-    )
-
-
-@pytest.mark.asyncio
-async def test_resolve_price_fractional_quantity_is_exact_decimal():
-    """0.10 x 3 must be exactly 0.30 — never 0.30000000000000004."""
-    from value.x402.pricing import PricingEngine
-
-    quote = await _register_and_resolve(PricingEngine(), TENANT, 0.10, quantity=3)
-    assert Decimal(str(quote["total_usd"])) == Decimal("0.30")
-    assert Decimal(str(quote["unit_price_usd"])) == Decimal("0.10")
-    # No binary-float artifact (0.1 * 3 === 0.30000000000000004 in float).
-    assert json.dumps(quote["total_usd"]) == "0.3"
-
-
-@pytest.mark.asyncio
-async def test_resolve_price_fractional_with_plan_discount_is_exact_decimal():
-    """Plan-discount + quantity products stay exact (0.30*0.60 and 0.07*0.80*7)."""
-    from value.x402.pricing import PricingEngine
-
-    engine = PricingEngine()
-
-    # enterprise (0.60) on $0.30 = $0.18 exactly.
-    quote = await _register_and_resolve(
-        engine, TENANT, 0.30, plan_code="enterprise"
-    )
-    assert Decimal(str(quote["total_usd"])) == Decimal("0.18")
-    assert Decimal(str(quote["unit_price_usd"])) == Decimal("0.18")
-    assert json.dumps(quote["total_usd"]) == "0.18"
-
-    # 0.07 x 0.80 = 0.056/unit, x7 = 0.392 exactly (float 0.07*0.8*7 drifts).
-    quote_b = await _register_and_resolve(
-        engine, TENANT + "-b", 0.07, quantity=7, plan_code="pro"
-    )
-    assert Decimal(str(quote_b["total_usd"])) == Decimal("0.392")
-    assert Decimal(str(quote_b["unit_price_usd"])) == Decimal("0.056")
-
-
-# ─── Interceptor: fee rate product is exact Decimal ─────────────────────────
 
 @pytest.mark.asyncio
 async def test_interceptor_fee_elimination_fractional_is_exact():
@@ -149,8 +84,6 @@ async def test_interceptor_fee_elimination_fractional_is_exact():
     assert tx.fee_eliminated_usd != float(Decimal("0.0015"))
     assert json.dumps(tx.fee_eliminated_usd) == "0.0014"
 
-
-# ─── Economic graph: rollup sums never accumulate float drift ───────────────
 
 @pytest.mark.asyncio
 async def test_economic_graph_node_totals_have_no_float_drift():
@@ -219,8 +152,6 @@ async def test_economic_graph_pays_edge_amount_is_decimal_string():
     assert amount == "0.1"
 
 
-# ─── Economic graph mutations: every money leg is a decimal string ──────────
-
 @pytest.mark.asyncio
 async def test_economic_mutations_write_money_as_decimal_strings():
     from value.x402.commerce_models import PaymentRequirement
@@ -253,99 +184,3 @@ async def test_economic_mutations_write_money_as_decimal_strings():
     for kind, key, value in money_legs:
         assert isinstance(value, str), f"{kind} {key} is not a decimal string"
         assert Decimal(value) == Decimal("0.30")
-
-
-# ─── Policies: fractional cap comparisons are exact Decimal ─────────────────
-
-@pytest.mark.asyncio
-async def test_policy_fractional_per_transaction_cap_boundary_exact():
-    from value.x402.commerce_store import get_commerce_store
-    from value.x402.policies import get_policy_engine
-    from value.x402.resources import get_resource_registry
-
-    registry = get_resource_registry()
-    resource = _resource(TENANT, 0.10)
-    await registry.register(resource)
-
-    store = get_commerce_store()
-    await store.put_budget_policy(BudgetPolicy(
-        tenant_id=TENANT,
-        subject_id="agent-cap",
-        per_transaction_cap_usd=0.30,
-    ))
-    engine = get_policy_engine()
-
-    # amount == cap is NOT a denial (0.30 > 0.30 is false in Decimal and float).
-    at_cap = await engine.evaluate(
-        tenant_id=TENANT,
-        challenge_id="chg-at-cap",
-        resource=resource,
-        requester_id="agent-cap",
-        amount_usd=0.30,
-        asset_symbol="USDC",
-        chain="eip155:8453",
-    )
-    assert at_cap.outcome != PolicyOutcome.DENY
-
-    # amount one cent over the fractional cap IS denied.
-    over = await engine.evaluate(
-        tenant_id=TENANT,
-        challenge_id="chg-over-cap",
-        resource=resource,
-        requester_id="agent-cap",
-        amount_usd=0.31,
-        asset_symbol="USDC",
-        chain="eip155:8453",
-    )
-    assert over.outcome == PolicyOutcome.DENY
-    assert over.denial_reason and "exceeds per-transaction cap" in over.denial_reason
-
-
-# ─── Settlement: a fractional price settles to the exact decimal amount ──────
-
-@pytest.mark.asyncio
-async def test_fractional_price_settles_with_exact_amount():
-    """A $0.30 resource issues a challenge, verifies, and settles while the
-    amount stays the exact decimal 0.30 at every stage — never a float drift,
-    and the on-chain atomic gate maps 0.30 to exactly 300_000 units."""
-    from value.x402.control_plane import get_control_plane
-    from value.x402.facilitators import seed_facilitators_and_assets
-    from value.x402.verification import _expected_atomic
-    from value.x402.resources import get_resource_registry
-
-    await seed_facilitators_and_assets(TENANT)
-    resource = _resource(TENANT, 0.30)
-    await get_resource_registry().register(resource)
-
-    plane = get_control_plane()
-    challenge = await plane.issue_challenge(
-        tenant_id=TENANT,
-        resource_id=resource.resource_id,
-        requester_id="agent-pay",
-        chain="eip155:8453",
-        asset_symbol="USDC",
-    )
-    assert challenge.amount_usd == resource.price_usd
-    assert Decimal(str(challenge.amount_usd)) == Decimal("0.30")
-
-    approval, _ = await plane.request_approval(TENANT, challenge.challenge_id)
-    await plane.apply_decision(
-        TENANT, approval.approval_id, "approve", "ops", "fractional exactness"
-    )
-    auth = await plane.authorize_payment(TENANT, approval.approval_id, "0xpayer")
-    assert Decimal(str(auth.amount_usd)) == Decimal("0.30")
-
-    result = await plane.verify_and_settle(TENANT, auth.authorization_id, "0x" + "a" * 64)
-    assert result["verified"] is True
-
-    store = plane._store
-    receipt = await store.get_receipt(TENANT, result["receipt_id"])
-    settlement = await store.get_settlement(TENANT, result["settlement_id"])
-    assert Decimal(str(receipt.amount_usd)) == Decimal("0.30")
-    assert Decimal(str(settlement.amount_usd)) == Decimal("0.30")
-    # JSON boundary stays exact — no 0.30000000000000004 anywhere.
-    assert json.dumps(settlement.amount_usd) == "0.3"
-
-    # On-chain atomic derivation for a fractional amount is exact.
-    assert _expected_atomic(0.30, "USDC") == 300_000
-    assert _expected_atomic(0.29, "USDC") == 290_000

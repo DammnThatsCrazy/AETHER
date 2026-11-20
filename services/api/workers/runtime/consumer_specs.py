@@ -67,12 +67,11 @@ def _attach_identity(registry: Any) -> None:
     )
 
 
+# Only the x402 settlement observer is authoritative (ADR-012); the commerce
+# control plane that produced challenge/submission/access topics is retired.
 AUTHORITATIVE_X402_TOPICS: tuple[Topic, ...] = (
-    Topic.COMMERCE_CHALLENGE_ISSUED,
-    Topic.COMMERCE_PAYMENT_SUBMITTED,
     Topic.COMMERCE_SETTLEMENT_COMPLETED,
     Topic.COMMERCE_SETTLEMENT_FAILED,
-    Topic.COMMERCE_ACCESS_GRANTED,
 )
 
 
@@ -85,15 +84,12 @@ def _attach_x402_lifecycle(registry: Any) -> None:
 
 def _attach_graph(registry: Any) -> None:
     from workers.profile360_workers import attach_profile360_workers
-    from actions.agent.lifecycle_consumer import project_agent_execution_lifecycle
 
+    # Agent run state for observed agents is owned by the Silver
+    # AgentExecutionProjector (canonical spine). The former backend lifecycle
+    # consumer projected runs Aether itself admitted; Aether no longer admits
+    # or runs agents (ADR-012), so it was retired.
     attach_profile360_workers(registry.consumer, registry.graph)
-    for topic in (
-        Topic.AGENT_EXECUTION_STARTED,
-        Topic.AGENT_EXECUTION_COMPLETED,
-        Topic.AGENT_EXECUTION_FAILED,
-    ):
-        registry.consumer.subscribe(topic, project_agent_execution_lifecycle)
 
 
 def _attach_measurement(registry: Any) -> None:

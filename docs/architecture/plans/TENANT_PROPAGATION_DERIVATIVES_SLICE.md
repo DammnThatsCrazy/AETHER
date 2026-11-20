@@ -112,13 +112,26 @@ reserved and withheld until incrementality evidence exists.
 
 ## Follow-ups
 
-- Fill the reserved Social360 `social_contagion` / `propagation` and Risk360
-  `financial_contagion` slots from propagation runs once those providers are
-  live; today the computation is served by its own route.
-- Wire the derivatives entitlement guard and usage meter for propagation runs.
+Done since the first slice: venue links now provision a connection and a
+data-rights grant each, linked accounts sync through provider raw rights
+admission, propagation uses only admitted fills, and links can be
+disconnected (grant kept) as well as revoked (see
+`docs/architecture/target/source-authority.md`, "Derivatives venue sources").
+Runs require the `derivatives.enabled` entitlement and are metered
+(`propagation_run_computed`); saved runs keep their input grants and linked
+population, report `stale` when either changes, can be recomputed, and are
+erased with any subject they name.
+
+- Social360 `social_contagion` and Risk360 `financial_contagion` are not
+  reserved for this lens: they already carry risk transmission along observed
+  follow paths and transfer paths linked to risk evidence. Propagation runs are
+  adoption diffusion, a different claim, so they are not written into those
+  slots. They reach Profile360 and Social360 through the propagation overlay
+  lens in `lens-registry.json`, read from `/v1/social360/propagation/runs`.
 - A tenant-linked staging rehearsal (account links on, propagation lens on).
-- Persist runs for saved investigations and recomputation on identity or
-  relationship corrections.
+- Recompute saved runs automatically on identity merges and relationship
+  corrections (today a saved run reports itself stale and is recomputed on
+  request).
 
 ## Not in this slice
 

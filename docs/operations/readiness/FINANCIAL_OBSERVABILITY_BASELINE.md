@@ -32,13 +32,13 @@ source_hashes:
   "config/readiness/features/interoperability-intelligence.yaml": "sha256:99f3bd9c8f300ddaf4acddc0f8fa1ca1398c40a85714f23ea838c9990b0b2293"
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
-  "config/storage_policies.yaml": "sha256:79b44accf707f668710c02c75a09580c977822c0e9daa2e539cdf5ec6f897b8a"
-  "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
-  "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
-  "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
+  "config/storage_policies.yaml": "sha256:58e2ed6c49220a7e31bec5fd6dcf39a86899b17a268eb66d3b0293ab3d7d1b81"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:a0905786f6c85708910a404e3a9212ca4ffcf06ef1ef48938729b87aa1c4967c"
+  "services/api/config/settings.py": "sha256:241a51b5e7bdf223a1163635664a4a4829f8d83013bce958dc6c877ea64e5131"
+  "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
-  "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/specs.py": "sha256:bed3da6f0117ac5a47f856c6405b6e2553bf0ad568c740e5716d14f3c0b9b884"
+  "services/api/workers/runtime/consumer_specs.py": "sha256:03cfaa1cf4341a5ac31b6222d09b29e2823162e5c6c0aac10e7c8215089cf516"
+  "services/api/workers/runtime/specs.py": "sha256:4ff2c134a396e6e253f56a0c3b6d46768c2f648eee0dc04230e6d3bc5fa797b1"
 ---
 
 # Financial Observability Baseline Manifest
@@ -118,8 +118,9 @@ conservative relative to its code and tests (§4).
 - **Implementation evidence:** routes under `/v1/integrations/providers` and
   `/v1/integrations/webhooks/payment-rails`; Kyber diagnostics under
   `/v1/admin/kyber/payment-rails`; `payment_rail_sync`,
-  `payment_canonical_repair`, `payment_alert_eval`, and
-  `x402_settlement_reconciliation` workers; Silver/Gold storage policies.
+  `payment_canonical_repair` and `payment_alert_eval` workers; Silver/Gold
+  storage policies. (The x402 settlement reconciliation worker was retired
+  with the commerce control plane, ADR-012.)
 - **Stripe:** `payment_intent.succeeded` normalizes only with a verified
   signature; the webhook returns 503 rather than accepting unsigned traffic when
   the secret or SDK is absent (#812). Reconciliation requires exact order
@@ -181,10 +182,12 @@ conservative relative to its code and tests (§4).
 
 ### 2.6 Agentic x402 and agent lifecycle
 
-- **Implementation evidence:** `x402-lifecycle-projection` consumes server-owned
-  commerce topics; the ingestion worker projects validated SDK lifecycle
-  observations; the agent execution consumer applies source-authority rules.
-  Repositories are tenant-scoped; eight lifecycle consumer tests pin
+- **Implementation evidence:** `x402-lifecycle-projection` consumes only the
+  settlement topics emitted by the x402 settlement observer after on-chain
+  verification (ADR-012); the ingestion worker projects validated SDK lifecycle
+  observations. Agent run state comes from the Silver AgentExecutionProjector;
+  the former backend agent execution consumer was retired. Repositories are
+  tenant-scoped; the lifecycle consumer and settlement observer tests pin
   registration and authority behavior.
 - **Correction in this change:** the readiness record previously said no
   consumer existed and scored runtime wiring false. It now records 100%
@@ -220,13 +223,22 @@ conservative relative to its code and tests (§4).
   and the propagation lens (`intelligence/propagation/`,
   `/v1/social360/propagation`) derives first-entry adoption, exposure paths,
   and an inferred organic/viral/coordinated classification for one tenant's
-  linked users. Pseudonymized live captures from public Hyperliquid and
-  Polymarket endpoints are replayed in tests.
+  linked users. Each link provisions a provider connection and a data-rights
+  grant; linked-account sync and tenant-pushed fills go through provider raw
+  rights admission, and propagation uses only admitted fills. Propagation runs
+  need the `derivatives.enabled` entitlement, are metered, and can be saved
+  (with staleness checks, recompute and DSR erasure). Pseudonymized
+  live captures from public Hyperliquid and Polymarket endpoints are replayed
+  in tests.
 - **Limits:** no readiness feature record, no worker, no Aether/Kyber page, no
   service-catalog or meter entry. The market observation adapters accept
-  caller-submitted payloads only. The Polymarket account adapter reads public
-  wallet activity only when a tenant link exists, and no tenant-linked staging
-  run has been recorded. Kalshi account data, live polling, and order
+  caller-submitted payloads only. Venue account adapters read public wallet
+  activity only when a governed tenant link exists, and no tenant-linked
+  staging run has been recorded. Nothing writes the global
+  `derivatives_markets` reference registry yet, and `derivatives_fills`
+  references it, so synced fills need market reference rows before PostgreSQL
+  accepts them. Kalshi account data is read with a member's read-only key
+  (signed requests) through a key link; live market polling and order
   execution are unsupported.
 - **Activation:** `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` and
   `AETHER_PROPAGATION_LENS_ENABLED` default off in settings and are turned on
@@ -249,10 +261,12 @@ conservative relative to its code and tests (§4).
 
 - **Implementation evidence:** generated matrix at
   `docs/_generated/adapter-certification-matrix.json`.
-- **Current state:** 29 first-release providers on development, all
-  `credential_waiting`, zero live. Domains: communications 8, derivatives 5
-  (including the Polymarket account adapter, which needs a tenant wallet link
-  rather than a credential), interop 7, payments 5,
+- **Current state:** 32 first-release providers on development, all
+  `credential_waiting`, zero live. Domains: communications 8, derivatives 8
+  (five venue adapters read account activity by public wallet and need a
+  tenant wallet link rather than a credential; Kalshi, Bybit and Coinbase
+  Financial Markets futures need the member's read-only key, and Coinbase also
+  accepts an OAuth link through the Aether-hosted app), interop 7, payments 5,
   prediction_market 2, stablecoin_chain 2. No import errors.
 - **Rule:** `credential_waiting` is not production-ready. The generated matrix is
   authoritative for counts and per-provider state; the guide no longer hardcodes
@@ -275,7 +289,7 @@ PII blocks, which default on. The staging manifest turns on
 | Interop | `AETHER_INTEROP_{INGESTION,ADAPTERS,LAYERZERO,GRAPH,PROFILE360,API,NOESIS}_ENABLED`, `KYBER_INTEROP_OPS_ENABLED` |
 | Prediction | `AETHER_PREDICTION_MARKET_INGESTION_ENABLED`, `AETHER_PROVIDER_{POLYMARKET,KALSHI}_ENABLED` |
 | Propagation lens | `AETHER_PROPAGATION_LENS_ENABLED` |
-| x402 graph | `IG_X402_LAYER`; `COMMERCE_CONTROL_PLANE_ENABLED` defaults on |
+| x402 graph | `IG_X402_LAYER` (capture plus on-chain settlement observation; no control plane flag) |
 
 ### 3.2 Routes
 
@@ -303,7 +317,6 @@ route re-checks the Kyber flag.
 | `payment_rail_sync` | payment rails / card-linked Gold |
 | `payment_canonical_repair` | payment rails |
 | `payment_alert_eval` | payment rails |
-| `x402_settlement_reconciliation` | x402 |
 | `card_linked_graph_outbox` | card-linked graph projection |
 | `stablecoin_provider_polling` | stablecoin |
 | `interop_scan` | interoperability |

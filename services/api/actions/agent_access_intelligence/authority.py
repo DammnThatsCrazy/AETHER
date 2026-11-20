@@ -32,9 +32,10 @@ Fail-closed invariants enforced on every write (each has a test):
    ``true`` — authorizing something you have not observed is a legitimate (pre-)grant,
    and pretending it was observed would fabricate inventory evidence.
 
-There is no approval queue here: the permission-gated ``POST`` is itself the authorizing
-act. Multi-party approval, where a tenant requires it, routes through the existing
-``services/api/value/x402/approvals.py`` flow. Authorization *state* (``active``/``revoked``/
+There is no approval queue here: the permission-gated ``POST`` records the tenant's
+authorization. Aether is observation-only (ADR-012): it no longer invokes tools under
+these grants, and the former x402 approval flow was retired; a recorded grant is the
+boundary observed agent actions are later judged against. Authorization *state* (``active``/``revoked``/
 ``expired``) is always **derived** from the row, never stored as a field that could
 disagree with ``revoked_at``/``ends_at``.
 """

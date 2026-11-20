@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/providers/tiktok/": "sha256:97db9e114887181397ef7e9e1cf1059fee2ed4f686108d12ee0a16db1cbece83"
   "services/api/connectors/providers/walmart/": "sha256:09426499055d250d2ceea2a5ed8053dac7d8b68b5445bcfae1b8b2837d3879ed"
   "services/api/connectors/providers/woocommerce/": "sha256:79331a89953129dc9ee4f54f5f6c2cc41f8f75788924831f26ac12930821fd6f"
-  "services/api/shared/integration_contracts/catalog.py": "sha256:76a954865823c7b8d0b9aac98787ed4ea1b0dbcbde1e99f6c58a07025971b63c"
+  "services/api/shared/integration_contracts/catalog.py": "sha256:66a6fcc0d34d1b41ecc13b91b98cc8a052e4e0512896c9ac13ec2fb8e0ce5ccd"
   "services/api/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---
 
@@ -71,6 +71,11 @@ with **zero provider code**:
   wired in and was removed.
 - Legacy namespaced event types are preserved — downstream consumers see no
   change.
+
+Derivatives venues are not legacy connectors and get no `LegacyConnectorPlugin`.
+The catalog derives their account and market-data manifests directly from the
+venue source profiles (`value/derivatives/venue_sources.py`), and venue account
+links create their provider connections and grants themselves.
 
 ### Path (b) — native plugin, per provider
 

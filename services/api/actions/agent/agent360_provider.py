@@ -2580,7 +2580,7 @@ class Agent360Provider:
             self._communication_view(row) for row in timeline_communications.rows[:limit]
         ]
 
-        from actions.agent.invocation_runtime import validated_agent_receipt
+        from actions.agent.invocation_receipts import validated_agent_receipt
         invocation_receipts: dict[str, dict[str, Any]] = {}
         receipt_execution_rows = (
             timeline_exec.rows[:limit]

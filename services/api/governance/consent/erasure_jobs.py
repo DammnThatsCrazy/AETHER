@@ -510,6 +510,7 @@ async def _run_completeness_planes(
             "agent_lineage_projection",
             "pattern_discovery",
             "venue_account_links",
+            "propagation_runs",
         )
     ))
     try:

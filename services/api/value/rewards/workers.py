@@ -59,22 +59,6 @@ async def build_reward_dlq_sweeper(interval_seconds: float = 600.0) -> None:
     await _run_loop("reward_dlq_sweeper", tick, interval_seconds)
 
 
-async def build_x402_settlement_reconciliation_worker(interval_seconds: float = 120.0) -> None:
-    """Advance PENDING x402 settlements to SETTLED on confirmed finality."""
-    from value.x402.commerce_store import get_commerce_store
-    from value.x402.reconciliation import get_reconciliation_worker
-
-    worker = get_reconciliation_worker()
-    store = get_commerce_store()
-
-    async def tick() -> None:
-        tenants = await store.tenants_with_pending_settlements()
-        for tenant_id in tenants:
-            await worker.reconcile_tenant(tenant_id)
-
-    await _run_loop("x402_settlement_reconciliation", tick, interval_seconds)
-
-
 async def build_credential_expiry_sweep(interval_seconds: float = 3600.0) -> None:
     """Sweep expired credential rotation-overlap windows across tenants."""
     from connectors.providers.credentials.authority import credential_authority
@@ -90,6 +74,5 @@ async def build_credential_expiry_sweep(interval_seconds: float = 3600.0) -> Non
 __all__ = [
     "build_reward_reservation_release_worker",
     "build_reward_dlq_sweeper",
-    "build_x402_settlement_reconciliation_worker",
     "build_credential_expiry_sweep",
 ]

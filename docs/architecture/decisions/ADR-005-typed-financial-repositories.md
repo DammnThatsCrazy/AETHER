@@ -10,7 +10,7 @@ source_files:
   - services/api/repositories/typed_repo.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
+  "services/api/repositories/typed_repo.py": "sha256:a36b2dab7ed5bd305ea6290f564c3003cce24162c0f0450d6b12ddd3e889f52a"
 ---
 
 # ADR-005: Typed Financial Repositories over JSONB
@@ -33,7 +33,10 @@ explicit column specs per table, Decimal-preserving reads/writes,
 asyncpg inserts with `ON CONFLICT (tenant_id, idempotency_key) DO
 NOTHING` in staging/prod, shared in-memory list stores locally, and
 `as_decimal()` that rejects binary floats. All three economic domains
-use it; non-financial platform data stays on `BaseRepository`.
+use it; non-financial platform data stays on `BaseRepository`. Inserts bind an
+ISO-8601 string for a `*_at` column as an aware datetime, because asyncpg
+rejects strings for `timestamptz` parameters; a string that does not parse is
+passed through so PostgreSQL still rejects it.
 
 ## Consequences
 

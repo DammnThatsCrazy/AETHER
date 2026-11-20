@@ -1,8 +1,11 @@
 """
 Aether Service — Payment Verification Engine
-Verifies payment proofs submitted against approved authorizations. Supports
-facilitator-aware verification (delegate to external facilitator) and local
-verification (on-chain RPC check) as fallback.
+Verifies that an observed x402 payment actually settled on-chain. Aether is
+observation-only (ADR-012): it never issues the payment requirement it checks.
+The ``PaymentAuthorization`` passed in describes the payment a tenant's server
+reported (payer, recipient, amount, asset, chain); the settlement observer
+builds it from captured x402 headers. Supports facilitator-aware verification
+and local verification (on-chain RPC check) as fallback.
 
 Day-1 chains: USDC on Base (eip155:8453), USDC on Solana (solana:mainnet).
 """
@@ -88,13 +91,11 @@ def _verdict_token(error: Optional[str]) -> str:
 # amount_below_required/no_matching_transfer/malformed) is TERMINAL: a retry
 # can never change the outcome, so it is safe to cache/idempotency-lock on.
 #
-# This distinction matters because the idempotency store
-# (value.x402.idempotency) is consulted by control_plane.verify_and_settle
-# before it ever re-verifies a payment_identifier. Caching a retryable
-# verdict would permanently strand a normally-submitted-but-not-yet-final
-# payment behind the cached failure until the cache entry's TTL expires, with
-# no settlement for the reconciliation worker (value.x402.reconciliation)
-# to revisit in the meantime — so retryable verdicts must NEVER be cached.
+# This distinction matters because a retryable verdict must stay retryable:
+# the settlement observer records nothing terminal for it, so the next report
+# of the same payment re-checks the chain. Caching a retryable verdict would
+# strand a not-yet-final payment behind a permanent-looking failure — so
+# retryable verdicts must NEVER be cached or emitted as settlement failures.
 _RETRYABLE_VERDICTS = frozenset({"not_finalized", "verification_unavailable"})
 
 
@@ -125,6 +126,15 @@ _ASSET_CONTRACT: dict[tuple[str, str], str] = {
 _ASSET_DECIMALS: dict[str, int] = {
     "USDC": 6,
 }
+
+def is_verifiable(asset_symbol: str, chain: str) -> bool:
+    """True when Aether can check this asset on this chain at all.
+
+    An unsupported asset/chain is not a failed payment: callers must treat it
+    as not observable rather than letting it reach a terminal verdict.
+    """
+    return (asset_symbol, chain) in _ASSET_CONTRACT and asset_symbol in _ASSET_DECIMALS
+
 
 # Minimum confirmations before a payment is treated as final (per chain family).
 _MIN_CONFIRMATIONS = {"eip155": 2, "solana": 1}
@@ -182,49 +192,6 @@ class VerificationEngine:
         prefer_facilitator: bool = True,
     ) -> PaymentReceipt:
         """Verify a submitted tx_hash. Returns a PaymentReceipt."""
-        # Fail-closed tenant signer gate (proof-verification boundary): a tenant
-        # that HAS registered signer references only accepts payment proofs from
-        # an active, tenant-authorized signer address. A tenant with NO signer
-        # registry (the default) is unaffected — the authority never "invents"
-        # an authorized signer, so legacy/fresh tenants keep the existing path.
-        from value.x402.signer_authority import get_signer_authority
-        payer_ok, payer_reason = await get_signer_authority().is_payer_authorized(
-            tenant_id, authorization.payer
-        )
-        if not payer_ok:
-            receipt = PaymentReceipt(
-                tenant_id=tenant_id,
-                authorization_id=authorization.authorization_id,
-                challenge_id=authorization.challenge_id,
-                tx_hash=tx_hash,
-                chain=authorization.chain,
-                environment=authorization.environment,
-                asset_symbol=authorization.asset_symbol,
-                amount_usd=authorization.amount_usd,
-                payer=authorization.payer,
-                recipient=authorization.recipient,
-                verified=False,
-                verified_by="signer_authority",
-                verification_verdict="unauthorized_signer",
-                verification_error=payer_reason,
-            )
-            await self._store.put_receipt(receipt)
-            await self._emit(
-                Topic.COMMERCE_VERIFICATION_FAILED,
-                tenant_id,
-                {"receipt_id": receipt.receipt_id, "error": receipt.verification_error},
-            )
-            metrics.increment(
-                "commerce_verifications",
-                labels={"result": "fail", "reason": "unauthorized_signer"},
-            )
-            logger.info(
-                "verification rejected by signer authority: tenant=%s "
-                "payer=%s authorization=%s",
-                tenant_id, authorization.payer, authorization.authorization_id,
-            )
-            return receipt
-
         await self._emit(
             Topic.COMMERCE_VERIFICATION_STARTED,
             tenant_id,

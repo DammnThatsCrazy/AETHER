@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 13
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:4e4658d9938ab38b36a0cc38a8f7431baebf6092f6abc46fe46b15ce4d5abac4"
+  "scripts/production_status.py": "sha256:ced981b071b44fee0f1aef796535cecf6bb7c5eab7cb60c5312922b9506093cb"
 ---
 
 # Acquisition Productization Dossier

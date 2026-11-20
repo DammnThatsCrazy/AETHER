@@ -98,11 +98,15 @@ async def project_sdk_lifecycle_observation(event: Event) -> None:
 
 
 async def project_authoritative_x402_lifecycle(event: Event) -> None:
-    """Project server-owned commerce transitions through the x402 mapper.
+    """Project an on-chain-verified x402 settlement through the x402 mapper.
 
-    The stage and producer must match a closed registry. For transitions whose
-    event contains only a store key, tenant-scoped control-plane records supply
-    the linked intent facts; a client payload never reaches this path.
+    The topic and producer must match the closed registry, whose only live
+    producer is the settlement observer (ADR-012): it verified the payment on
+    the chain before publishing. A client payload never reaches this path.
+    The intent and settlement identities are derived from the observation id,
+    which is deterministic per (tenant, chain, transaction hash), so a repeated
+    observation projects idempotently. The agent reference is kept exactly as
+    reported (``agent_ref_source``); this path does not resolve it.
     """
     topic = str(getattr(event.topic, "value", event.topic))
     authority = AUTHORITATIVE_X402_SOURCES.get(topic)
@@ -114,65 +118,33 @@ async def project_authoritative_x402_lifecycle(event: Event) -> None:
     if not tenant_id or not event_id:
         return
     payload = dict(event.payload or {})
-    from value.x402.commerce_store import get_commerce_store
-
-    store = get_commerce_store()
     stage = authority[1]
+    observation_id = str(payload.get("observation_id") or "").strip()
+    tx_hash = str(payload.get("tx_hash") or "").strip()
+    amount = str(payload.get("amount") or "").strip()
+    currency = str(payload.get("asset_symbol") or "").strip()
+    if not observation_id or not tx_hash or not amount or not currency:
+        metrics.increment("lifecycle_observation_deferred_total", labels={"family": "x402", "reason": "incomplete_observation"})
+        return
     mapped: dict = {
         "event_id": event_id,
+        "payment_intent_id": observation_id,
+        "settlement_event_id": f"{observation_id}:{stage}",
+        "agent_id": str(payload.get("agent_id") or ""),
+        "amount": amount,
+        "currency": currency,
+        "provider": "x402",
+        "protocol": "x402",
+        "tx_hash": tx_hash,
+        "receipt_id": payload.get("receipt_id"),
+        "timestamp": payload.get("verified_at") or getattr(event, "timestamp", None),
         "metadata": {"evidence_status": "server_observed", "source_authority": "x402_commerce",
                      "source_event_id": event_id,
-                     "source_topic": topic, "source_service": event.source_service},
+                     "source_topic": topic, "source_service": event.source_service,
+                     "verification": "on_chain", "verdict": payload.get("verdict"),
+                     "chain": payload.get("chain"),
+                     "agent_ref_source": payload.get("agent_ref_source") or "unknown"},
     }
-    if stage == "x402_payment_required":
-        challenge_id = str(payload.get("challenge_id") or "")
-        requirement = await store.get_requirement(tenant_id, challenge_id) if challenge_id else None
-        if requirement is None:
-            return
-        mapped.update({
-            "payment_intent_id": requirement.challenge_id,
-            "agent_id": requirement.requester_id if requirement.requester_type == "agent" else "",
-            "amount": str(requirement.amount_usd), "currency": requirement.asset_symbol,
-            "provider": "x402", "protocol": requirement.protocol_version,
-            "resource_id": requirement.resource_id,
-            "timestamp": requirement.issued_at,
-        })
-    elif stage == "x402_payment_submitted":
-        auth_id = str(payload.get("authorization_id") or "")
-        auth = await store.get_authorization(tenant_id, auth_id) if auth_id else None
-        requirement = await store.get_requirement(tenant_id, auth.challenge_id) if auth else None
-        if auth is None or requirement is None:
-            return
-        mapped.update({
-            "payment_intent_id": requirement.challenge_id,
-            "settlement_event_id": event_id,
-            "authorization_id": auth_id,
-            "agent_id": requirement.requester_id if requirement.requester_type == "agent" else "",
-            "amount": str(auth.amount_usd), "currency": auth.asset_symbol,
-            "provider": "x402", "protocol": "x402-v2", "tx_hash": payload.get("tx_hash"),
-        })
-    elif stage in ("x402_payment_settled", "x402_payment_failed"):
-        settlement_id = str(payload.get("settlement_id") or "")
-        settlement = await store.get_settlement(tenant_id, settlement_id) if settlement_id else None
-        requirement = await store.get_requirement(tenant_id, settlement.challenge_id) if settlement else None
-        if settlement is None or requirement is None:
-            return
-        mapped.update({
-            "payment_intent_id": requirement.challenge_id,
-            "settlement_event_id": settlement.settlement_id,
-            "agent_id": requirement.requester_id if requirement.requester_type == "agent" else "",
-            "amount": str(settlement.amount_usd), "currency": requirement.asset_symbol,
-            "provider": "x402", "protocol": requirement.protocol_version,
-            "tx_hash": settlement.tx_hash,
-            "timestamp": settlement.updated_at,
-        })
-    else:  # access granted
-        entitlement_id = str(payload.get("entitlement_id") or "")
-        entitlement = await store.get_entitlement(tenant_id, entitlement_id) if entitlement_id else None
-        settlement = await store.get_settlement(tenant_id, entitlement.settlement_id) if entitlement else None
-        mapped.update({"payment_intent_id": getattr(settlement, "challenge_id", "")})
-        if not mapped["payment_intent_id"]:
-            return
 
     from value.x402.lifecycle_mapper import X402LifecycleMapper
     result = await X402LifecycleMapper().handle_event(stage, mapped, tenant_id)

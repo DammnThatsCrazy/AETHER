@@ -1270,24 +1270,12 @@ def create_app() -> FastAPI:
         )
 
     if ig.enable_x402_layer:
+        # Observation only (ADR-012): capture x402 payments a tenant's server saw
+        # and verify their settlement on-chain. Aether issues no 402 challenge,
+        # approves no spend and grants no entitlement.
         from value.x402.routes import router as x402_router
-        from value.x402.challenge_middleware import register_challenge_middleware
         app.include_router(x402_router)
-        register_challenge_middleware(app)
-        logger.info("Intelligence Graph: x402 Interceptor service (L3b) mounted")
-
-        # Agentic Commerce control plane (L3b+) — mounted alongside legacy capture.
-        from value.x402.commerce_routes import (
-            router as commerce_cp_router,
-            approvals_router,
-            entitlements_router,
-            diagnostics_router as commerce_diag_router,
-        )
-        app.include_router(commerce_cp_router)
-        app.include_router(approvals_router)
-        app.include_router(entitlements_router)
-        app.include_router(commerce_diag_router)
-        logger.info("Intelligence Graph: Agentic Commerce control plane (L3b+) mounted")
+        logger.info("Intelligence Graph: x402 capture and settlement observation (L3b) mounted")
 
     # ── Suggestion Intelligence (OODA) ────────────────────────────────────
     sug = settings.suggestions
