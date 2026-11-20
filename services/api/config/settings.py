@@ -1911,6 +1911,9 @@ class DerivativesIntelligenceConfig:
     api_enabled: bool = _env_bool("AETHER_DERIVATIVES_API_ENABLED", False)
     noesis_enabled: bool = _env_bool("AETHER_DERIVATIVES_NOESIS_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_DERIVATIVES_OPS_ENABLED", False)
+    # Tenant-held venue account links (wallet proof / read-only key / OAuth /
+    # tenant push) that scope account-level venue data to one tenant subject.
+    venue_account_links_enabled: bool = _env_bool("AETHER_VENUE_ACCOUNT_LINKS_ENABLED", False)
 
 
 @dataclass(frozen=True)
@@ -2080,6 +2083,9 @@ class Social360Config:
     path_fidelity_enabled: bool = _env_bool("AETHER_PATH_FIDELITY_ENABLED", False)
     # Social lens capability on the product surfaces (M9/M10 exploration fabric).
     social_lenses_enabled: bool = _env_bool("AETHER_SOCIAL_LENSES_ENABLED", False)
+    # Propagation & Diffusion lens: tenant-scoped exposure -> adoption paths
+    # over Relationship360/Social360 (read-only derived computation).
+    propagation_lens_enabled: bool = _env_bool("AETHER_PROPAGATION_LENS_ENABLED", False)
     # Relationship / spine read-only Noesis surface (Wave 3a). Observation-only
     # NL answers over relationship spine evidence; default False (fail-closed)
     # until the read plane and its consent evaluation are verified.

@@ -130,6 +130,10 @@ class HyperliquidAdapter(VenueDerivativesAdapter):
             fee_amount=self.amount(r.get("fee", "0"), "fee"),
             fee_asset_id=str(r.get("feeToken", "USDC")),
             executed_at=_ms_to_iso(r.get("time")),
+            # Venue-reported position transition ("Open Long", "Close Short",
+            # "Long > Short", ...): lets consumers detect fills that act on a
+            # position opened before the observed history.
+            direction=str(r["dir"]) if r.get("dir") else None,
         )]
 
     def _project_funding(self, r: dict[str, Any]) -> list[dict[str, Any]]:

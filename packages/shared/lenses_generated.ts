@@ -33,6 +33,7 @@ export const lensIds = [
   'payment',
   'policy',
   'population',
+  'propagation',
   'relationship',
   'risk',
   'security',
@@ -298,6 +299,17 @@ export const lensDefinitions: Record<LensId, LensDescriptor> = {
     description: 'Views a subject as a member of a population or cohort — definitions, membership, clustering, comparison baselines.',
     domain: 'population',
     applicableSubjectKinds: ['cluster', 'entity', 'population'],
+    temporalModes: ['relative', 'window'],
+    default: false
+  },
+  propagation: {
+    id: 'propagation',
+    displayName: 'Propagation & Diffusion',
+    kind: 'overlay',
+    baseLens: 'standard',
+    description: 'Views a subject through how a behavior moved through one tenant\'s own linked subjects: first-entry adoptions grouped by instrument and side, evidence-backed exposure paths over registered relationship predicates and in-app exposure events, separate reach, radius, breadth, velocity and lag metrics, an exposed-vs-unexposed baseline, and coordination signals. Computed server-side over the relationship360 and social360 projections; classifications are inferred claims, never causal, and unknown metrics stay unknown.',
+    domain: 'propagation',
+    applicableSubjectKinds: ['entity', 'episode', 'population', 'relationship'],
     temporalModes: ['relative', 'window'],
     default: false
   },

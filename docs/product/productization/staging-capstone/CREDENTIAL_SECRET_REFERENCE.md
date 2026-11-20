@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
-  "services/api/shared/certification/registry.py": "sha256:b0dc79cd4c3af7688f1b5b8400900e66ad1cbb474d8f94327882e623942d1085"
+  "services/api/shared/certification/registry.py": "sha256:d7c2255829f0ccd7e5551e8a3590222e7bc6008e63046f51d8581c0d47b4300f"
 ---
 
 # Credential & Secret Reference
@@ -44,8 +44,11 @@ Polling-capable providers (Coinbase, MoonPay, Bridge) additionally need a
 verified polling endpoint + read credential before `_fetch_poll_records` returns
 data. No secret ⇒ the provider stays observation-only via SDK signals.
 
-### Derivatives (4) — read-only
-Hyperliquid, dYdX, GMX, Drift each require a `read_only_api_key`. The read-only
+### Derivatives (5) — read-only
+Hyperliquid, dYdX, GMX, Drift each require a `read_only_api_key`. The
+Polymarket event-contract adapter needs no credential: it reads public wallet
+activity, and the wallet comes from a verified tenant venue account link
+(`/v1/derivatives/account-links`, flag `AETHER_VENUE_ACCOUNT_LINKS_ENABLED`). The read-only
 authority is enforced: an adapter rejects `authority_type: trade` and any
 mutating scope (`orders:write`, `withdraw`). Never provision a key with trade or
 withdraw scope.

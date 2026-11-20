@@ -382,6 +382,59 @@
       ],
       "unsupported_operations": []
     },
+    "derivatives:polymarket": {
+      "adapter": "polymarket",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/derivatives",
+      "pagination_model": "cursor",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "polymarket",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "derivatives:polymarket",
+      "release_domain": "derivatives",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/derivatives"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "derivatives"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_price_observation_recorded"
+      ],
+      "supported_operations": [
+        "account_snapshot",
+        "fills",
+        "markets",
+        "position",
+        "reference_data"
+      ],
+      "unsupported_operations": []
+    },
     "interop:axelar": {
       "adapter": "axelar",
       "adapter_version": "0.1.0",
@@ -1271,25 +1324,25 @@
   },
   "summary": {
     "by_domain": {
-      "derivatives": 4,
+      "derivatives": 5,
       "interop": 7,
       "payments": 5,
       "prediction_market": 2,
       "stablecoin_chain": 2
     },
     "by_release_domain": {
-      "derivatives": 4,
+      "derivatives": 5,
       "financial": 9,
       "payments": 5,
       "stablecoin": 2
     },
     "by_state": {
-      "credential_waiting": 20
+      "credential_waiting": 21
     },
     "domains": 5,
     "import_errors": {},
     "production_eligible": 0,
-    "total": 20
+    "total": 21
   },
   "version": "0.1.0-alpha.0"
 }
