@@ -30,19 +30,19 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
 source_hashes:
-  "services/api/actions/": "sha256:0eb5116a1fa01187b754d905e98159b9f5d7c49cae2c08c751912f2be6938408"
+  "services/api/actions/": "sha256:d1cf7b1487cb20463f07f8d2b7c029eb2e2d250da256b5a3391e0a22f768c28b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
-  "services/api/governance/": "sha256:51f72b87ef8db8f17887dec8e03982edad27e78486ce6db0b5424640813a737e"
+  "services/api/governance/": "sha256:6694e54ed4e8795cbb43107b1b6960ef35b2a27d2fa50c9262bee6fb7e0fd2e3"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:b6213f37eb693cbd8217b682b05b14d62c6a31a034d06bf026b5f093d420a14e"
-  "services/api/intelligence/": "sha256:f7d73beb404b3de3e110a36f5bbc0799a5bf1528556ac005e51a6445ab9abd5d"
+  "services/api/intelligence/": "sha256:cd53523bb0fb43606baa40bd4d8bcca880456867bc5d4f237df0ccb6e2943637"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:8b1a53f21ac22b49dce0be2fb2dcc9662d45657cc8e54b240606ba85ea53218d"
+  "services/api/value/": "sha256:2e2d89dad8a2bd220a70499ee9b2e47c8e7d02b972014dd801bfa39648effba4"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5545,18 +5545,48 @@ integer-cent `last_price` still accepted.
 ## Venue account links
 
 Gated by `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` (default off; `503` while off).
-A link binds one tenant subject to one read-only venue account and scopes that
-account's fills and positions to the tenant. Every link needs a consent
-receipt; no secret is stored. A venue account has at most one active owner per
-tenant: linking it to a second subject returns `400`
-`account_already_linked_to_another_subject`.
+A link binds one tenant subject to one read-only venue account. Every link
+needs a consent receipt. A venue account has at most one owner per tenant
+among active and disconnected links: linking it to a second subject returns
+`400` `account_already_linked_to_another_subject`.
+
+Behind every link the server creates a provider connection for the venue's
+account capability (`<venue>.account.<capability>`, for example
+`polymarket.account.activity_read`) and a data-rights grant for the source
+`provider-account:<connection_id>:<account_ref>`. Wallet, key and OAuth links
+are `personal_account` sources owned by the subject; tenant-push links are
+`organization_system` sources owned by the tenant. Account records are stored
+only after the Rights Authority admits them under that grant. Each link
+response carries `connection_id`, `source_id`, `grant_id` and
+`source_relationship`; a key is never returned. Wallet venues (Hyperliquid,
+Polymarket, dYdX, GMX, Drift) accept only wallet and tenant-push links
+(`400` `venue_does_not_accept_read_only_api_key` otherwise). The reserved
+`olympus` scope cannot hold a link (`400` `olympus_scope_not_linkable`).
 
 | Method | Path | Permission | Summary |
 |---|---|---|---|
-| GET | `/v1/derivatives/account-links` | `derivatives:read` | Active links for the tenant; filter by `venue` or `subject_id`; `include_revoked=true` adds revoked rows |
+| GET | `/v1/derivatives/account-links` | `derivatives:read` | Active and disconnected links; filter by `venue` or `subject_id`; `include_revoked=true` adds revoked rows |
 | POST | `/v1/derivatives/account-links/wallet` | `derivatives:connect` | Link a wallet. `proof_evidence_id` must be active `wallet_ownership_verified` evidence of this tenant whose address, chain namespace, and bound subject match the request; otherwise `400` with a machine-readable reason (`wallet_proof_subject_mismatch`, `wallet_proof_address_mismatch`, ...) |
-| POST | `/v1/derivatives/account-links/tenant-push` | `derivatives:connect` | Record that the tenant already holds this account's activity for its own subject |
-| POST | `/v1/derivatives/account-links/{link_id}/revoke` | `derivatives:connect` | Revoke a link; later propagation runs exclude the account. `404` for another tenant's link |
+| POST | `/v1/derivatives/account-links/credential` | `derivatives:connect` | Link with a read-only venue key (`api_key`, optional `api_secret` and `passphrase`, `scopes`). Mutating scopes return `400`. The key is stored by the credential broker under the link's connection; re-linking the same account rotates it in place |
+| POST | `/v1/derivatives/account-links/tenant-push` | `derivatives:connect` | Record that the tenant already holds this account's activity for its own subject. Fills it then posts to `/v1/derivatives/runtime/observations` with `venue_id` and `account_ref` are admitted under this link's grant |
+| POST | `/v1/derivatives/account-links/sync` | `derivatives:connect` | Read every active link of the tenant through rights admission and write admitted fills. Per-link result: `ok`, `degraded`, `denied` (the grant no longer admits; nothing after it is kept and the checkpoint does not move), `failed`, or `skipped` |
+| POST | `/v1/derivatives/account-links/{link_id}/sync` | `derivatives:connect` | Same, for one link |
+| POST | `/v1/derivatives/account-links/{link_id}/disconnect` | `derivatives:connect` | Stop reading the account: the credential is deleted and the connection disabled. The grant stays, so admitted activity keeps its governed uses. Linking again reconnects under the same grant |
+| POST | `/v1/derivatives/account-links/{link_id}/revoke` | `derivatives:connect` | Revoke the grant first (the next raw write for the account is denied), then delete the credential and close the connection. Later propagation runs exclude the account. `404` for another tenant's link |
+
+Orders, fills and positions need their market's reference row first; intake
+of one without it returns `409` `market_reference_missing`. Kyber operators
+provision the Olympus market sources that fill the registry:
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/admin/kyber/derivatives/runtime/market-sources` | Kyber operator | Olympus market-reference source per supported venue (Hyperliquid, dYdX, Polymarket), or `null` when none is provisioned or its grant was revoked |
+| POST | `/v1/admin/kyber/derivatives/runtime/market-sources/{venue}` | Kyber operator | Provision the venue's source under the reserved `olympus` scope: a connection for `<venue>.markets.market_data` and a `public_reference` grant of class `olympus_provider`. Idempotent; `400` `market_reference_not_supported` for venues without a public market fetcher |
+
+DSR erasure revokes each of the subject's link grants, deletes their
+credentials and then deletes the rows. A client cannot supply
+`source_id`, `source_grant_ref` or `rights_decision_ref` in a fill's
+`source_refs`; the server strips them and writes its own.
 
 ## Propagation & Diffusion lens
 
@@ -5567,7 +5597,7 @@ caller's own linked subjects and never writes graph truth. Responses follow
 
 | Method | Path | Summary |
 |---|---|---|
-| POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` adds a bounded read-only pull of public-wallet venues (Hyperliquid, Polymarket) for linked accounts |
+| POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` first syncs the tenant's linked accounts through rights admission. Runs use only fills admitted under a grant; others are excluded and reported as `unadmitted_fills_excluded` |
 | POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
 
 

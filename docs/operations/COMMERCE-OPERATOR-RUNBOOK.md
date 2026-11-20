@@ -31,7 +31,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/governance/diagnostics/routes.py": "sha256:bb2f2366e46d79164868bb2df1315e1c41d704f48f0ed4d04f4ceb68039a02b9"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
-  "services/api/value/x402/": "sha256:edc02290facfce1c780393ca4ace0f5fc5b11065e683ee59a357bef448ef8c38"
+  "services/api/value/x402/": "sha256:9adb59933e0b97374586571246ddc5aaa9c7ba2edca5d460d4d7331b906076a4"
   "services/api/value/x402/provenance.py": "sha256:fe227df986d4c03f770d97d6236bc4c5c5ee4410db66415dd38b7a697779d556"
   "services/api/value/x402/settlement_observer.py": "sha256:d7779f89245892329488cfc587ae4afa4988b012494e4b5acce736acec45874e"
 ---

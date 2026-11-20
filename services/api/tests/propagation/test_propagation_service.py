@@ -30,14 +30,21 @@ class FakeLinks:
         return {("hyperliquid", f"0x{i}"): f"u{i}" for i in range(1, 9)}
 
 
+ADMITTED = ["source_grant_ref=drg_1", "rights_decision_ref=rd_1", "source_id=provider-account:c:a"]
+
+
 class FakeFills:
     def __init__(self):
         self.rows = [
             {"tenant_id": T, "trading_account_id": "acct_0x1", "canonical_market_id": "hyperliquid:mainnet:HYPE",
              "fill_id": "f1", "side": "buy", "price": "40", "quantity": "2", "executed_at": at(0),
-             "source_refs": ["direction=Open Long"]},
+             "source_refs": ["direction=Open Long", *ADMITTED]},
             {"tenant_id": T, "trading_account_id": "acct_0x2", "canonical_market_id": "hyperliquid:mainnet:HYPE",
              "fill_id": "f2", "side": "buy", "price": "41", "quantity": "1", "executed_at": at(45),
+             "source_refs": ["direction=Open Long", *ADMITTED]},
+            # Written by legacy intake, never admitted under a grant: excluded.
+            {"tenant_id": T, "trading_account_id": "acct_0x4", "canonical_market_id": "hyperliquid:mainnet:HYPE",
+             "fill_id": "f4", "side": "buy", "price": "41", "quantity": "1", "executed_at": at(20),
              "source_refs": ["direction=Open Long"]},
             {"tenant_id": "other", "trading_account_id": "acct_0x3", "canonical_market_id": "hyperliquid:mainnet:HYPE",
              "fill_id": "f3", "side": "buy", "price": "41", "quantity": "1", "executed_at": at(50)},
@@ -117,6 +124,8 @@ async def test_service_builds_tenant_run_from_repository_sources():
     assert episode.paths[0].hops[0].predicate == "FOLLOWS"
     assert episode.baseline.exposed == 2  # u2 (adopted) + u3 (in-app viewer, did not adopt)
     assert episode.classification is EpisodeClassification.INSUFFICIENT_DATA  # groups too small
+    assert "unadmitted_fills_excluded" in result.limitations
+    assert "u4" not in {a.subject_id for a in episode.adopters}
 
 
 async def test_unavailable_sources_degrade_with_reasons():
@@ -136,20 +145,26 @@ async def test_unavailable_sources_degrade_with_reasons():
     assert result.episodes[0].metrics.propagation_radius is None
 
 
-async def test_live_pull_uses_read_only_adapter_factory():
-    pulled = []
+async def test_include_live_syncs_linked_accounts_before_reading():
+    calls = []
 
-    class FakeAdapter:
-        def __init__(self, venue, account):
-            pulled.append((venue, account))
-
-        async def pull_events(self):
-            return [], {"provider_health": "ok"}
+    class FakeSync:
+        async def sync_tenant(self, tenant_id):
+            calls.append(tenant_id)
+            return SimpleNamespace(truncated=False, links=[SimpleNamespace(status="denied")])
 
     src, _, _ = sources()
-    src._adapter_factory = FakeAdapter
-    await PropagationService(src).run(query(), include_live=True)
-    assert pulled and all(v == "hyperliquid" for v, _ in pulled)
+    src._account_sync = FakeSync()
+    result = await PropagationService(src).run(query(), include_live=True)
+    assert calls == [T]
+    assert "account_sync_denied" in result.limitations
+
+
+def test_stored_fill_key_comes_from_the_venue_adapter():
+    from intelligence.propagation.sources import _adapter_account_key
+
+    assert _adapter_account_key("hyperliquid", "0xabc") == "acct_0xabc"
+    assert _adapter_account_key("dydx", "dydx1abc") == "acct_dydx1abc_0"
 
 
 async def test_route_is_disabled_by_default(monkeypatch):

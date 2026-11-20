@@ -29,6 +29,9 @@ class DydxAdapter(VenueDerivativesAdapter):
         "surface). Live provider validation pending — CREDENTIAL_WAITING."
     )
 
+    # Account activity is public data keyed by address; a linked account is
+    # proved by wallet signature, not a venue credential.
+    authentication_model = "public_wallet_address"
     venue_id = "dydx"
     default_deployment = "mainnet"
     rest_base_url = "https://indexer.dydx.trade/v4"
@@ -40,7 +43,10 @@ class DydxAdapter(VenueDerivativesAdapter):
         self._subaccount = subaccount_number
 
     def _account_id(self) -> str:
-        return f"acct_{self._account_ref}_{self._subaccount}" if self._account_ref else "public"
+        return self.trading_account_id_for(self._account_ref) if self._account_ref else "public"
+
+    def trading_account_id_for(self, account_ref: str) -> str:
+        return f"acct_{account_ref}_{self._subaccount}"
 
     def _base_params(self) -> dict[str, Any]:
         return {"address": self._account_ref, "subaccountNumber": self._subaccount}

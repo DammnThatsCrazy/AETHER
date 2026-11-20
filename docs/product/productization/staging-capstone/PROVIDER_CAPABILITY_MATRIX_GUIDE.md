@@ -15,8 +15,8 @@ source_files:
   - docs/_generated/financial-capability-matrix.json
 canonical_owner: platform@aether
 source_hashes:
-  "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
-  "docs/_generated/financial-capability-matrix.json": "sha256:a196f631b28740f20ae01eb021c0e4214a85511a33c98d66fa062bd5ec05655c"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:d3973ff39e724aac7e0f8ff414f4a13374633d5227eacb53658eb135a051129c"
+  "docs/_generated/financial-capability-matrix.json": "sha256:e96dab01329b9ce3a75004c00df630e8895efd564b8c02c331da98cd5dd2a446"
   "services/api/shared/certification/capability_records.py": "sha256:f1aa839e3b693dae77e44816c3fac6c21b8207f3c2a980957621dcd34701ed1b"
   "services/api/shared/certification/descriptor.py": "sha256:9b4a90d83b4304d4cf5be2a98df1db3abd971841b91565bc10cd4f17b0c0a198"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
@@ -137,6 +137,10 @@ Iterable also declare pull (incremental pull, with campaign/message sync and/or
 historical backfill per provider); customerio, mailchimp, postmark, and sendgrid
 are webhook-only and their `capabilities` lists reflect that honestly.
 
+> Derivatives venues read account activity by public wallet address, so their
+> `required_credentials` is empty: a governed tenant wallet link, not a key,
+> unlocks them.
+>
 > Field caveat: for derivatives, `capabilities` come from the live adapter but
 > `streaming_model`/`pagination_model` come from a fixed spec table, so dydx can
 > advertise `realtime_account_stream` while reporting `streaming_model: none`.

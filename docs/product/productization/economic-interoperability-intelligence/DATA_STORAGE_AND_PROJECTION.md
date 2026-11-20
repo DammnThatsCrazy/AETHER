@@ -16,7 +16,7 @@ source_hashes:
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py": "sha256:ff433ea1c35069666694aee0f0a2a6cef369cf97b0f77ad5c9eb578f6913caea"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py": "sha256:33c4eb1dab69dd4a98201761df37c8de1a6a3006f190937920751135308fc2fa"
   "services/api/ingestion/silver/dispatcher.py": "sha256:f1ac1e82dd95a777fdc182b5f5c1451548c9cf3208b5bd0651d99f299910a4fb"
-  "services/api/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
+  "services/api/repositories/typed_repo.py": "sha256:a36b2dab7ed5bd305ea6290f564c3003cce24162c0f0450d6b12ddd3e889f52a"
 ---
 
 # Data Storage and Projection
@@ -45,7 +45,9 @@ also converts each value to its column's introspected Postgres type:
 - Values for `numeric` columns become `Decimal(str(v))`.
 
 A value that can't be converted fails the write, and the error names the
-table and column.
+table and column. `TypedTableRepository` inserts apply the same timestamp rule
+by column name: an ISO-8601 string for a `*_at` column is bound as an aware
+datetime.
 
 The card-linked payment rail slice adds `CardLinkedProjector`
 (`card_linked_flow_facts`), registered after the economic projectors in

@@ -1729,7 +1729,7 @@ async def erase_pattern_discovery_plane(subject: ErasureSubject) -> dict[str, Re
 
 
 async def erase_venue_account_links_plane(subject: ErasureSubject) -> dict[str, Receipt]:
-    """Hard-delete the subject's tenant venue account links (wallet / key refs).
+    """Hard-delete the subject's tenant venue account links, revoking their grants and credentials.
 
     Links are keyed by the tenant's subject id, so every subject ref is tried;
     deletion is tenant-exact and idempotent. An active legal hold on
@@ -1748,10 +1748,14 @@ async def erase_venue_account_links_plane(subject: ErasureSubject) -> dict[str, 
                 blocked_reason=str(hold.get("reason") or "legal hold"),
             )}
 
-    repo = VenueAccountLinkRepository()
+    from value.derivatives.account_links import VenueAccountLinkService
+
+    # The service revokes each link's grant (no further raw admission) and
+    # deletes its stored credential before the rows go.
+    service = VenueAccountLinkService(repo=VenueAccountLinkRepository())
     deleted = 0
     for ref in sorted(subject.refs):
-        deleted += int(await repo.delete_by_principal(subject.tenant_id, ref))
+        deleted += int(await service.erase_subject(subject.tenant_id, ref))
     return {VENUE_ACCOUNT_LINKS_COMPONENT: Receipt(
         records_impacted=deleted,
         requires_recompute=bool(deleted),

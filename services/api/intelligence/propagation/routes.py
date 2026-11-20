@@ -28,7 +28,7 @@ class PropagationRunRequest(BaseModel):
     channels: Optional[list[str]] = None
     exposure_window_seconds: int = Field(default=72 * 3600, ge=60, le=30 * 24 * 3600)
     max_hops: int = Field(default=4, ge=1, le=16)
-    include_live: bool = Field(default=False, description="Bounded live read of public-wallet venues")
+    include_live: bool = Field(default=False, description="Sync linked accounts (through rights admission) before computing")
 
 
 def _require_enabled() -> None:

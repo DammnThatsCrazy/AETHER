@@ -22,7 +22,7 @@ source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
   "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
-  "services/api/actions/agent/": "sha256:fe1bf2b14395186a4a23bb9bb1d133daf35d43ea94c27bd341d1c25a0f767beb"
+  "services/api/actions/agent/": "sha256:3ec4ff6e349f0fd6a28d21612e35bd1e337c063856e17ac18e7f006e224b11d6"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -54,7 +54,7 @@ source_hashes:
   "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:edc02290facfce1c780393ca4ace0f5fc5b11065e683ee59a357bef448ef8c38"
+  "services/api/value/x402/": "sha256:9adb59933e0b97374586571246ddc5aaa9c7ba2edca5d460d4d7331b906076a4"
   "services/api/workers/runtime/specs.py": "sha256:4ff2c134a396e6e253f56a0c3b6d46768c2f648eee0dc04230e6d3bc5fa797b1"
 ---
 
