@@ -107,7 +107,7 @@ source_hashes:
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
   "services/api/main.py": "sha256:4d724bbe252cea78b579a428f5cb934f4fd61ba11510f205c2f604a2e6e38f56"
-  "services/api/middleware/middleware.py": "sha256:3c9d662e516a36e85ebc683ffaf91adc212fd466be6f135262b0f8f88340ecf5"
+  "services/api/middleware/middleware.py": "sha256:5dae9bb875637d01e0d234953532f821d841dbae8de29d533911e6b80a66de99"
   "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:edbdaa60384c89a717379f14f94182904cc02c7525ec0408e7a4757fe995f4b1"

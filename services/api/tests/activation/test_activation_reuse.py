@@ -197,3 +197,22 @@ async def test_first_event_from_an_installed_sdk_is_recorded_once(
     await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
     status = await svc.get_status(tenant)
     assert status["first_sdk_event"]["event_id"] == "evt-installed-sdk-1"
+
+
+@pytest.mark.asyncio
+async def test_old_dashboard_tests_never_become_an_install_once_their_id_ages_out(
+    svc, make_request, onboard_with_keys
+):
+    """Only the last 20 test-event ids are kept, but the scan reads 50 rows. The
+    server-stamped marker on each test row keeps the 21st-oldest from counting."""
+    tenant = "tenant-first-sdk-3"
+    await onboard_with_keys(svc, tenant)
+    request = make_request(tenant)
+    for _ in range(21):
+        await svc.run_test_event(request, tenant, TestEventRequest(event_type="track"))
+
+    record = await svc.repo.get_for_tenant(tenant)
+    # The oldest test id really has aged out of the kept list.
+    assert len(record["activation_test_event_ids"]) == 20
+    status = await svc.get_status(tenant)
+    assert status["first_sdk_event"] is None

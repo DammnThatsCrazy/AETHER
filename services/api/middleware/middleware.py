@@ -1265,11 +1265,24 @@ _SDK_HANDOFF_PATHS = frozenset({"/sdk/journey-handoff", "/sdk/journey-handoff/re
 # Canonical consent receipts (/v1/consent/records) and identity lookups stay
 # off this list: they assert or read compliance and identity state, which a
 # key anyone can lift out of an app binary must not do.
+# The SDK manifest is public-safe configuration (see the site check below), and
+# every SDK reads it on start. A publishable key may GET it and nothing else
+# under /v1/config.
+_PUBLISHABLE_MANIFEST_PATH = "/v1/config/sdk/manifest"
+
 _PUBLISHABLE_SDK_POST_PATHS = frozenset({
     "/v1/diagnostics/sdk/heartbeat",
     "/v1/attribution/deferred/resolve",
     "/v1/attribution/apple-ads/resolve",
 })
+
+
+def _is_publishable_manifest_read(request, path: str, credential_class: str) -> bool:
+    return (
+        credential_class == CREDENTIAL_CLASS_PUBLISHABLE
+        and path == _PUBLISHABLE_MANIFEST_PATH
+        and getattr(request, "method", "GET").upper() == "GET"
+    )
 
 
 def _evaluate_route_policy(
@@ -1376,6 +1389,7 @@ def _evaluate_route_policy(
                 and not path.startswith("/v1/ingest")
                 and path not in _SDK_HANDOFF_PATHS
                 and not publishable_sdk_post
+                and not _is_publishable_manifest_read(request, path, credential_class)
             ):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
         if credential_class == CREDENTIAL_CLASS_PUBLISHABLE:
@@ -1431,7 +1445,14 @@ def _evaluate_route_policy(
                 permission = "write"
             if not context.has_permission(permission):
                 return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
-        elif pol.tenant_scoped and credential_class != "legacy" and not context.has_permission("read"):
+        elif (
+            pol.tenant_scoped
+            and credential_class != "legacy"
+            and not context.has_permission("read")
+            # A publishable key carries ingest authority only, yet must read
+            # the public-safe SDK manifest; that one GET is admitted above.
+            and not _is_publishable_manifest_read(request, path, credential_class)
+        ):
             return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
 
         if pol.audit_required:

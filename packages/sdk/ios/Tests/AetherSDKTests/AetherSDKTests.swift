@@ -383,11 +383,19 @@ final class AetherSDKTests: XCTestCase {
 
     func testTierACanonicalPurposes() {
         let purposes = Aether.canonicalConsentPurposes
-        XCTAssertEqual(Set(purposes), Set([
-            "analytics", "marketing", "personalization", "web3",
-            "agent", "commerce", "credit", "location"
-        ]))
-        XCTAssertEqual(Set(Aether.explicitOptInPurposes), Set(["credit", "location"]))
+        // Mirrors CONSENT_PURPOSES / EXPLICIT_OPT_IN_PURPOSES in packages/shared/consent.ts.
+        XCTAssertEqual(purposes, [
+            "analytics", "marketing", "personalization", "web3", "agent", "commerce",
+            "financial_activity", "credit", "location", "economic_observability",
+            "cross_chain_observability", "fraud_prevention",
+        ])
+        XCTAssertEqual(Aether.explicitOptInPurposes, [
+            "financial_activity", "credit", "location", "economic_observability",
+            "cross_chain_observability", "fraud_prevention",
+        ])
+        // grantAll() must never grant an explicit-opt-in purpose.
+        let grantable = purposes.filter { !Aether.explicitOptInPurposes.contains($0) }
+        XCTAssertEqual(grantable, ["analytics", "marketing", "personalization", "web3", "agent", "commerce"])
     }
 
     // MARK: - Manifest Signature Verification (§2.9)

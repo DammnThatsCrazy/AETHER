@@ -41,7 +41,7 @@ source_hashes:
   "services/api/intelligence/": "sha256:d3743b13cc80df4fcfbc2bb8fc3056ee880ab1e7a0c768108d252a22a3903913"
   "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:25b4f1a79b57e5356a1e8098d988fcad4626960892101acc4ad0cef07c9ee7c0"
+  "services/api/tenancy/": "sha256:908f8792e6953d73acd81e0d0e9f11dfa26d4c6ceb6973829df4fc1afae2e191"
   "services/api/value/": "sha256:1c5aceacc350054ca9f1cdb05861ecbc923b5ec37640af70a7c586d1d7421b70"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
@@ -433,8 +433,9 @@ permission, because a site is a credential boundary rather than a preference:
 a publishable key travels in page HTML or an app binary, so the site is the
 only thing confining it to one property.
 
-A publishable key reaches `POST /v1/batch`, `/v1/track`, `/v1/ingest*`, the SDK
-manifest, the two journey-handoff POSTs, and three native SDK POSTs:
+A publishable key reaches `POST /v1/batch`, `/v1/track`, `/v1/ingest*`,
+`GET /v1/config/sdk/manifest` (its only read, and nothing else under
+`/v1/config`), the two journey-handoff POSTs, and three native SDK POSTs:
 `/v1/diagnostics/sdk/heartbeat`, `/v1/attribution/deferred/resolve` and
 `/v1/attribution/apple-ads/resolve`. Every request except the manifest read
 must declare a site it is bound to in `X-Aether-Site`

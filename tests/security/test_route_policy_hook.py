@@ -306,3 +306,19 @@ def test_public_ingest_identifier_does_not_gain_the_native_sdk_posts():
     post.method = "POST"
     with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
         assert _is_denial(_hook()(post, "/v1/attribution/deferred/resolve", ident))
+
+
+def test_publishable_key_can_read_only_the_sdk_manifest():
+    """Every SDK reads the public-safe manifest on start. A publishable key
+    carries ingest authority only, so the manifest GET is the one read it is
+    given; nothing else under /v1/config, and no write to the manifest."""
+    get = _req()
+    get.method = "GET"
+    post = _req()
+    post.method = "POST"
+    post.headers = {"X-Aether-Site": "site_a"}
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _hook()(get, "/v1/config/sdk/manifest", _PUBLISHABLE) is None
+        assert _is_denial(_hook()(post, "/v1/config/sdk/manifest", _PUBLISHABLE))
+        assert _is_denial(_hook()(get, "/v1/config/sdk/manifest/requests", _PUBLISHABLE))
+        assert _is_denial(_hook()(get, "/v1/config/sdk", _PUBLISHABLE))

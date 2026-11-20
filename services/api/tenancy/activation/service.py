@@ -91,6 +91,11 @@ _FIRST_VALUE_STORES: tuple[tuple[str, dict[str, Any]], ...] = (
 # session, not by a key an SDK was configured with. Their ids are remembered so
 # the first event an installed SDK actually sends can be told apart from them.
 _TEST_EVENT_IDS_KEPT = 20
+# Stamped by the server on every dashboard test event, so a test row is told
+# apart by its own payload. The id list above covers rows written before the
+# marker existed; the marker keeps a test row from ever counting once its id
+# has aged out of that list.
+ACTIVATION_TEST_MARKER = "aether_activation_test"
 _FIRST_SDK_EVENT_SCAN = 50
 
 
@@ -325,7 +330,7 @@ class ActivationService:
             timestamp=now,
             sessionId=body.session_id or str(uuid.uuid4()),
             anonymousId=body.anonymous_id or str(uuid.uuid4()),
-            properties=body.properties or {},
+            properties={**(body.properties or {}), ACTIVATION_TEST_MARKER: True},
         )
         batch_request = BatchRequest(batch=[event], sentAt=now)
         response = await ingest_batch(request, batch_request, get_producer())
@@ -398,6 +403,8 @@ class ActivationService:
             payload = row.get("payload") or {}
             event_id = row.get("provider_record_id") or payload.get("event_id")
             if not event_id or event_id in excluded:
+                continue
+            if (payload.get("properties") or {}).get(ACTIVATION_TEST_MARKER) is True:
                 continue
             source_tag = row.get("source_tag") or ""
             record["first_sdk_event"] = {
