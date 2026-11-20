@@ -33,7 +33,7 @@ In **Settings → SDK Sites**, register the origin your site is served from. The
 mint a **publishable** key for it and paste the tag the platform renders:
 
 ```html
-<script src="https://cdn.aether.network/v1.js"
+<script src="https://cdn.olympuslabsml.com/v1.js"
         data-key="pk_YOUR_PUBLISHABLE_KEY"
         data-site="site_YOUR_SITE_ID"
         async></script>
@@ -183,18 +183,18 @@ Add keys in **Settings → API Keys → Provider Keys**, or via API:
 
 ```bash
 # Meta Ads
-curl -X POST https://api.aether.network/v1/providers/keys \
+curl -X POST https://api.olympuslabsml.com/v1/providers/keys \
   -H "X-API-Key: ak_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"provider_name": "meta_ads", "api_key": "YOUR_META_ACCESS_TOKEN"}'
 
 # Google Ads
-curl -X POST https://api.aether.network/v1/providers/keys \
+curl -X POST https://api.olympuslabsml.com/v1/providers/keys \
   -H "X-API-Key: ak_YOUR_KEY" \
   -d '{"provider_name": "google_ads", "api_key": "YOUR_GOOGLE_ADS_TOKEN"}'
 
 # Plaid (bank account signals — requires credit consent from your end-users)
-curl -X POST https://api.aether.network/v1/providers/keys \
+curl -X POST https://api.olympuslabsml.com/v1/providers/keys \
   -H "X-API-Key: ak_YOUR_KEY" \
   -d '{"provider_name": "plaid", "api_key": "YOUR_PLAID_SECRET"}'
 ```

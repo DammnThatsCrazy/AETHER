@@ -64,10 +64,10 @@ VPC_CONFIGS = {
 }
 
 DNS_DOMAINS = {
-    "api":       "api.aether.network",
+    "api":       "api.olympuslabsml.com",
     "dashboard": "dashboard.aether.network",
     "websocket": "ws.aether.network",
-    "cdn":       "cdn.aether.network",
+    "cdn":       "cdn.olympuslabsml.com",
 }
 
 

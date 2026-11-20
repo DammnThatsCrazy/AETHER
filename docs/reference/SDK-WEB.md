@@ -27,7 +27,7 @@ The recommended install is one tag. Register a site and mint a publishable key
 for it (**Settings → SDK Sites**), then paste the snippet the platform renders:
 
 ```html
-<script src="https://cdn.aether.network/v1.js"
+<script src="https://cdn.olympuslabsml.com/v1.js"
         data-key="pk_your_publishable_key"
         data-site="site_your_site_id"
         async></script>
@@ -534,7 +534,7 @@ interface AetherConfig {
     build?: string; environment?: string;  // context.application on every event
     namespace?: string;
   };
-  endpoint?: string;                       // Default: 'https://api.aether.network'
+  endpoint?: string;                       // Default: 'https://api.olympuslabsml.com'
   wsEndpoint?: string;                     // WebSocket endpoint override
   debug?: boolean;                         // Enable console logging
   autoResumeJourney?: boolean;             // Cross-device resolve (default: true)

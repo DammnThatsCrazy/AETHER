@@ -7,7 +7,7 @@ import {
   isFrameForRequest,
 } from './experience360.mjs';
 
-const DEFAULT_API_URL = 'https://api.aether.network';
+const DEFAULT_API_URL = 'https://api.olympuslabsml.com';
 const REQUEST_TIMEOUT_MS = 15_000;
 const CAPABILITY_ID_PATTERN = /^cap_[a-f0-9]{24}$/;
 const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
@@ -760,7 +760,7 @@ export function buildTrackBatch({
       anonymousId: anonymousId.trim(),
       properties: { ...properties, event: eventName.trim() },
       context: {
-        library: { name: '@aether/access-kit', version: '0.1.0-alpha.0' },
+        library: { name: '@olympuslabs/aether-access-kit', version: '0.1.0-alpha.0' },
         surface,
         schemaVersion: '1.0.0',
         sequence: { event: eventSequence },

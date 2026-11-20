@@ -62,7 +62,7 @@ describe('AetherLoader', () => {
           minimumVersion: '8.3.0',
           updateUrgency: 'none',
           downloads: {
-            sdkBundleUrl: 'https://cdn.aether.network/sdk/8.3.1/aether.umd.js',
+            sdkBundleUrl: 'https://cdn.olympuslabsml.com/sdk/8.3.1/aether.umd.js',
             sdkBundleHash: '',
             sdkBundleSize: 128,
           },

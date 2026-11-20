@@ -32,7 +32,7 @@ Authorization: Bearer {apiKey}
 Content-Type: application/json
 ```
 
-Default `endpoint` = `https://api.aether.network`.
+Default `endpoint` = `https://api.olympuslabsml.com`.
 
 ## Request body
 

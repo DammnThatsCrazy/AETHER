@@ -159,7 +159,7 @@ import Aether from '@olympuslabs/aether-react-native';
 Aether.init({
   apiKey: 'your-api-key',
   environment: 'production',       // 'production' | 'staging' | 'development'
-  endpoint: 'https://api.aether.network', // custom endpoint
+  endpoint: 'https://api.olympuslabsml.com', // custom endpoint
   debug: false,                    // enable native debug logging
 
   modules: {

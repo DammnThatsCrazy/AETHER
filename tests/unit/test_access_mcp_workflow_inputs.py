@@ -78,7 +78,7 @@ def test_npm_release_publishes_the_reviewed_tarball_only_after_review_gate() -> 
     validation = jobs["validate-package"]
     validation_script = "\n".join(step.get("run", "") for step in validation["steps"])
     assert validation.get("environment") is None
-    assert "pnpm --filter @aether/access-kit test" in validation_script
+    assert "pnpm --filter @olympuslabs/aether-access-kit test" in validation_script
     assert "npm pack ./packages/access-kit --pack-destination" in validation_script
 
     reviewer_gate = jobs["require-npm-release-reviewers"]

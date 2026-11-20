@@ -406,7 +406,7 @@ interface AetherRNConfig {
   apiKey: string;
   siteId?: string;             // Site a publishable key is bound to; sent as X-Aether-Site
   environment?: 'production' | 'staging' | 'development';
-  endpoint?: string;           // Default: 'https://api.aether.network'
+  endpoint?: string;           // Default: 'https://api.olympuslabsml.com'
   debug?: boolean;
   modules?: {
     screenTracking?: boolean;  // Auto screen tracking

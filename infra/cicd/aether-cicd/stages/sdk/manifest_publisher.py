@@ -3,7 +3,7 @@ Aether CI/CD -- SDK Manifest Publisher
 Generates per-platform SDK manifest JSON files and uploads them to CDN.
 
 Each platform (web, ios, android, react-native) gets its own manifest at:
-  s3://cdn.aether.network/sdk/manifests/{platform}/latest.json
+  s3://cdn.olympuslabsml.com/sdk/manifests/{platform}/latest.json
 
 The manifest tells each SDK client:
   - What the latest version is and the minimum supported version
@@ -35,7 +35,7 @@ STAGE = "SDK-MANIFEST"
 
 PLATFORMS = ["web", "ios", "android", "react-native"]
 
-DEFAULT_CDN_BASE = "https://cdn.aether.network"
+DEFAULT_CDN_BASE = "https://cdn.olympuslabsml.com"
 
 # Data modules that every manifest references
 DATA_MODULE_NAMES = [
@@ -282,7 +282,7 @@ def publish_manifests(
 
         # Step 3 -- Upload to S3
         s3_key = f"sdk/manifests/{platform}/latest.json"
-        s3_uri = f"s3://cdn.aether.network/{s3_key}"
+        s3_uri = f"s3://cdn.olympuslabsml.com/{s3_key}"
         s3_paths.append(s3_uri)
         cf_paths.append(f"/{s3_key}")
 

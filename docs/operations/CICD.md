@@ -883,7 +883,7 @@ than publishing a mislabelled install.
 | React Native (`packages/sdk/react-native`) | npm (`@olympuslabs/aether-react-native`); its podspec and Gradle module ship inside the npm package | `publish-npm` | `packages/sdk/react-native/package.json` |
 | iOS (`packages/sdk/ios`) | Swift Package Manager via the `DammnThatsCrazy/aether-ios` mirror (bare version tags), and CocoaPods (`AetherSDK`, sourced from the mirror) | `publish-ios-mirror`, then `publish-cocoapods` | `AetherSDK.podspec` |
 | Android (`packages/sdk/android`) | Maven Central (`com.olympuslabsml:aether-android`, signed) | `publish-android` | `gradle.properties` |
-| Web CDN (`packages/sdk/web`) | `cdn.aether.network` | `publish-cdn` | `packages/sdk/web/package.json` |
+| Web CDN (`packages/sdk/web`) | `cdn.olympuslabsml.com` | `publish-cdn` | `packages/sdk/web/package.json` |
 
 `publish-cdn` runs after `publish-npm`, because npm is the registry of record and
 the CDN is a delivery mirror of the same build. It derives the CDN layout and the

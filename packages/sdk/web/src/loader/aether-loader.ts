@@ -1,8 +1,8 @@
 // =============================================================================
 // Aether SDK — CDN AUTO-LOADER
 // Lightweight loader at the stable URL that dynamically loads the latest SDK
-// Stable URL:    https://cdn.aether.network/v1.js
-// Versioned URL: https://cdn.aether.network/sdk/v<major>/loader.js
+// Stable URL:    https://cdn.olympuslabsml.com/v1.js
+// Versioned URL: https://cdn.olympuslabsml.com/sdk/v<major>/loader.js
 // =============================================================================
 
 interface LoaderConfig {
@@ -16,7 +16,7 @@ interface LoaderConfig {
   onError?: (error: Error) => void;
   /** Network timeout in ms. Default: 10000 */
   timeout?: number;
-  /** CDN base URL. Default: 'https://cdn.aether.network/sdk' */
+  /** CDN base URL. Default: 'https://cdn.olympuslabsml.com/sdk' */
   cdnBase?: string;
 }
 
@@ -42,7 +42,7 @@ interface SDKManifest {
 
 const STORAGE_KEY = '_aether_loader_bundle';
 const MANIFEST_KEY = '_aether_loader_manifest';
-const DEFAULT_CDN = 'https://cdn.aether.network/sdk';
+const DEFAULT_CDN = 'https://cdn.olympuslabsml.com/sdk';
 const DEFAULT_TTL = 3600000; // 1 hour
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 
@@ -50,10 +50,10 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  * AetherLoader — CDN Auto-Loader
  *
  * Loads the latest Aether SDK bundle from CDN with intelligent caching.
- * Place at a stable, never-changing URL: https://cdn.aether.network/v1.js
+ * Place at a stable, never-changing URL: https://cdn.olympuslabsml.com/v1.js
  *
  * Usage:
- *   <script src="https://cdn.aether.network/v1.js"></script>
+ *   <script src="https://cdn.olympuslabsml.com/v1.js"></script>
  *   <script>
  *     AetherLoader.load().then(aether => aether.init({ apiKey: 'your-key' }));
  *   </script>

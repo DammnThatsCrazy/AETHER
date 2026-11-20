@@ -36,12 +36,12 @@ describe('one-tag auto-init', () => {
 
   describe('normalizeEndpoint', () => {
     it('strips trailing slashes so path joins cannot produce //v1/batch', () => {
-      expect(normalizeEndpoint('https://api.aether.network/')).toEqual({
-        endpoint: 'https://api.aether.network',
+      expect(normalizeEndpoint('https://api.olympuslabsml.com/')).toEqual({
+        endpoint: 'https://api.olympuslabsml.com',
         error: null,
       });
-      expect(normalizeEndpoint('https://api.aether.network///')).toEqual({
-        endpoint: 'https://api.aether.network',
+      expect(normalizeEndpoint('https://api.olympuslabsml.com///')).toEqual({
+        endpoint: 'https://api.olympuslabsml.com',
         error: null,
       });
     });
@@ -54,7 +54,7 @@ describe('one-tag auto-init', () => {
     });
 
     it('rejects cleartext http off localhost', () => {
-      const result = normalizeEndpoint('http://api.aether.network');
+      const result = normalizeEndpoint('http://api.olympuslabsml.com');
       expect(result.endpoint).toBeNull();
       expect(result.error).toContain('must use https');
     });
@@ -95,7 +95,7 @@ describe('one-tag auto-init', () => {
     it('defaults to the canonical ingestion host, not the CDN host', () => {
       // A snippet that ships no data-endpoint must reach the same API host the
       // SDK itself defaults to. These are separate origins by design.
-      expect(DEFAULT_AUTO_INIT.endpoint).toBe('https://api.aether.network');
+      expect(DEFAULT_AUTO_INIT.endpoint).toBe('https://api.olympuslabsml.com');
     });
 
     it('reports both missing required attributes at once', () => {

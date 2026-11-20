@@ -93,7 +93,7 @@ describe('FPS-053: React Provider', () => {
   });
 
   it('should validate provider config endpoint is a valid URL string', () => {
-    const endpoint = 'https://api.aether.network/v1';
+    const endpoint = 'https://api.olympuslabsml.com/v1';
     expect(typeof endpoint).toBe('string');
     expect(endpoint.startsWith('https://')).toBe(true);
     expect(endpoint.length).toBeGreaterThan(10);

@@ -93,9 +93,9 @@ for attribute in sorted(required):
 
 # --- 3. The loader URL must be the one the shipping bundle advertises --------
 bundle_src = text(LOADER_BUNDLE)
-bundle_urls = set(re.findall(r'https://cdn\.aether\.network/[A-Za-z0-9._/-]*\.js', bundle_src))
+bundle_urls = set(re.findall(r'https://cdn\.olympuslabsml\.com/[A-Za-z0-9._/-]*\.js', bundle_src))
 if not bundle_urls:
-    fail(f'{LOADER_BUNDLE} advertises no cdn.aether.network loader URL')
+    fail(f'{LOADER_BUNDLE} advertises no cdn.olympuslabsml.com loader URL')
 
 server_url_match = re.search(r"""^LOADER_URL\s*=\s*['"]([^'"]+)['"]""", server_src, re.MULTILINE)
 if not server_url_match:

@@ -66,7 +66,7 @@ Register a site in **Settings → SDK Sites**, mint a publishable key for it, an
 paste the tag the platform renders:
 
 ```html
-<script src="https://cdn.aether.network/v1.js"
+<script src="https://cdn.olympuslabsml.com/v1.js"
         data-key="pk_your_publishable_key"
         data-site="site_your_site_id"
         async></script>
@@ -94,7 +94,7 @@ The `AetherLoader` class is still exported for callers who want to resolve and
 install the bundle under their own control:
 
 ```html
-<script src="https://cdn.aether.network/v1.js"></script>
+<script src="https://cdn.olympuslabsml.com/v1.js"></script>
 <script>
   AetherLoader.load().then(aether => {
     aether.init({ apiKey: 'pk_your_publishable_key', siteId: 'site_your_site_id' });
@@ -162,7 +162,7 @@ aether.init({
   apiKey: 'pk_your_publishable_key',
   siteId: 'site_your_site_id',     // required alongside a publishable key
   environment: 'production',       // 'production' | 'staging' | 'development'
-  endpoint: 'https://api.aether.network', // custom endpoint
+  endpoint: 'https://api.olympuslabsml.com', // custom endpoint
   debug: false,
 
   modules: {

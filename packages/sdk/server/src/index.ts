@@ -91,7 +91,7 @@ function isAwsLambda(): boolean {
   return typeof process.env.AWS_LAMBDA_FUNCTION_NAME === 'string';
 }
 
-const DEFAULT_ENDPOINT = 'https://api.aether.network/v1/batch';
+const DEFAULT_ENDPOINT = 'https://api.olympuslabsml.com/v1/batch';
 
 export class AetherServerSDK {
   // application stays optional-valued: Required<> would strip its undefined,

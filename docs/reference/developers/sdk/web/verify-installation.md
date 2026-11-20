@@ -44,7 +44,7 @@ aether.consent.grant(['analytics']);
 ```
 
 The key identifies the tenant on the server, so there is no tenant ID to pass.
-The ingestion endpoint defaults to `https://api.aether.network` (override with
+The ingestion endpoint defaults to `https://api.olympuslabsml.com` (override with
 `endpoint`). If you install with the one-line CDN script tag instead, the tag's
 `data-key` and `data-site` attributes carry the same values.
 

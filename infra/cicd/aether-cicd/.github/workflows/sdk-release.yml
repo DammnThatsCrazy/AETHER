@@ -88,8 +88,8 @@ jobs:
         if: inputs.dry_run != 'true'
         run: |
           VERSION=$(node -p "require('./packages/web/package.json').version")
-          aws s3 sync packages/sdk/web/dist/ "s3://cdn.aether.network/sdk/${VERSION}/" --acl public-read
-          aws s3 sync packages/sdk/web/dist/ "s3://cdn.aether.network/sdk/latest/" --acl public-read
+          aws s3 sync packages/sdk/web/dist/ "s3://cdn.olympuslabsml.com/sdk/${VERSION}/" --acl public-read
+          aws s3 sync packages/sdk/web/dist/ "s3://cdn.olympuslabsml.com/sdk/latest/" --acl public-read
           aws cloudfront create-invalidation --distribution-id ${{ secrets.CDN_DISTRIBUTION_ID }} --paths "/sdk/*"
       - name: Create GitHub Release
         if: inputs.dry_run != 'true'
