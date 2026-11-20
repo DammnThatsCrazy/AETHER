@@ -314,3 +314,14 @@ def test_funding_after_the_entries_is_not_coordination_evidence():
     assert episode.classification is not EpisodeClassification.COORDINATED
     before = run([adopt("u1", 0), adopt("u2", 0.5)], [pays(-100)], POP)
     assert before.episodes[0].classification is EpisodeClassification.COORDINATED
+
+
+def test_case_sensitive_account_refs_keep_exact_attribution():
+    links = {("hyperliquid", "Account-X"): "alice", ("hyperliquid", "account-x"): "bob",
+             ("hyperliquid", "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"): "carol"}
+    events = [
+        fill("Account-X", "1", "buy", 0, direction="Open Long"),
+        fill("0xABCDEFabcdefABCDEFabcdefABCDEFabcdefABCD", "2", "buy", 1, direction="Open Long"),
+    ]
+    adoptions, _ = adoptions_from_fill_events(T, events, links)
+    assert sorted(a.subject_id for a in adoptions) == ["alice", "carol"]

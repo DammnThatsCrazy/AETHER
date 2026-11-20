@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from decimal import Decimal
-from typing import Any, Iterable, Mapping
+import re
+from typing import Any, Iterable, Mapping, Optional
 
 from intelligence.propagation.contracts import AdoptionEvent
 from value.derivatives.models import (
@@ -62,6 +63,27 @@ def _fill_fact(tenant_id: str, venue: str, payload: Mapping[str, Any]) -> Normal
     )
 
 
+_EVM_ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}")
+
+
+def _linked_subject(
+    subjects_by_account: Mapping[tuple[str, str], str], venue: str, account: str,
+) -> Optional[str]:
+    """Exact account match first; case is folded only for EVM addresses.
+
+    Tenant-push and credential account references can be case-sensitive, so a
+    lowercase lookup could hand one subject's fill to another. EVM addresses
+    are case-insensitive (checksum casing only), and wallet links store them
+    lowercase, so only they fall back to the lowercase key.
+    """
+    exact = subjects_by_account.get((venue, account))
+    if exact is not None:
+        return exact
+    if _EVM_ADDRESS.fullmatch(account):
+        return subjects_by_account.get((venue, account.lower()))
+    return None
+
+
 def _history_truncated(fact: NormalizedFillFact, payload: Mapping[str, Any]) -> bool:
     direction = str(payload.get("direction") or "").lower()
     if direction and not direction.startswith("open"):
@@ -89,7 +111,7 @@ def adoptions_from_fill_events(
         payload = event.get("payload") or {}
         venue = str(payload.get("venue_id") or "")
         account = _account_ref(str(payload.get("trading_account_id") or ""))
-        subject = subjects_by_account.get((venue, account.lower())) or subjects_by_account.get((venue, account))
+        subject = _linked_subject(subjects_by_account, venue, account)
         if subject is None:
             reasons.add("fill_account_not_linked")
             continue
