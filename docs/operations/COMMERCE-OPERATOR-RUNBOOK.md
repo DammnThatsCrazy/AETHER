@@ -27,7 +27,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---

@@ -125,5 +125,5 @@ The web SDK applies the same rule to `context.trafficSource`: it captures `aethe
 - `canonicalCampaignId` is validated server-side against tenant ownership; a forged UUID is rejected.
 - Click IDs are stored as evidence but do not trigger auto-resolution without a registered alias.
 - `referralToken` is opaque to the SDK. Its presence does not assert a campaign, AI provider, product, referring actor, or verification level. The server must verify the token before deriving any of those dimensions.
-- `clickToken` is opaque to the SDK. The server verifies tenant, signature and expiry before attributing a visit to the email recipient, and never reassigns a visitor who is already bound to a different person (forwarded link).
+- `clickToken` is opaque to the SDK. The iOS and Android SDKs (and React Native, which delegates to them) capture it from deep and universal links the same way. The server verifies tenant, signature and expiry at ingestion, persists only a seal bound to that event, and attributes the visit to the email recipient only with identity-stitching consent, on the first device that opens the link, and never for a visitor already known as a different person (forwarded link).
 - Never log `referralToken`, `clickToken`, `externalCampaignId`, or `canonicalCampaignId` values in client-side error reporters.

@@ -452,6 +452,42 @@
       ],
       "unsupported": []
     },
+    "derivatives:polymarket": {
+      "adapter": "polymarket",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "markets",
+        "position",
+        "reference_data"
+      ],
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "permissions": [],
+      "provider": "polymarket",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_price_observation_recorded"
+      ],
+      "unsupported": []
+    },
     "interop:axelar": {
       "adapter": "axelar",
       "adapter_version": "0.1.0",
@@ -1032,18 +1068,18 @@
   "summary": {
     "by_domain": {
       "communications": 8,
-      "derivatives": 4,
+      "derivatives": 5,
       "interop": 7,
       "payments": 5,
       "prediction_market": 2,
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 28
+      "credential_waiting": 29
     },
-    "first_release": 28,
+    "first_release": 29,
     "import_errors": {},
-    "total": 28
+    "total": 29
   },
   "version": "0.1.0-alpha.0"
 }

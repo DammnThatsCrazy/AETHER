@@ -15,7 +15,8 @@ estimated_read_minutes: 8
 The Android SDK **observes acquisition evidence and names the entry method;
 the backend classifies**. Evidence follows the shared `AcquisitionEvidence`
 contract (schema v3, `packages/shared/acquisition-evidence.ts`): UTM fields,
-click IDs, an opaque `referralToken` (`aether_ref`), the destination domain,
+click IDs, an opaque `referralToken` (`aether_ref`), an opaque `clickToken`
+(a signed per-recipient email click token from `ae`), the destination domain,
 a one-way destination-path hash, the entry method, and expiry metadata.
 
 Two invariants govern everything on this page:
@@ -82,7 +83,9 @@ actually reaches the app, and the backend classifier decides what it proves.
 
 Any landing/deep-link URL the SDK transmits is sanitized first: the fragment,
 all click-ID parameters (`gclid`, `fbclid`, `ttclid`, ...), and all Aether
-opaque tokens (`aether_ref`, `aether_cid`) are removed. UTM parameters are
+opaque tokens (`aether_ref`, `aether_cid`, and a signed `ae` click token) are
+removed. An `ae` value without the signed `v<ver>.<payload>.<sig>` shape is the
+host app's own parameter and is left alone. UTM parameters are
 retained. Click IDs and tokens still travel — but as structured evidence
 fields, never inside URL strings. Destination paths are transmitted only as a
 truncated SHA-256 hash (`destinationPathHash`).

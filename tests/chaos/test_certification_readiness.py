@@ -24,9 +24,9 @@ from shared.certification.registry import build_capability_matrix
 def test_all_first_release_providers_are_credential_waiting():
     matrix = build_capability_matrix()
     summary = matrix["summary"]
-    assert summary["total"] == 28
-    assert summary["first_release"] == 28
-    assert summary["by_state"] == {"credential_waiting": 28}
+    assert summary["total"] == 29
+    assert summary["first_release"] == 29
+    assert summary["by_state"] == {"credential_waiting": 29}
     # none are production/partner-live, none are scaffolded (forbidden for release)
     states = {p["state"] for p in matrix["providers"].values()}
     assert states == {"credential_waiting"}
@@ -40,8 +40,10 @@ def test_provider_domains_match_the_shipped_scope():
     # extend the cohort with pull-capable adapters.
     # prediction_market: Polymarket and Kalshi payload normalization + observation
     # store only (no live polling), code-complete and flag-gated.
+    # derivatives: Hyperliquid, dYdX, GMX, Drift perpetuals plus the Polymarket
+    # event-contract account adapter (public-wallet reads, no credential).
     assert matrix["summary"]["by_domain"] == {
-        "communications": 8, "derivatives": 4, "interop": 7, "payments": 5,
+        "communications": 8, "derivatives": 5, "interop": 7, "payments": 5,
         "prediction_market": 2, "stablecoin_chain": 2,
     }
 

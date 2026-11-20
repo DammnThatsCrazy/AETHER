@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "signers": {
+    "https://chatgpt.com": {
+      "actor_type": "agent",
+      "keys": [
+        {
+          "exp": 1795695581,
+          "kid": "ArwjqcCqtA5oxEWkzXGC-To_0A9whHmajCHtfe8I9aY",
+          "nbf": 1735689600,
+          "x": "P_1c4SX6fCavDcq6FRegWcVvaOKsp_aXHPEN1FcKDIA"
+        }
+      ],
+      "product": "chatgpt",
+      "provider": "openai",
+      "source_url": "https://chatgpt.com/.well-known/http-message-signatures-directory"
+    }
+  }
+}

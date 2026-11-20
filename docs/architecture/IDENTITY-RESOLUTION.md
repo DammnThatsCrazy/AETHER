@@ -38,14 +38,14 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:f6f15747e96134201a275fb7343c3d511b8668ecd63932bf66d58870c3213e6d"
+  "services/api/identity/identity/": "sha256:ea3a67caeb78ccfda6887b7aa61e506ded005c26b8d4b32b241608397fe0dab6"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:7e042b4b53ff4926fcacbfa236ab0c997d9e9576654b16a2cc32cf25f9d8e6a1"
-  "services/api/ingestion/ingestion/batch.py": "sha256:c5d2ead7250540a36dd23b7ab42297e4e1ed22d1c0b8972c5a670f5e4e6e1229"
+  "services/api/ingestion/ingestion/batch.py": "sha256:edcd2e94c445e083a219d89f7eb484fd67aeb3d01aa055c36e68589c789593b5"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
   "services/api/journeys/handoff/continuation_jobs.py": "sha256:13081b7ff46f57f7ae26c005163275d92cef3b7e7bf52959c02df345b0292630"
   "services/api/journeys/handoff/continuation_scope.py": "sha256:4805ff2560480a30d0e5452eefdd92dfc500cc6f84109ad10f5dc38de4e6ad08"
-  "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
+  "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -348,7 +348,7 @@ These produce `confidence = 1.0` and trigger immediate merging:
 
 **Email normalization**: lowercase, trim whitespace, remove dots from Gmail local part (j.doe@gmail.com = jdoe@gmail.com), remove plus aliases (user+tag@domain.com = user@domain.com).
 
-> **Observed vs. verified email.** A merely *observed* `email_hash` (asserted in event traits) is **strong** evidence, not deterministic — it does not prove the subject controls the mailbox, and does not auto-merge in staging/production. Only **verified email ownership** (`email_ownership_verified`, established by the backend verification layer — OTP, scanner-safe magic link, or a server-validated OIDC `email_verified` claim) is deterministic. Verified email still requires identity-linking consent, respects identifier suppression, and opens a conflict rather than merging when candidates carry contradictory deterministic identifiers. A client-supplied `email_verified` flag is never trusted.
+> **Observed vs. verified email.** A merely *observed* `email_hash` (asserted in event traits) is **strong** evidence, not deterministic — it does not prove the subject controls the mailbox, and does not auto-merge in staging/production. Only **verified email ownership** (`email_ownership_verified`, established by the backend verification layer — OTP, scanner-safe magic link, or a server-validated OIDC `email_verified` claim) is deterministic. Verified email still requires identity-linking consent, respects identifier suppression, and opens a conflict rather than merging when candidates carry contradictory deterministic identifiers. A client-supplied `email_verified` flag is never trusted. The identity worker may also add a server-derived observed `email_hash` from a verified email click token (`signed_click`): only with identity-stitching consent, only on the first device that opens that link, and only when the visitor is not already a different entity. It is supplied through a private worker-only field that public resolve routes cannot set, and it goes through the same suppression, consent and merge policy as any observed email.
 
 **Phone normalization**: E.164 format (+1234567890), strip spaces/dashes/parens.
 

@@ -83,7 +83,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:c1a9247c91f77efacd8198719b2f6489e226eab7c9ff66739a8ff2d93af86043"
+  "infra/aws/terraform/": "sha256:4301e32316ed81751c062e1248cb4eead3f9402499cac62baae9a327bdb0de0d"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -907,6 +907,13 @@ hosts are third-party clients limited to a read-only default grant on the MCP
 audience. `enable_access_continuations` separately opens the
 existing tenant continuation route on the API task; the continuation tools
 still require the caller's read or write permission.
+
+`enable_agent_deployment_registry` (default `true`) sets
+`AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true` on the API and worker tasks for
+every non-staging profile; staging gets it from
+`config/release/feature_flags/staging.yaml` `task_environment` instead. Set it to
+`false` to keep the agent deployment registry, its lineage jobs and
+attestation-key registration off.
 
 The image is built from a clean reviewed commit by
 `infra/aws/terraform/scripts/publish_access_mcp_image.sh`; Terraform consumes

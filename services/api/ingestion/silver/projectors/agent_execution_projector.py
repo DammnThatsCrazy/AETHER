@@ -64,6 +64,21 @@ def _block_ref(block: dict[str, Any], name: str) -> str | None:
     return _source_reference(block.get(name) if name in block else block.get(_camel(name)))
 
 
+def _mcp_principal_claim(event: dict[str, Any]) -> tuple[str, str] | None:
+    """(namespace, subject_hash) from a verified MCP OAuth client, else None."""
+    server_ctx = event.get("server_context")
+    if not isinstance(server_ctx, dict):
+        return None
+    protocol = server_ctx.get("agent_protocol")
+    if not isinstance(protocol, dict) or protocol.get("verification") != "mcp_oauth_client":
+        return None
+    subject_hash = _source_reference(protocol.get("principal_subject_hash"))
+    if not subject_hash:
+        return None
+    issuer = _source_reference(protocol.get("oauth_issuer")) or "unknown_issuer"
+    return f"mcp_oauth:{issuer}", subject_hash
+
+
 def _bounded_depth(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
@@ -290,6 +305,17 @@ class AgentExecutionProjector(BaseProjector):
             or _block_ref(actor_ctx, "principal")
             or beneficiary_claim
         )
+        reported_principal_namespace = _block_ref(actor_ctx, "reported_principal_namespace")
+        # MCP OAuth: the tenant's server verified the client's token, whose
+        # subject is the user who authorized this agent client. It arrives as a
+        # SHA-256 hash (journeys/traffic/protocol_identity.py) and becomes a
+        # principal *claim* in the "mcp_oauth:<issuer>" namespace. It proves
+        # nothing on its own: the lineage resolver links a principal only through
+        # a claim binding for (namespace, hash). A producer-reported principal wins.
+        if not reported_principal_ref:
+            mcp_claim = _mcp_principal_claim(event)
+            if mcp_claim is not None:
+                reported_principal_namespace, reported_principal_ref = mcp_claim
         authority_type = _authority_type(
             authority_ctx.get("authority_type", authority_ctx.get("authorityType"))
         )
@@ -466,9 +492,7 @@ class AgentExecutionProjector(BaseProjector):
             "parent_agent_entity_id": None,
             "root_agent_entity_id": None,
             "reported_principal_ref": reported_principal_ref,
-            "reported_principal_namespace": _block_ref(
-                actor_ctx, "reported_principal_namespace"
-            ),
+            "reported_principal_namespace": reported_principal_namespace,
             "canonical_principal_entity_id": None,
             "principal_resolution_status": "unresolved" if reported_principal_ref else None,
             # Actor roles are producer-reported entity references. They are kept

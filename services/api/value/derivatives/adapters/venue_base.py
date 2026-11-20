@@ -259,7 +259,9 @@ class VenueDerivativesAdapter(DerivativesAdapter):
                     plan.build_request,
                     plan.extract_page,
                     start_cursor=None,
-                    max_pages=plan.max_pages,
+                    # The adapter-level bound caps every plan (a caller can only
+                    # tighten a plan's own default, never widen it).
+                    max_pages=min(plan.max_pages, self._max_pages),
                     health=health,
                 )
             except ProviderRequestError as exc:
@@ -320,7 +322,7 @@ class VenueDerivativesAdapter(DerivativesAdapter):
         health = {"health": PROVIDER_HEALTH_OK}
         records, _ = await self._rest.paginate(
             plan.build_request, plan.extract_page,
-            start_cursor=None, max_pages=plan.max_pages, health=health,
+            start_cursor=None, max_pages=min(plan.max_pages, self._max_pages), health=health,
         )
         return [self._bronze(record_type, account, record) for record in records]
 
@@ -446,7 +448,11 @@ class VenueDerivativesAdapter(DerivativesAdapter):
             adapter_version=self.adapter_version,
             supported_operations=list(self.capabilities),
             unsupported_operations=[],
-            required_credentials=["read_only_api_key"],
+            # Public-wallet venues read on-chain account activity by address:
+            # the account comes from a verified tenant link, not a credential.
+            required_credentials=(
+                [] if self.authentication_model == "public_wallet_address" else ["read_only_api_key"]
+            ),
             required_endpoints=[self.rest_base_url] if self.rest_base_url else [],
             pagination_model="cursor",
             streaming_model="websocket" if self.has_websocket else "polling",

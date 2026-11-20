@@ -7,7 +7,13 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+    ServiceUnavailableError,
+)
 from value.derivatives import counters
 from value.derivatives.product import product_service
 
@@ -161,3 +167,96 @@ async def kyber_derivatives_intelligence_quality(request: Request) -> dict:
 async def kyber_derivatives_operator_action(body: OperatorActionRequest, request: Request) -> dict:
     _require_kyber_operator(request)
     return APIResponse(data=product_service.record_operator_action(_tenant_id(request), body.tenant_id, body.action, body.scope)).to_dict()
+
+
+# ── Tenant venue account links (flag-gated; AETHER_VENUE_ACCOUNT_LINKS_ENABLED) ──
+
+
+class WalletLinkRequest(BaseModel):
+    subject_id: str
+    venue: str
+    wallet_address: str
+    chain_namespace: str = Field(..., description="CAIP-2 namespace used for the ownership proof")
+    proof_evidence_id: str = Field(..., description="wallet_ownership_verified evidence id")
+    consent_receipt_id: str
+
+
+class TenantPushLinkRequest(BaseModel):
+    subject_id: str
+    venue: str
+    account_ref: str
+    consent_receipt_id: str
+
+
+class RevokeLinkRequest(BaseModel):
+    reason: str = ""
+
+
+def _require_account_links_enabled() -> None:
+    from config.settings import settings
+
+    if not settings.derivatives.venue_account_links_enabled:
+        raise ServiceUnavailableError("Venue account links are disabled")
+
+
+def _require_derivatives_connect(request: Request) -> None:
+    tenant = request.state.tenant
+    if hasattr(tenant, "require_permission"):
+        tenant.require_permission("derivatives:connect")
+
+
+def _link_service():
+    from value.derivatives.account_links import VenueAccountLinkService
+
+    return VenueAccountLinkService()
+
+
+@router.get("/account-links")
+async def list_venue_account_links(
+    request: Request,
+    venue: str | None = Query(default=None),
+    subject_id: str | None = Query(default=None),
+    include_revoked: bool = Query(default=False),
+) -> dict:
+    _require_account_links_enabled()
+    _require_derivatives_read(request)
+    links = await _link_service().list_links(
+        _tenant_id(request), venue=venue, subject_id=subject_id, active_only=not include_revoked,
+    )
+    return APIResponse(data={"items": [link.to_record() for link in links]}).to_dict()
+
+
+@router.post("/account-links/wallet")
+async def create_wallet_account_link(body: WalletLinkRequest, request: Request) -> dict:
+    from value.derivatives.account_links import AccountLinkError
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    try:
+        link = await _link_service().link_wallet(tenant_id=_tenant_id(request), **body.model_dump())
+    except AccountLinkError as exc:
+        raise BadRequestError(exc.reason) from exc
+    return APIResponse(data=link.to_record()).to_dict()
+
+
+@router.post("/account-links/tenant-push")
+async def create_tenant_push_account_link(body: TenantPushLinkRequest, request: Request) -> dict:
+    from value.derivatives.account_links import AccountLinkError
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    try:
+        link = await _link_service().link_tenant_push(tenant_id=_tenant_id(request), **body.model_dump())
+    except AccountLinkError as exc:
+        raise BadRequestError(exc.reason) from exc
+    return APIResponse(data=link.to_record()).to_dict()
+
+
+@router.post("/account-links/{link_id}/revoke")
+async def revoke_venue_account_link(link_id: str, body: RevokeLinkRequest, request: Request) -> dict:
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    link = await _link_service().revoke(tenant_id=_tenant_id(request), link_id=link_id, reason=body.reason)
+    if link is None:
+        raise NotFoundError("Venue account link")
+    return APIResponse(data=link.to_record()).to_dict()

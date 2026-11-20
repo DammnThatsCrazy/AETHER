@@ -17,7 +17,7 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
   "services/api/journeys/comms/repository.py": "sha256:d004eebae56513405edd97c485121aca171786de9e85a5fce808cdabc997a2cf"
-  "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
+  "services/api/journeys/comms/routes.py": "sha256:066307201b72fe9acb8bd4a1a639e90cd911ea69ded2ed7a26094a2873dc0f4b"
   "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
   "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
   "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
@@ -198,25 +198,63 @@ canonical Conversation membership, identity or delegation authority.
 ## Signed click tokens
 
 ```
-POST /v1/comms/click-tokens          → issue tokens to embed as ?ae=<token>
-POST /v1/comms/click-tokens/verify   → verify + correlation evidence
+POST /v1/comms/click-tokens            → issue tokens to embed as ?ae=<token>
+POST /v1/comms/click-tokens/tag-links  → one copy of a message body per recipient,
+                                         every link already tagged
+POST /v1/comms/click-tokens/verify     → verify + correlation evidence
 ```
+
+A link shared by hand is the same for everyone, so a click on it can never be
+tied to a person. A campaign send has to give every recipient their own copy of
+each link. `tag-links` does that in one call: render the message once, post it
+with the recipient list and the tenant's own hosts (`allowed_hosts`), and send
+each returned copy to its recipient. Only `http(s)` links to those hosts are
+tagged — a token is recipient-correlated and must never reach a third-party
+site. Links with ESP merge tags, `mailto:`, `tel:` and anchors are left alone.
+`link_id` is deterministic per URL, so every recipient's copy of a link shares
+one id. Recipient emails are hashed to tenant-scoped aliases and never echoed;
+each tagged copy returns its `recipient_alias_id` and `external_message_id` so
+the sender can report delivery without the address. Suppressed recipients
+(unsubscribe, complaint, provider suppression) come back with
+`status: "suppressed"` and no copy — no token is minted for them — and the
+ledger check fails closed.
+
+**Sending.** Aether never sends the message (ADR-C1). The reference sender in
+`packages/sdk/examples/campaign-sender-python` calls `tag-links` in batches of
+500, delivers each copy through the tenant's own SMTP server, keeps a local
+send-once ledger keyed by `--send-id`, and reports `email_sent` /
+`email_dropped` back through `POST /v1/comms/webhook` (signed when the tenant
+has a webhook secret) using the returned alias.
 
 Tokens are HMAC-signed, key-versioned (`COMMS_CLICK_TOKEN_KEYS`,
 `COMMS_CLICK_TOKEN_ACTIVE_VERSION`), expiring, tenant-bound, and contain no
-raw PII. On landing, the web SDK forwards the token as
-`context.trafficSource.clickToken` (and strips it from every transmitted URL).
-At ingestion the Silver dispatcher verifies the token for the event's own tenant,
-removes it from stored URLs, and applies the result to the landing touchpoint:
+raw PII. The web SDK forwards `ae` as `context.trafficSource.clickToken`; the
+iOS and Android SDKs (and React Native through them) capture it from deep and
+universal links as `acquisitionEvidence.clickToken`. Every SDK strips it from
+transmitted URLs.
 
-| Recipient outcome | Touchpoint effect |
-|---|---|
-| `resolved` — alias maps to exactly one tenant-owned entity, visitor not bound to another | `profile_id` set to the recipient when empty; `identity_resolution_method=signed_click`, confidence 0.9 |
-| `forwarded` — visitor already bound to a different entity | identity untouched; `forwarded_link`, confidence 0.4 |
-| `unresolved` / `absent` | campaign lineage only |
+**Persistence boundary.** At ingestion (`build_normalized_payload`) the token
+is verified against the authenticated tenant and replaced by `verified_click`,
+a seal bound to that one event. The reusable link token never reaches Bronze
+or the outbox, a stored seal cannot be replayed onto another event, and any raw
+token that still reaches persistence is scrubbed.
 
-Campaign, message, link and sequence lineage are stamped on every outcome.
-Campaign evidence priority is: signed token → provider click id → utm_id →
-external campaign id → utm_campaign composite → referrer → manual review.
-A link shared without a token (for example, pasted by hand) carries no recipient
-and so can never be attributed to a person.
+**Recipient decision.** The Silver dispatcher and the identity worker open the
+seal and apply one shared rule:
+
+| Outcome | When | Touchpoint | Identity |
+|---|---|---|---|
+| `resolved` | consented, first device, alias maps to one tenant-owned entity | `profile_id` set to the recipient when empty; `signed_click`, 0.9 | visitor linked to the recipient's email alias |
+| `unresolved` | consented, first device, alias not yet known | lineage only | entity created holding the alias; merges when the person later signs up with that email |
+| `forwarded` | another device presented this token first, or the visitor is already a different known entity | identity untouched; `forwarded_link`, 0.4 | nothing linked |
+| `consent_required` | no identity-stitching consent on the event | lineage only | nothing linked |
+| `binding_unavailable` | first-device binding store unreachable (fails closed) | lineage only | nothing linked |
+| `absent` | token has no recipient | lineage only | nothing linked |
+
+The first-device binding lives in the shared cache for the token's lifetime and
+stores only hashes. One recipient opening the same link on a second device is
+recorded as `forwarded` (confidence lowered, nothing reassigned) — the safe
+side of the trade-off. Campaign, message, link and sequence lineage are stamped
+on every outcome. Campaign evidence priority is: signed token → provider click
+id → utm_id → external campaign id → utm_campaign composite → referrer → manual
+review.

@@ -5,6 +5,8 @@ Tenant surface:
     POST /v1/comms/replies              Inbound reply ingestion
     POST /v1/comms/click-tokens         Issue signed post-click tokens
     POST /v1/comms/click-tokens/verify  Verify token → correlation evidence
+    POST /v1/comms/click-tokens/tag-links  Per-recipient copies of a message
+                                        body with every link tagged
     GET  /v1/comms/health               Tenant comms pipeline health
 
 Operator surface (Kyber):
@@ -223,6 +225,104 @@ async def issue_click_tokens(request: Request, body: ClickTokenBatchBody) -> dic
         labels={"tenant_id": tenant.tenant_id},
     )
     return APIResponse(data={"tokens": issued}).to_dict()
+
+
+_MAX_TAG_BODY_CHARS = 512 * 1024
+
+
+class TagLinksRecipient(BaseModel):
+    recipient_email: Optional[str] = None  # hashed immediately, never stored or echoed
+    recipient_alias_id: Optional[str] = None
+    external_message_id: Optional[str] = None
+
+
+class TagLinksBody(BaseModel):
+    campaign_id: Optional[str] = None
+    external_message_id: Optional[str] = None
+    sequence_step: Optional[int] = None
+    ttl_seconds: int = Field(default=30 * 24 * 3600, ge=60, le=90 * 24 * 3600)
+    allowed_hosts: list[str] = Field(..., min_length=1, max_length=50)
+    html: Optional[str] = Field(default=None, max_length=_MAX_TAG_BODY_CHARS)
+    text: Optional[str] = Field(default=None, max_length=_MAX_TAG_BODY_CHARS)
+    recipients: list[TagLinksRecipient] = Field(..., min_length=1, max_length=500)
+    # Suppressed recipients (unsubscribe, complaint, provider suppression) get
+    # no copy. The ledger check fails closed.
+    skip_suppressed: bool = True
+
+
+@router.post("/click-tokens/tag-links")
+async def tag_links_route(request: Request, body: TagLinksBody) -> dict:
+    """Return one copy of the message body per recipient, every link tagged.
+
+    This is the whole integration for a sending system: render the message
+    once, call this endpoint with the recipient list, send each returned copy
+    to its recipient. Only links to ``allowed_hosts`` (the tenant's own sites,
+    where the SDK runs) are tagged. Suppressed recipients come back with
+    ``status: "suppressed"`` and no copy, so the sender must skip them; the
+    ledger check fails closed. Recipients come back in request order and carry
+    no email address. Aether never sends the message itself (ADR-C1).
+    """
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    if body.html is None and body.text is None:
+        raise BadRequestError("Provide html and/or text")
+
+    from journeys.comms.link_tagging import normalize_hosts, tag_message_for_recipients
+
+    allowed = normalize_hosts(body.allowed_hosts)
+    if not allowed:
+        raise BadRequestError("allowed_hosts must list the tenant's own domains")
+
+    recipients = [r.model_dump() for r in body.recipients]
+    suppressed: set[int] = set()
+    if body.skip_suppressed:
+        from journeys.comms.mailbox import build_email_alias
+        from journeys.comms.suppression_authority import SuppressionAuthorityService
+
+        ledger = SuppressionAuthorityService()
+        for index, recipient in enumerate(recipients):
+            alias_id = recipient.get("recipient_alias_id")
+            if not alias_id and recipient.get("recipient_email"):
+                alias = build_email_alias(recipient["recipient_email"], tenant.tenant_id)
+                alias_id = alias.alias_hash if alias else None
+            if alias_id and await ledger.is_suppressed(tenant.tenant_id, recipient_alias_id=alias_id):
+                suppressed.add(index)
+                # Never mint tokens for a recipient who must not be contacted.
+                recipients[index] = {"external_message_id": recipient.get("external_message_id")}
+
+    result = tag_message_for_recipients(
+        tenant.tenant_id,
+        html=body.html,
+        text=body.text,
+        allowed_hosts=allowed,
+        recipients=recipients,
+        campaign_id=body.campaign_id,
+        external_message_id=body.external_message_id,
+        sequence_step=body.sequence_step,
+        ttl_seconds=body.ttl_seconds,
+    )
+    metrics.increment(
+        "comms_click_links_tagged_total", len(result.copies) - result.untagged,
+        labels={"tenant_id": tenant.tenant_id},
+    )
+    def _copy(c) -> dict:
+        if c.index in suppressed:
+            return {"index": c.index, "status": "suppressed", "tagged": False, "html": None, "text": None}
+        return {
+            "index": c.index, "status": "tagged" if c.tagged else "untagged",
+            "tagged": c.tagged, "html": c.html, "text": c.text,
+            # Tenant-scoped hash (never the address): lets the sender report
+            # delivery back through the comms webhook without the raw email.
+            "recipient_alias_id": c.recipient_alias_id,
+            "external_message_id": c.external_message_id,
+        }
+
+    return APIResponse(data={
+        "recipients": [_copy(c) for c in result.copies],
+        "links": [{"link_id": k, "url": v} for k, v in sorted(result.links.items())],
+        "untagged_recipients": result.untagged - len(suppressed),
+        "suppressed_recipients": len(suppressed),
+    }).to_dict()
 
 
 class ClickTokenVerifyBody(BaseModel):

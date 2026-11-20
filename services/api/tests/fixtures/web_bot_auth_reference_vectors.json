@@ -1,0 +1,26 @@
+{
+  "_comment": "Signed by Cloudflare's reference web-bot-auth npm library (0.2.0) with the public RFC 9421 Appendix B.1.4 Ed25519 TEST key, for POST https://ingest.aether.test/v1/batch at created=1795090879. Test-only vectors.",
+  "public_key_x": "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs",
+  "keyid": "poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U",
+  "signature_agent": "https://signature-agent.test",
+  "authority": "ingest.aether.test",
+  "method": "POST",
+  "path": "/v1/batch",
+  "now": 1795090900,
+  "vectors": {
+    "dict": {
+      "Signature": "sig1=:m9ZeAWrLr5AdVWMDw1rQjx7pUyHQfcIf2jcxDGhtrvDEAzqhtAWkzyKlg2LRzEwp1D0eIj70cLSXVWCQDQ4zAQ==:",
+      "Signature-Input": "sig1=(\"@authority\" \"signature-agent\";key=\"sig1\");created=1795090879;keyid=\"poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U\";alg=\"ed25519\";expires=1795091179;nonce=\"rFw3VgAlPVia+oNWHo6p2Iiz/v2OQnGHuJTmFGKJsrw225qlbDS0jhk+PFKhOE2Hr0EpMIBefl3M6cYN1XW6dQ==\";tag=\"web-bot-auth\"",
+      "Signature-Agent": "sig1=\"https://signature-agent.test\";type=directory"
+    },
+    "string": {
+      "Signature": "sig1=:yi2TOPDsnCHBmNA8v5hKDGCwNmODXHUSM+Oytn6qr45TX6UrSe8vEykSoCOlizG1pBLX6VC48YfvQsAnQTniAg==:",
+      "Signature-Input": "sig1=(\"@authority\" \"signature-agent\");created=1795090879;keyid=\"poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U\";alg=\"ed25519\";expires=1795091179;nonce=\"ilDR4sX7wy6Ccd0EPq0VLT0qrDjP6UBqIL4sRleGUVTZYQkeYb83f7VwZMO2Er5s2LOlqsczvQGDICRSSJiqzg==\";tag=\"web-bot-auth\"",
+      "Signature-Agent": "\"https://signature-agent.test\""
+    },
+    "none": {
+      "Signature": "sig1=:lY1R5cC3m2ouRvu3DlYvFxibDxUAowiLnnblVZEQeYHMfMoNryNUFTMun0/T8FITs7mP1bSEysAu9NeApyRPDQ==:",
+      "Signature-Input": "sig1=(\"@authority\");created=1795090879;keyid=\"poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U\";alg=\"ed25519\";expires=1795091179;nonce=\"iLgbJa81byCU1Ic8aDBE8eXiDuGF69VSRLJRTTK2po2howMYYxYw/OiKhKB2WCEFcRE8psrCBRs8VfdKpyDzyA==\";tag=\"web-bot-auth\""
+    }
+  }
+}

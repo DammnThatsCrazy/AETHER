@@ -63,8 +63,8 @@ from journeys.comms.projector import CommsProjector, COMMS_TABLE
 from journeys.comms.contracts import COMMUNICATION_EVENT_TYPES
 from journeys.comms.click_token import (
     apply_click_correlation_to_rows,
-    extract_and_strip_click_token,
     resolve_click_correlation,
+    strip_click_correlation,
 )
 from journeys.traffic.referral_links import VerifiedReferralLinkRepository
 from journeys.traffic import metrics as traffic_metrics
@@ -649,7 +649,7 @@ class SilverDispatcher:
         # must still prevent plaintext tokens or client-asserted verification
         # metadata from reaching Silver.
         _extract_and_sanitize_referral_token(event)
-        extract_and_strip_click_token(event)
+        strip_click_correlation(event)
         is_comm_event = event_type in COMMUNICATION_EVENT_TYPES
         has_touchpoint_projector = any(
             isinstance(candidate, TouchpointProjector) for candidate in projectors

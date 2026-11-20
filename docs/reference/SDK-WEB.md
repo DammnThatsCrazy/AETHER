@@ -16,7 +16,7 @@ source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:e4e871496633b6b1712a313a0c6e99f29e61d50f6ba2c162579ca957f0468d4b"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether Web SDK v0.1.0-alpha.0 — Integration Guide

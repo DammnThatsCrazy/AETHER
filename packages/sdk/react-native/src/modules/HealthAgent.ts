@@ -17,6 +17,8 @@ const SDK_ID_KEY = 'aether_sdk_instance_id';
 export interface RNHealthAgentConfig {
   endpoint: string;
   apiKey: string;
+  /** Site a publishable key is bound to; sent as `X-Aether-Site`. */
+  siteId?: string;
   appVersion?: string;
   /** Heartbeat interval in ms (default 60 000). */
   heartbeatIntervalMs?: number;
@@ -51,7 +53,7 @@ function resolveAsyncStorage(): AsyncStorageLike | null {
 }
 
 export class RNHealthAgent {
-  private readonly config: Required<RNHealthAgentConfig>;
+  private readonly config: Required<Omit<RNHealthAgentConfig, 'siteId'>> & Pick<RNHealthAgentConfig, 'siteId'>;
   private timer: ReturnType<typeof setInterval> | null = null;
   private sdkId: string;
   private storage: AsyncStorageLike | null;
@@ -109,6 +111,7 @@ export class RNHealthAgent {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.config.apiKey}`,
+          ...(this.config.siteId ? { 'X-Aether-Site': this.config.siteId } : {}),
           'X-Aether-SDK': this.platform(),
           'X-Aether-SDK-Version': SDK_VERSION,
         },

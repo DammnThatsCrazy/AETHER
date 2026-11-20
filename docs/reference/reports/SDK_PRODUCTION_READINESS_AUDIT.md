@@ -15,7 +15,7 @@ source_hashes:
   "packages/sdk/web/src/index.ts": "sha256:53635bb48461322dc7e32dd0e79ba6a72f1ced80940f53fc23503a76a3d89913"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
 ---
 

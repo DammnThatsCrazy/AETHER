@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:85c97af1c81ce994db3e565300039980c8acdd5eb8d83616bedb8b7db3d508bf"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:e572628211e30a12ae0778974524a613b7d42d5a1b1897e5cb938e4a7c3f7705"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
+  "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -50,10 +50,24 @@ import com.aether.sdk.AetherConfig
 class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        Aether.initialize(this, AetherConfig(apiKey = "your-api-key"))
+        Aether.initialize(
+            this,
+            AetherConfig(
+                apiKey = "pk_live_...",   // publishable key from onboarding
+                siteId = "site_..."       // the site the key is bound to
+            )
+        )
     }
 }
 ```
+
+Onboarding issues the publishable key and site id together, binding the site to
+your application ID. The key ships inside the APK and can be read out of it, so
+the backend accepts it only on requests that declare its site (`X-Aether-Site`,
+sent on every request when `siteId` is set). A publishable key reaches
+`/v1/batch`, the SDK manifest, the health heartbeat, Play Integrity device
+integrity, and the deferred-attribution resolve. Canonical consent receipts and identity resolution
+(`autoResumeJourney`) need a secret key, so send those from your backend.
 
 ## Core API
 
@@ -135,6 +149,26 @@ The fingerprint is stamped as `context.fingerprint.id` — but stamping is
 fingerprint is omitted from event context (and from identity-resolve calls).
 Only the composite hash is sent — raw device signals are never transmitted.
 
+### Automation Evidence
+
+Every event's `device.automation` carries two booleans for agent / automation
+detection: `testHarness` (the monkey, the user test harness on API 29+, or an
+instrumentation framework such as Espresso, UiAutomator or Appium's
+UiAutomator2 server loaded in the app process) and `emulator`. Aether
+classifies `testHarness: true` as automation; `emulator` is evidence only.
+Accessibility services are never inspected. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md).
+
+### Device Integrity (Play Integrity)
+
+Opt in with `AetherConfig(deviceIntegrity = true)` and add
+`com.google.android.play:integrity` to the app (the SDK links it `compileOnly`;
+set `playIntegrityCloudProjectNumber` outside Play distribution). The SDK
+requests an integrity token with a single-use Aether challenge as its nonce once
+per token lifetime and attaches the server-issued token to every event as
+`device.integrity.token`. See
+[Agent Detection Reliability](../architecture/AGENT-DETECTION-RELIABILITY.md) §4.7.
+
 ## Wallet Tracking
 
 ```kotlin
@@ -173,7 +207,7 @@ payment, or finality in the graph.
 ## Consent Management
 
 The platform's canonical consent registry
-(`packages/shared/contracts/consent-registry.json`) defines **12 purposes**:
+(`packages/shared/contracts/consent-registry.json`) defines the purposes:
 base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
 `commerce`, plus explicit opt-in purposes `financial_activity`, `credit`,
 `location`, `economic_observability`, `cross_chain_observability`, and
@@ -181,20 +215,16 @@ base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
 by an accept-all path. Present each explicit opt-in purpose as a separate
 consent choice in your UI.
 
-The Android runtime exposes `canonicalConsentPurposes` (8 purposes, listed
-below) with `explicitOptInPurposes = ["credit", "location"]`; the extended
-purposes `financial_activity`, `economic_observability`, and
-`cross_chain_observability` are used by the event gating map and stamped into
-per-event `context.consent` for web ConsentState parity. The registry's
-`fraud_prevention` purpose is not yet surfaced by the Android runtime lists
-(grant it via `grantConsent` if your integration collects fraud-prevention
-signals; it is never included in `grantAll()`).
+The Android runtime exposes every registry purpose as `canonicalConsentPurposes`, each stamped
+into per-event `context.consent`, and the explicit opt-in purposes as
+`explicitOptInPurposes`. `grantAll()` grants the canonical purposes minus the explicit opt-in ones.
+`validate_sdk_parity` fails if either list drifts from `packages/shared/consent.ts`.
 
 ```kotlin
 // Grant specific purposes
 Aether.grantConsent(listOf("analytics", "marketing"))
 
-// Grant all non-explicit-opt-in purposes (excludes credit and location)
+// Grant every base purpose (never an explicit opt-in purpose)
 Aether.grantAll()
 
 // Explicitly grant credit after showing separate consent UI
@@ -208,7 +238,9 @@ val state = Aether.getConsentState() // ["analytics", ...]
 
 // Runtime canonical purposes
 val purposes = Aether.canonicalConsentPurposes
-// ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+// ["analytics", "marketing", "personalization", "web3", "agent", "commerce",
+//  "financial_activity", "credit", "location", "economic_observability",
+//  "cross_chain_observability", "fraud_prevention"]
 ```
 
 ### Consent receipts
@@ -274,6 +306,13 @@ The SDK captures **12 ad platform click IDs** and all UTM parameters from deep l
 **Supported click IDs:** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
 
 **Campaign context fields:** `source`, `medium`, `campaign`, `content`, `term`, `clickIds` (JSONObject), `referrerDomain`
+
+**Email click tokens:** a signed per-recipient click token in the `ae`
+parameter (`v<ver>.<payload>.<sig>`) is captured as
+`acquisitionEvidence.clickToken` and stripped from every transmitted URL. An
+`ae` value without that shape is the app's own parameter and is left alone. The
+backend verifies the token and decides whether the visit belongs to the email
+recipient (see `docs/product/comms/COMMS_GENERIC_WEBHOOK.md`).
 
 Every attribution entry point is routed through the **canonical
 acquisition-evidence parser** (shared `AcquisitionEvidence` schema v3): the URL
@@ -349,7 +388,8 @@ data class AetherConfig(
     val onJourneyResumed:                    // Fires once when a prior session is matched
         ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
     val subjectHintsOnly: Boolean = false,   // Subject-hints identity (default OFF = legacy client-side canonical re-stamp)
-    val encryptedDurableQueue: Boolean = false // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
+    val encryptedDurableQueue: Boolean = false, // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
+    val siteId: String? = null               // Site a publishable key is bound to; sent as X-Aether-Site
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
 }
@@ -395,7 +435,7 @@ not establish Android device or customer-tenant graph behavior.
 ### What the SDK sends (event context):
 - Event type, name, and raw properties (sensitive fields scrubbed recursively,
   including nested maps/lists)
-- `os` `{name: "Android", version, sdkInt}` and `device` `{manufacturer, model}`
+- `os` `{name: "Android", version, sdkInt}` and `device` `{manufacturer, model, automation: {testHarness, emulator}}`
 - `locale`, `timezone`, plus temporal provenance captured at the event's
   occurrence instant: `utcOffsetMinutes` (zone-at-instant, DST-correct),
   `timeZoneSource: "device"`, `clockSource: "device"`

@@ -16,7 +16,7 @@ source_hashes:
   "services/api/graph/interop/providers/ibc.py": "sha256:e3877b2a59b68ea507699246dc0d693dc3c3be3f281da2c7655f5e2da2234fee"
   "services/api/graph/interop/providers/layerzero_v2.py": "sha256:d0023a52c1d79801a9e635d224eee544f6c2cec9516b49cb6be8aa08c9d470e1"
   "services/api/graph/interop/providers/wormhole.py": "sha256:0bf5064d4968017fc3b2c386c10ab1b623dc08bb50221fb5527b2b9fe415cb90"
-  "services/api/value/derivatives/adapters/venue_base.py": "sha256:a06c93e331962efc07f7943943809f42ebe140d946825c4feac84be7eec1654d"
+  "services/api/value/derivatives/adapters/venue_base.py": "sha256:ad88b63cbe3eed7dbe8fc27358e51cfa5f9a5466e2082aa98c65409fa401e30b"
   "services/api/value/stablecoins/price_feed.py": "sha256:2a88c6769b436ccd3931e73d8523cf15023440a2a9b43a532af0eec0816648f1"
 ---
 
@@ -37,8 +37,9 @@ environment. The machine-readable, source-generated matrix lives at
 | `dydx` | `CREDENTIAL_WAITING` | REST (Indexer: fills/orders/positions) + WebSocket | Venue read-only API key + staging validation |
 | `gmx` | `CREDENTIAL_WAITING` | Public on-chain read path (subgraph GraphQL, timestamp pagination); no private API/WS (declared) | Subgraph endpoint + staging validation |
 | `drift` | `CREDENTIAL_WAITING` | REST read path (trades/funding); WebSocket declared not-supported | Venue endpoint + staging validation |
+| `polymarket` | `CREDENTIAL_WAITING` | Event contracts: Data API v2 trades and positions by public wallet (cursor pagination); outcome token = market, outcome = side; no WebSocket | Tenant wallet link + staging validation (no credential) |
 
-All four venue adapters implement the conformance-tested `DerivativesAdapter`
+All five venue adapters implement the conformance-tested `DerivativesAdapter`
 interface, pass `run_conformance` + `run_certification` with zero failures,
 reject mutating scopes, use exact `Decimal` arithmetic, and yield nothing until
 a REST/WS client is injected (honest credential-waiting). The

@@ -72,6 +72,71 @@ Setting `spoolPath` turns on the durable queue. `durable: true` without a
 because that directory is usually discarded on exactly the restarts a spool is
 meant to survive.
 
+## Agent and crawler evidence
+
+AI agents and crawlers that never run JavaScript are invisible to the browser
+SDK. Forward what your server saw on the incoming request and Aether can
+verify them:
+
+```ts
+import { captureRequestEvidence } from '@olympuslabs/aether-server';
+
+aether.track({
+  type: 'page',
+  properties: { path: req.url },
+  context: { requestEvidence: captureRequestEvidence(req) },
+});
+```
+
+`captureRequestEvidence` accepts a Node `IncomingMessage` (Express, Fastify,
+Next.js pages API) or a Fetch API `Request` (route handlers, Workers, Bun,
+Deno). It reads only the user-agent, client IP, method, host, path, query and
+the three HTTP Message Signature headers (`Signature`, `Signature-Input`,
+`Signature-Agent`): never bodies, cookies or authorization headers.
+
+Aether checks a declared agent user-agent against the provider's published IP
+ranges and verifies Web Bot Auth (RFC 9421) signatures, then discards the raw
+values: the client IP and signature headers are not stored. Evidence your
+server forwarded is labelled as observed by your server.
+
+Pass `clientIp` if your framework has already resolved it (for example Express
+`req.ip` with `trust proxy`). Set `trustForwardedFor: true` only behind a proxy
+you control; otherwise any client can choose the IP Aether checks.
+
+## MCP and A2A caller identity
+
+If your server is an MCP server or an A2A agent, tell Aether who is calling:
+
+```ts
+import { captureMcpClientIdentity, captureA2aCallerIdentity } from '@olympuslabs/aether-server';
+
+// MCP tool handler: `extra.authInfo` is set only after your auth middleware
+// verified the bearer token.
+aether.track({
+  type: 'agent_tool_called',
+  context: { agentProtocol: captureMcpClientIdentity({
+    clientInfo: server.getClientVersion(),
+    authInfo: extra.authInfo,
+  }) },
+});
+
+// A2A: after your server authenticated the caller against your Agent Card.
+aether.track({
+  type: 'agent_task_received',
+  context: { agentProtocol: captureA2aCallerIdentity({
+    agentCard: callerCard,
+    authenticated: true,
+    cardSignatureVerified: false,
+    authScheme: 'oauth2',
+  }) },
+});
+```
+
+Tokens are never sent. The OAuth subject (the user who authorized the client)
+is SHA-256-hashed before it leaves your server, and only identity fields of an
+Agent Card are kept. A client your server authenticated is graded
+`server_observed`; `clientInfo` or an Agent Card alone is `declared`.
+
 ## Consent
 
 Purposes are the canonical set from `@olympuslabs/aether-shared/consent`.

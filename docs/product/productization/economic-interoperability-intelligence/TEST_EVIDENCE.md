@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [tests/unit/stablecoin/, tests/unit/derivatives/, tests/unit/interop/, tests/unit/test_economic_noesis_ooda_wiring.py]
 canonical_owner: platform@aether
 source_hashes:
-  "tests/unit/derivatives/": "sha256:d403f7dbc3d6529e1cf0739576f56de3b331cca831bc37ba51ed8021316d674d"
+  "tests/unit/derivatives/": "sha256:6550ccb8ce89c5122159d8d110c9d29d2b692a09c7c8eea6ba2550018dcbd6f1"
   "tests/unit/interop/": "sha256:bcd2fb4f4ef848a76e7ddb843a7f423167469b93f598468df28586e99a38e86e"
   "tests/unit/stablecoin/": "sha256:22b6ec6271545c603ccdc2950387ed959afc6b04433787a7f4148d9b7718eac6"
   "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:fcf7ac56e7e4fb008fae05e265d60703dea60bce1581f005a91972eb67b8839d"
@@ -43,6 +43,13 @@ source_hashes:
   venue adapters (Hyperliquid/dYdX REST+WebSocket, GMX/Drift read path) on
   the conformance-tested interface: mock-server REST backfill/pagination,
   WS reconnect + gap recovery, cursor resume, read-only-scope rejection.
+  Event contracts (`test_event_contracts.py`): canonical instrument shape,
+  Kalshi current dollar-price fields, and a Polymarket account adapter that
+  passes conformance and credentialless certification; pseudonymized live
+  captures from public Hyperliquid and Polymarket endpoints
+  (`scripts/capture_venue_fixtures.py`) replay through the adapters and the
+  position engine. This replay is recorded public data, not a tenant-linked
+  live run.
 - Stablecoin: observation dedupe/resolution; depeg classification;
   finality reorg rollback (finalized immutable, corrections append);
   projector routing; routes; graph mutation shapes.

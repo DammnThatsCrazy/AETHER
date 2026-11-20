@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:34645c3d56ea9fde425c2fd76036e67fe8b274c5b4c1997599279a6c96a9f17d"
+  "scripts/production_status.py": "sha256:4e4658d9938ab38b36a0cc38a8f7431baebf6092f6abc46fe46b15ce4d5abac4"
 ---
 
 # AETHER × Kyber Release State
@@ -146,7 +146,7 @@ with evidence paths.
 | Area | Score |
 |------|-------|
 | backend/API | 4 |
-| SDKs | 4 |
+| SDKs | 3 |
 | identity resolution | 4 |
 | Profile 360 | 5 |
 | Neptune relationships (H2H/H2A/A2H/A2A) | 4 |

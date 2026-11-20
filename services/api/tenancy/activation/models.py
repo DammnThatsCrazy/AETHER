@@ -51,6 +51,12 @@ class ActivationRecord(BaseModel):
     first_event_id: Optional[str] = None
     first_event_batch_id: Optional[str] = None
     first_value_evidence: dict[str, Any] = Field(default_factory=dict)
+    # Ids of dashboard test events (POST /v1/activation/test-event), newest
+    # last, so they are never mistaken for an installed SDK's first event.
+    activation_test_event_ids: list[str] = Field(default_factory=list)
+    # First event observed from something other than the dashboard test: the
+    # signal that an SDK is installed and sending. Additive; None until seen.
+    first_sdk_event: Optional[dict[str, Any]] = None
     waiting_reason: Optional[str] = None
     manual_reason: Optional[str] = None
     blocked_reason: Optional[str] = None

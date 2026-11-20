@@ -63,6 +63,8 @@ Component → store map (see ``docs/reference/privacy/dsr-erasure-coverage.md``)
   pattern_discovery        discovered_patterns redacted (subject removed from affected
                            entities and evidence; patterns left with <2 entities and the
                            run records listing them hard deleted); legal hold skips
+  venue_account_links      venue_account_links rows of the subject (hard delete); the
+                           venue's own public activity is not Aether-held data
   agent_lineage_projection principal_agent_lineage + summary, clusters, nodes,
                            restatements, tenant-declared bindings and delegations naming
                            the subject (hard delete); Delegation vertices projected from
@@ -115,6 +117,7 @@ RISK_INTERVENTION_RECORDS_COMPONENT = "risk_intervention_records"
 SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT = "social_relationship_evidence_events"
 AGENT_LINEAGE_COMPONENT = "agent_lineage_projection"
 PATTERN_DISCOVERY_COMPONENT = "pattern_discovery"
+VENUE_ACCOUNT_LINKS_COMPONENT = "venue_account_links"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1725,6 +1728,37 @@ async def erase_pattern_discovery_plane(subject: ErasureSubject) -> dict[str, Re
     )}
 
 
+async def erase_venue_account_links_plane(subject: ErasureSubject) -> dict[str, Receipt]:
+    """Hard-delete the subject's tenant venue account links (wallet / key refs).
+
+    Links are keyed by the tenant's subject id, so every subject ref is tried;
+    deletion is tenant-exact and idempotent. An active legal hold on
+    ``venue_account_links`` for any subject ref skips the plane.
+    """
+    from repositories.repos import VenueAccountLinkRepository
+    from shared.storage.lifecycle import StorageLifecycle
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(subject.tenant_id, "venue_account_links", ref)
+        if hold is not None:
+            return {VENUE_ACCOUNT_LINKS_COMPONENT: Receipt(
+                status="skipped_legal_hold",
+                policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                blocked_reason=str(hold.get("reason") or "legal hold"),
+            )}
+
+    repo = VenueAccountLinkRepository()
+    deleted = 0
+    for ref in sorted(subject.refs):
+        deleted += int(await repo.delete_by_principal(subject.tenant_id, ref))
+    return {VENUE_ACCOUNT_LINKS_COMPONENT: Receipt(
+        records_impacted=deleted,
+        requires_recompute=bool(deleted),
+        detail={"venue_account_links": deleted},
+    )}
+
+
 # Entity-keyed planes, run in this order before the identity plane. The ML
 # artifact assessment is sequenced by the job right after ``feature_rows``
 # (it reads the feature plane's training-eligible count).
@@ -1758,6 +1792,7 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
     ),
     ("agent_lineage", (AGENT_LINEAGE_COMPONENT,), erase_agent_lineage_plane),
     ("pattern_discovery", (PATTERN_DISCOVERY_COMPONENT,), erase_pattern_discovery_plane),
+    ("venue_account_links", (VENUE_ACCOUNT_LINKS_COMPONENT,), erase_venue_account_links_plane),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

@@ -14,7 +14,7 @@ source_hashes:
   "services/api/identity/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
   "services/api/identity/identity/reconciliation_routes.py": "sha256:3fee3e01149f08645f47338505621c3c2f890d2f51ea02ae9388c8505371259c"
   "services/api/identity/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/api/identity/identity/resolver.py": "sha256:e7d5b059297e105d2cf570e3aed710134db2397029ff93194e123db2d050b71f"
+  "services/api/identity/identity/resolver.py": "sha256:b36e3006011f9b3167dc5cecd70d7ad0954211a6a2b680f048fc9faa1831f68d"
 ---
 
 # Runbook — Identity Repair

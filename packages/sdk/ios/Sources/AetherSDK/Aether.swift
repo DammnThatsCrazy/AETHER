@@ -32,6 +32,16 @@ import AdServices
 
 // MARK: - Configuration
 
+extension URLRequest {
+    /// Declare the site a publishable key is bound to (`X-Aether-Site`). The
+    /// backend refuses a publishable key on a request that declares no site or
+    /// another site, so every request that carries the key carries this too.
+    mutating func setAetherSite(_ siteId: String?) {
+        guard let siteId = siteId, !siteId.isEmpty else { return }
+        setValue(siteId, forHTTPHeaderField: "X-Aether-Site")
+    }
+}
+
 public struct AetherConfig {
     public let apiKey: String
     public var environment: Environment = .production
@@ -63,6 +73,17 @@ public struct AetherConfig {
     // Keychain, and events are only removed after the server acknowledges the
     // batch (2xx), preserving order and idempotency across kills.
     public var encryptedDurableQueue: Bool = false
+    /// Apple App Attest device-integrity evidence (default OFF). Requires the
+    /// App Attest capability. When ON the SDK attests once per token lifetime and
+    /// attaches the server-issued integrity token to every event as
+    /// `context.device.integrity`. See `DeviceIntegrityManager`.
+    public var deviceIntegrity: Bool = false
+    /// The site a publishable (`pk_`) key is bound to, sent as `X-Aether-Site`
+    /// on every request. Onboarding issues it with the key: a native app's key
+    /// ships inside the binary and can be read out of it, so the backend only
+    /// accepts it for the site it was issued for and refuses requests that
+    /// declare none. Leave it `nil` only with a secret key used outside an app.
+    public var siteId: String? = nil
 
     public init(apiKey: String) {
         self.apiKey = apiKey
@@ -732,6 +753,24 @@ public struct EventContext: Codable {
         public let osVersion: String
         public let locale: String
         public let timezone: String
+        /// Presence-only automation evidence (see `AutomationSignals`).
+        public var automation: AutomationInfo? = nil
+        /// Server-issued App Attest integrity token (see `DeviceIntegrityManager`).
+        public var integrity: IntegrityInfo? = nil
+    }
+
+    /// Device-integrity token issued by Aether after App Attest.
+    public struct IntegrityInfo: Codable, Equatable {
+        public let token: String
+    }
+
+    /// Automation evidence for actor classification. Booleans only; nothing
+    /// about the user, their input or assistive technology is read.
+    public struct AutomationInfo: Codable, Equatable {
+        /// XCTest is hosting this process (unit / hosted tests).
+        public let testHarness: Bool
+        /// Running in the iOS Simulator. Evidence only; never changes the actor alone.
+        public let emulator: Bool
     }
 
     public struct CampaignInfo: Codable {
@@ -896,6 +935,7 @@ public final class Aether: NSObject {
     private var currentJourneyType: String? = nil
     private var currentJourneyStatus: String? = nil
     private var anonymousId: String = ""
+    private var deviceIntegrity: DeviceIntegrityManager?
     private var userId: String?
     /// Source-native correlation stamped on every outgoing event's
     /// context.correlation (WS-C / Invariant #12). Set by the host app so
@@ -948,6 +988,20 @@ public final class Aether: NSObject {
         "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
         "irclickid", "aff_id"
     ]
+
+    /// Query parameter carrying a signed per-recipient email click token.
+    static let clickTokenParam = "ae"
+
+    /// True when `value` has the signed `v<ver>.<payload>.<sig>` click-token
+    /// shape. The bare `ae` name is too generic to strip by key, so a host
+    /// app's own unrelated `ae` parameter is never captured or removed.
+    static func isClickToken(_ value: String?) -> Bool {
+        guard let value = value, !value.isEmpty else { return false }
+        return value.range(
+            of: "^v[0-9A-Za-z]{1,16}\\.[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_-]{16,}$",
+            options: .regularExpression
+        ) != nil
+    }
 
     private static let eventConsentPurpose: [AetherEventType: String] = [
 // @generated-start aether-consent-purposes/ios-map
@@ -1478,6 +1532,14 @@ public final class Aether: NSObject {
 
         self.config = config
         self.anonymousId = loadOrCreateAnonymousId()
+        if config.deviceIntegrity {
+            let manager = DeviceIntegrityManager(defaults: defaults) { [weak self] path, body, completion in
+                guard let self else { completion(nil); return }
+                self.postDeviceIntegrity(path: path, body: body, completion: completion)
+            }
+            self.deviceIntegrity = manager
+            manager.refreshIfNeeded(anonymousId: self.anonymousId)
+        }
         self.walletAddress = defaults.string(forKey: "walletAddress")
         self.walletVm = defaults.string(forKey: "walletVm") ?? "evm"
         self.walletChainId = defaults.string(forKey: "walletChainId") ?? "unknown"
@@ -1525,7 +1587,8 @@ public final class Aether: NSObject {
             apiKey: config.apiKey,
             platform: "ios",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            manifestPublicKey: config.manifestPublicKey
+            manifestPublicKey: config.manifestPublicKey,
+            siteId: config.siteId
         )
         hAgent.getDynamicState = { [weak self] in
             guard let self = self else { return (0, false, false, false) }
@@ -1735,6 +1798,40 @@ public final class Aether: NSObject {
         }
     }
 
+    /// Current device-integrity token for this install, refreshing in the background when due.
+    private func currentIntegrityInfo() -> EventContext.IntegrityInfo? {
+        guard let manager = deviceIntegrity else { return nil }
+        manager.refreshIfNeeded(anonymousId: anonymousId)
+        return manager.currentToken(for: anonymousId).map { EventContext.IntegrityInfo(token: $0) }
+    }
+
+    /// POST to a device-integrity route; completes with the decoded JSON body, or nil on any failure.
+    private func postDeviceIntegrity(path: String, body: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
+        guard let config = config,
+              let url = URL(string: "\(config.endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))\(path)"),
+              let payload = try? JSONSerialization.data(withJSONObject: body) else {
+            completion(nil)
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
+        request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 15.0
+        request.httpBody = payload
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard error == nil, (200...299).contains(status), let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion(nil)
+                return
+            }
+            completion(json)
+        }.resume()
+    }
+
     /// POST to a journey-handoff route; completes with the response `data` object, or nil on any failure.
     private func postJourneyHandoff(path: String, body: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
         guard isInitialized, let config = config,
@@ -1747,6 +1844,7 @@ public final class Aether: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 10.0
         request.httpBody = payload
@@ -1857,6 +1955,9 @@ public final class Aether: NSObject {
         traits = [:]
         consentState = []
         anonymousId = UUID().uuidString
+        // The integrity token is bound to the install id; a new id re-attests.
+        deviceIntegrity?.clear()
+        deviceIntegrity?.refreshIfNeeded(anonymousId: anonymousId)
         sessionId = UUID().uuidString
         eventSequence = 0
         // Acquisition attribution is identity-scoped state: logout/reset
@@ -2225,8 +2326,9 @@ public final class Aether: NSObject {
         let evidence: [String: AnyCodable]
         /// Click IDs preserved for CampaignInfo/audit.
         let clickIds: [String: String]
-        /// URL with the opaque `aether_ref` token stripped — the token only
-        /// travels inside evidence.referralToken, never in raw URL strings.
+        /// URL with the opaque `aether_ref` token and any signed `ae` click
+        /// token stripped — they only travel inside evidence.referralToken /
+        /// evidence.clickToken, never in raw URL strings.
         let sanitizedURL: String
     }
 
@@ -2265,6 +2367,10 @@ public final class Aether: NSObject {
             } else if name == "aether_cid", let value = item.value, !value.isEmpty {
                 // Explicit Aether campaign UUID — always validated server-side.
                 evidence["canonicalCampaignId"] = AnyCodable(value)
+            } else if item.name == Self.clickTokenParam, Self.isClickToken(item.value) {
+                // Signed per-recipient email click token: opaque here, verified
+                // and attributed server-side; never left in a transmitted URL.
+                evidence["clickToken"] = AnyCodable(item.value ?? "")
             }
         }
         if !clickIds.isEmpty {
@@ -2287,7 +2393,10 @@ public final class Aether: NSObject {
         // Strip the opaque referral token from the transmitted URL string.
         var sanitizedComponents = components
         if let items = components?.queryItems {
-            let kept = items.filter { $0.name.lowercased() != "aether_ref" }
+            let kept = items.filter { item in
+                item.name.lowercased() != "aether_ref"
+                    && !(item.name == Self.clickTokenParam && Self.isClickToken(item.value))
+            }
             sanitizedComponents?.queryItems = kept.isEmpty ? nil : kept
         }
         let sanitizedURL = sanitizedComponents?.url?.absoluteString ?? url.absoluteString
@@ -2405,6 +2514,7 @@ public final class Aether: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 10.0
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["identifier": trimmed])
@@ -2511,6 +2621,7 @@ public final class Aether: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 15.0
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -2746,11 +2857,19 @@ public final class Aether: NSObject {
     // Native SDK purposes supported from the canonical consent registry.
     // Callers SHOULD only pass these strings. Backend validator ignores others.
 
-    public static let canonicalConsentPurposes: [String] =
-        ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+    // Mirrors CONSENT_PURPOSES / EXPLICIT_OPT_IN_PURPOSES in
+    // packages/shared/consent.ts (held together by validate_sdk_parity).
+    public static let canonicalConsentPurposes: [String] = [
+        "analytics", "marketing", "personalization", "web3", "agent", "commerce",
+        "financial_activity", "credit", "location", "economic_observability",
+        "cross_chain_observability", "fraud_prevention",
+    ]
 
     /// Purposes that always require explicit opt-in and are never granted by grantAll().
-    public static let explicitOptInPurposes: [String] = ["credit", "location"]
+    public static let explicitOptInPurposes: [String] = [
+        "financial_activity", "credit", "location", "economic_observability",
+        "cross_chain_observability", "fraud_prevention",
+    ]
 
     public func grantConsent(categories: [String]) {
         consentState = Array(Set(consentState + categories))
@@ -2765,9 +2884,10 @@ public final class Aether: NSObject {
         }
     }
 
-    /// Grant all non-explicit-opt-in purposes (excludes credit and location).
-    /// Call grantConsent(["credit"]) or grantConsent(["location"]) explicitly after
-    /// displaying the required separate opt-in UI for those purposes.
+    /// Grant all purposes that do not require explicit opt-in. Never grants
+    /// `explicitOptInPurposes` (financial_activity, credit, location,
+    /// economic_observability, cross_chain_observability, fraud_prevention):
+    /// call grantConsent(categories:) for each after displaying its own opt-in UI.
     public func grantAll() {
         let grantable = Self.canonicalConsentPurposes.filter {
             !Self.explicitOptInPurposes.contains($0)
@@ -2826,6 +2946,7 @@ public final class Aether: NSObject {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+            request.setAetherSite(config.siteId)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: consentReceiptRequest(receipt))
             URLSession.shared.dataTask(with: request) { _, response, error in
@@ -3099,6 +3220,7 @@ public final class Aether: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 10.0
 
@@ -3142,6 +3264,7 @@ public final class Aether: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config.siteId)
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 10.0
 
@@ -3235,6 +3358,7 @@ public final class Aether: NSObject {
         guard let url = URL(string: "\(config?.endpoint ?? "")/v1/config/sdk/manifest") else { return }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(config?.apiKey ?? "")", forHTTPHeaderField: "Authorization")
+        request.setAetherSite(config?.siteId)
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -3267,7 +3391,9 @@ public final class Aether: NSObject {
                 osName: osName,
                 osVersion: osVersion,
                 locale: Locale.current.identifier,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                automation: AutomationSignals.current,
+                integrity: currentIntegrityInfo()
             ),
             campaign: self.campaignInfo,
             // Active acquisition evidence rides on every event while
@@ -3288,6 +3414,7 @@ public final class Aether: NSObject {
                 "location": granted.contains("location"),
                 "economic_observability": granted.contains("economic_observability"),
                 "cross_chain_observability": granted.contains("cross_chain_observability"),
+                "fraud_prevention": granted.contains("fraud_prevention"),
             ],
             journey: journeySnapshot(),
             sequence: .init(event: sequenceNumber),
@@ -3477,6 +3604,7 @@ public final class Aether: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(cfg.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setAetherSite(cfg.siteId)
         request.timeoutInterval = 5.0
 
         var wallets: [[String: String]] = []

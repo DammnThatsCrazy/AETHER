@@ -477,10 +477,18 @@ async def redirect_verified_source_link(token: str, request: Request) -> Redirec
     user_agent = request.headers.get("user-agent", "")
     _redirect_started = time.monotonic()
     try:
+        from journeys.traffic.web_bot_auth import verify_starlette_request
+
+        signed_agent = verify_starlette_request(request)
+    except Exception as exc:  # verification never blocks a redirect
+        logger.warning("web_bot_auth_redirect_verification_error: %s", exc)
+        signed_agent = None
+    try:
         result = await _verified_referral_links.resolve_redirect(
             token,
             environment=_deployment_environment(),
             user_agent=user_agent,
+            web_bot_auth=signed_agent,
         )
     except Exception as exc:
         logger.warning("verified_source_link_redirect_error: %s", exc)

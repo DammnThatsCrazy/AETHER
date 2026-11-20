@@ -126,6 +126,20 @@ class AetherAttributionTest {
     }
 
     @Test
+    fun clickToken_capturedAndStrippedOnlyWhenSigned() {
+        val token = "v1.eyJ0IjoidGVuYW50LWEifQ.abcdefghijklmnopqrstuvwxyz012345"
+        val url = "https://shop.example.com/sale?utm_source=email&ae=$token"
+        val evidence = parseAcquisitionEvidenceFromUrl(url, "deep_link", observedAt)!!
+        assertEquals(token, evidence.getString("clickToken"))
+        assertEquals("https://shop.example.com/sale?utm_source=email", sanitizeAttributionUrl(url))
+
+        // A host app's own unrelated `ae` parameter is neither captured nor stripped.
+        val plain = "https://shop.example.com/checkout?ae=express"
+        assertFalse(parseAcquisitionEvidenceFromUrl(plain, "deep_link", observedAt)!!.has("clickToken"))
+        assertEquals(plain, sanitizeAttributionUrl(plain))
+    }
+
+    @Test
     fun sanitize_dropsQueryEntirelyWhenOnlyStrippedParams() {
         assertEquals(
             "https://shop.example.com/x",

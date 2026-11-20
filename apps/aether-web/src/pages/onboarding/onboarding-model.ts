@@ -135,11 +135,20 @@ export interface SdkOption {
   /** Backend SourcePlatform this SDK reports as. */
   readonly platform: SourcePlatform;
   /**
-   * `publishable`: browser code is public, so the SDK gets a site-bound `pk_`
-   * key (/v1/sdk/sites). `secret`: an `ak_` ingestion key for code that is not
-   * served to visitors.
+   * `publishable`: browser and app code is public (a page's source, an app
+   * binary), so the SDK gets a site-bound `pk_` key (/v1/sdk/sites). `secret`:
+   * an `ak_` ingestion key for server code that is never shipped to users.
    */
   readonly keyKind: 'publishable' | 'secret';
+  /**
+   * What a publishable SDK's site is bound to, and the backend site platform.
+   * A web site declares the origins its page is served from; a native app sends
+   * no Origin, so it declares its bundle ID / package name instead.
+   */
+  readonly site?: {
+    readonly platform: 'web' | 'ios' | 'android' | 'react_native';
+    readonly binding: 'origins' | 'app_ids';
+  };
   /** Platform tag accepted by POST /v1/me/api-keys (web|ios|android|react-native|node|other). */
   readonly keyPlatform: string;
   readonly snippet: string;
@@ -159,6 +168,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     mark: 'javascript',
     platform: 'web',
     keyKind: 'publishable',
+    site: { platform: 'web', binding: 'origins' },
     keyPlatform: 'web',
     snippet: `npm install @olympuslabs/aether-web@${SDK_VERSION}\n\nimport aether from '@olympuslabs/aether-web';\naether.init({ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' });`,
   },
@@ -170,6 +180,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     mark: 'react',
     platform: 'web',
     keyKind: 'publishable',
+    site: { platform: 'web', binding: 'origins' },
     keyPlatform: 'web',
     snippet: `npm install @olympuslabs/aether-web@${SDK_VERSION}\n\nimport { AetherProvider } from '@olympuslabs/aether-web/react';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>`,
   },
@@ -180,9 +191,10 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'iOS and Android through one bridge',
     mark: 'react',
     platform: 'react-native',
-    keyKind: 'secret',
+    keyKind: 'publishable',
+    site: { platform: 'react_native', binding: 'app_ids' },
     keyPlatform: 'react-native',
-    snippet: `npm install @olympuslabs/aether-react-native@${SDK_VERSION}\ncd ios && pod install\n\nimport { AetherProvider } from '@olympuslabs/aether-react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>`,
+    snippet: `npm install @olympuslabs/aether-react-native@${SDK_VERSION}\ncd ios && pod install\n\nimport { AetherProvider } from '@olympuslabs/aether-react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>`,
   },
   {
     id: 'ios',
@@ -191,9 +203,10 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Swift package or CocoaPods · iOS 14+',
     mark: 'apple',
     platform: 'ios',
-    keyKind: 'secret',
+    keyKind: 'publishable',
+    site: { platform: 'ios', binding: 'app_ids' },
     keyPlatform: 'ios',
-    snippet: `// Swift Package Manager: https://github.com/DammnThatsCrazy/aether-ios.git (exact: ${SDK_VERSION})\n// or CocoaPods:\npod 'AetherSDK', '${SDK_VERSION}'\n\nimport AetherSDK\n\nlet config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nAether.shared.initialize(config: config)`,
+    snippet: `// Swift Package Manager: https://github.com/DammnThatsCrazy/aether-ios.git (exact: ${SDK_VERSION})\n// or CocoaPods:\npod 'AetherSDK', '${SDK_VERSION}'\n\nimport AetherSDK\n\nvar config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nconfig.siteId = \"YOUR_SITE_ID\"\nAether.shared.initialize(config: config)`,
   },
   {
     id: 'android',
@@ -202,9 +215,10 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Kotlin · Maven',
     mark: 'android',
     platform: 'android',
-    keyKind: 'secret',
+    keyKind: 'publishable',
+    site: { platform: 'android', binding: 'app_ids' },
     keyPlatform: 'android',
-    snippet: `// build.gradle.kts (Maven Central)\nimplementation("com.olympuslabsml:aether-android:${SDK_VERSION}")\n\nimport com.aether.sdk.Aether\nimport com.aether.sdk.AetherConfig\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY")\nAether.initialize(application, config)`,
+    snippet: `// build.gradle.kts (Maven Central)\nimplementation("com.olympuslabsml:aether-android:${SDK_VERSION}")\n\nimport com.aether.sdk.Aether\nimport com.aether.sdk.AetherConfig\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY", siteId = "YOUR_SITE_ID")\nAether.initialize(application, config)`,
   },
   {
     id: 'server',

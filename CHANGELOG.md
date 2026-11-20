@@ -8,6 +8,10 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Added
 
+- Native publishable keys: iOS, Android and React Native now get a site-bound publishable (`pk_`) key instead of a secret key embedded in the app binary. A site can be registered for `ios`, `android` or `react_native` with `app_ids` (bundle ID / package name) in place of origins; the native SDKs take a `siteId` and send it as `X-Aether-Site`. A publishable key also reaches the native SDK heartbeat and the deferred and Apple Ads attribution resolves (POST, for its own site only); consent receipts and identity lookups stay secret-key surfaces.
+- Activation records `first_sdk_event`, the first event an installed SDK sent, kept apart from dashboard test events (which prove the pipeline, not an install). Onboarding shows a native or server SDK as live only on that.
+- `make production-status` places each SDK platform on an L0–L7 readiness ladder; all six are at L3 (release pipeline) until they are published.
+
 - Cross-device journey continuation: a redeemed journey handoff now makes one journey span both devices (bounded, tenant-scoped walk over redeemed handoffs; the root device owns it). Redemption queues the durable `journey.handoff_continuation` rebuild. No identity is merged.
 - `JOURNEY_ACTIVITY_REBUILD_ENABLED`: newly emitted canonical activity recompiles its journey (debounced per identity), so late events reach the journey. On in staging, off in production.
 - Apple Ads attribution: `POST /v1/attribution/apple-ads/resolve` (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`) verifies the AdServices token with Apple and records `ios_apple_ads_attribution` / `platform_verified` evidence server-side. The iOS SDK adds `resolveAppleAdsAttribution`, also exposed through the React Native bridge.
@@ -29,6 +33,10 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - Scale-readiness verification: concurrency proofs on the real SDK ingestion handler (`services/api/tests/scale`) show tenant isolation, exactly-once acceptance of duplicate and overlapping batches, claim release so retries are accepted after a bus failure, and the declared claim-store-outage degradation. `scale-readiness` moves to `VERIFIED` (activation stays `INFRASTRUCTURE_WAITING`: staging is not provisioned and no staging load baseline is recorded).
 
 ### Changed
+
+- Real (non-dry-run) SDK publishes must be dispatched from `development`, and the release job pushes the version bump to `development` with the tag in one atomic push (previously directly to `main`). `repo-health.yml` gains an on-demand `integration-durable` job for `workflow_dispatch` on any branch.
+- iOS and Android consent purposes match the shared registry, including `fraud_prevention` (explicit opt-in, never granted by `grantAll()`); `validate_sdk_parity` now fails if a native list drifts from `packages/shared/consent.ts`.
+- The `SDKs` production-status area drops from 4 to 3: nothing is published to a public registry yet.
 
 - Loader URL and API origin are canonicalized (`https://cdn.aether.network/v1.js`, `https://api.aether.io`) and enforced by a domain gate. The two origins remain deliberately separate.
 - A failed site install observes as `degraded`, never `missing`: the record exists and says the install is broken, which is evidence.

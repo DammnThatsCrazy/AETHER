@@ -444,6 +444,10 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
     validated_deployment = _validated_agent_deployment_marker(payload)
     if validated_deployment is not None:
         envelope["validated_agent_deployment"] = validated_deployment
+    # Event-bound click seal attached at the ingestion boundary. It is only
+    # trusted after the dispatcher re-checks its MAC against tenant + event id.
+    if isinstance(payload.get("verified_click"), dict):
+        envelope["verified_click"] = dict(payload["verified_click"])
     return envelope
 
 

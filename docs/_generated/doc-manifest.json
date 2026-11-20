@@ -2526,6 +2526,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/plans/TENANT_PROPAGATION_DERIVATIVES_SLICE.md",
+      "title": "Tenant Propagation Lens — Derivatives and Event-Contract Slice",
+      "slug": "plans/tenant-propagation-derivatives-slice",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/architecture/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",
       "title": "Universal Intelligence Graph — Implementation Ledger",
       "slug": "plans/universal-intelligence-graph-implementation",

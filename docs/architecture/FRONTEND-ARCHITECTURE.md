@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:24484093ad981e64e2b6b6239a95a9e7ac204434f3039f12cb774000d879461f"
+  "apps/aether-web/src/": "sha256:c04e4256426c0d0781e433dd5759dbed91a310844e18872729fef4b12916b2be"
   "apps/kyber-web/src/": "sha256:5e9cd64433118dece9555f7876a7b32b5369a61619accee30926ac77c7aa11c9"
   "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
 ---
@@ -381,13 +381,17 @@ next actions; CSV files go through the imports pipeline and finish on the
 Imports review page; every source is optional and can be skipped), **SDKs and
 keys** (optional: nothing is preselected, any or all SDKs can be selected, and
 every selected key must be issued and confirmed stored; one key per SDK, labelled
-`<SDK> · onboarding`. Browser SDKs (Web, React) register a site with its
-origins through `POST /v1/sdk/sites` and get a site-bound `pk_` publishable key
-from `POST /v1/sdk/sites/{site_id}/keys`, with per-site liveness from
-`/v1/sdk/sites/{site_id}/live`; they never receive a secret key. Server and app
-SDKs get a secret `ak_` ingestion key through activation `create-sdk-keys` while
-the state machine allows it, otherwise through `/v1/me/api-keys` with explicit
-`read/write/ingest/analytics` permissions. Raw keys are shown once, and a key
+`<SDK> · onboarding`. Browser and app SDKs never receive a secret key: Web and
+React register a site with its origins, and iOS, Android and React Native
+register one with their bundle ID / package name (`platform` + `app_ids`), both
+through `POST /v1/sdk/sites`, then get a site-bound `pk_` publishable key from
+`POST /v1/sdk/sites/{site_id}/keys`. Browser SDKs show per-site liveness from
+`/v1/sdk/sites/{site_id}/live`; native SDKs have no loader, so they show live
+once activation records `first_sdk_event` (an event other than the dashboard
+test event). The Server SDK gets a secret `ak_` ingestion key through
+activation `create-sdk-keys` while the state machine allows it, otherwise
+through `/v1/me/api-keys` with explicit `read/write/ingest/analytics`
+permissions. Raw keys are shown once, and a key
 counts as ready only after the visitor confirms storing it (remembered per key
 id in the browser). Activation proves first value from any ingestion path —
 SDK or site-key events, connector syncs, imports — so skipping SDKs never blocks

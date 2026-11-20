@@ -64,6 +64,17 @@ internal val CLICK_ID_PARAMS: Set<String> = setOf(
  */
 internal val AETHER_TOKEN_PARAMS: Set<String> = setOf("aether_ref", "aether_cid")
 
+/**
+ * Signed per-recipient email click token (`ae=v<ver>.<payload>.<sig>`). The
+ * bare `ae` name is too generic to strip by key, so only token-shaped values
+ * are captured (as `clickToken`) and stripped from transmitted URLs.
+ */
+internal const val CLICK_TOKEN_PARAM: String = "ae"
+private val CLICK_TOKEN_SHAPE = Regex("^v[0-9A-Za-z]{1,16}\\.[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_-]{16,}$")
+
+/** True when [value] has the shape of a signed Aether click token. */
+internal fun isClickToken(value: String?): Boolean = value != null && CLICK_TOKEN_SHAPE.matches(value)
+
 /** Click-id evidence key aliases for cross-platform parity with the shared contract. */
 private val CLICK_ID_EVIDENCE_KEYS: Map<String, String> = mapOf(
     "li_fat_id" to "liEFatId",
@@ -86,7 +97,8 @@ internal fun parseQueryParams(rawQuery: String?): List<Pair<String, String>> {
 
 /**
  * Sanitize a landing / deep-link URL for transmission: strips the fragment,
- * all click-id params, and all Aether opaque tokens (aether_ref / aether_cid).
+ * all click-id params, all Aether opaque tokens (aether_ref / aether_cid), and
+ * signed `ae` email click tokens.
  * UTM params are retained — they are declarative campaign evidence, not secrets.
  * Operates textually so even URLs java.net.URI cannot parse are still sanitized.
  */
@@ -99,7 +111,9 @@ internal fun sanitizeAttributionUrl(url: String): String {
     val kept = rawQuery.split("&").filter { pair ->
         if (pair.isEmpty()) return@filter false
         val key = decodeUrlComponent(pair.substringBefore('=')).lowercase()
-        key !in CLICK_ID_PARAMS && key !in AETHER_TOKEN_PARAMS
+        val isSignedClickToken = key == CLICK_TOKEN_PARAM &&
+            isClickToken(decodeUrlComponent(pair.substringAfter('=', "")))
+        key !in CLICK_ID_PARAMS && key !in AETHER_TOKEN_PARAMS && !isSignedClickToken
     }
     return if (kept.isEmpty()) base else base + "?" + kept.joinToString("&")
 }
@@ -139,6 +153,7 @@ internal fun buildAcquisitionEvidence(
             // stripped from every transmitted URL string.
             "aether_ref" -> evidence.put("referralToken", value)
             "aether_cid" -> evidence.put("canonicalCampaignId", value)
+            CLICK_TOKEN_PARAM -> if (isClickToken(value)) evidence.put("clickToken", value)
             in CLICK_ID_PARAMS -> clickIds.put(CLICK_ID_EVIDENCE_KEYS[key] ?: key, value)
         }
     }

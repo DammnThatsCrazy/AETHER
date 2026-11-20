@@ -2368,6 +2368,21 @@ export interface DeviceContext {
   viewportHeight?: number;
   pixelRatio?: number;
   language?: string;
+  /**
+   * Presence-only automation evidence. Web: `webdriver`, `trustedInputSeen`.
+   * Mobile: `testHarness`, `emulator`. Accessibility state is never collected.
+   */
+  automation?: {
+    webdriver?: boolean;
+    trustedInputSeen?: boolean;
+    testHarness?: boolean;
+    emulator?: boolean;
+  };
+  /**
+   * Mobile device integrity: the token Aether issued after App Attest / Play
+   * Integrity. Verified at ingestion and removed before storage.
+   */
+  integrity?: { token: string };
 }
 
 export interface CampaignContext {
@@ -2618,6 +2633,69 @@ export interface JourneyContext {
   confidenceSignals?: string[];
 }
 
+/**
+ * Evidence about an incoming request, captured by a server SDK on the
+ * customer's server (captureRequestEvidence) and forwarded with an event.
+ * Ingestion verifies it (provider IP ranges, Web Bot Auth signatures) and
+ * removes it before storage: the raw IP and headers are never persisted.
+ */
+export interface RequestEvidence {
+  /** ISO-8601 time the customer's server received the request. */
+  receivedAt: string;
+  userAgent?: string;
+  /** Client IP as the customer's server resolved it. Not stored by Aether. */
+  clientIp?: string;
+  method?: string;
+  /** host[:port] the request was addressed to. */
+  authority?: string;
+  path?: string;
+  query?: string;
+  scheme?: string;
+  /** Raw HTTP Message Signature headers (RFC 9421), if present. */
+  signature?: string;
+  signatureInput?: string;
+  signatureAgent?: string;
+}
+
+/**
+ * Agent identity from an agent protocol, observed by the customer's MCP server
+ * or A2A agent and forwarded by a server SDK (captureMcpClientIdentity /
+ * captureA2aCallerIdentity). Graded at ingestion and replaced by the verdict.
+ * Never carries tokens; the OAuth subject is a SHA-256 hex digest.
+ */
+export interface AgentProtocolEvidence {
+  protocol: 'mcp' | 'a2a';
+  mcp?: {
+    clientInfo?: { name?: string; version?: string };
+    protocolVersion?: string;
+    oauth?: {
+      /** True only when the server's auth middleware verified the bearer token. */
+      verified: boolean;
+      clientId?: string;
+      issuer?: string;
+      scopes?: string[];
+      /** SHA-256 hex of the token subject (the user who authorized the client). */
+      subjectHash?: string;
+    };
+  };
+  a2a?: {
+    /** Identity fields of the caller's Agent Card. */
+    agentCard?: {
+      name?: string;
+      url?: string;
+      version?: string;
+      protocolVersion?: string;
+      provider?: { organization?: string; url?: string };
+    };
+    agentCardUrl?: string;
+    /** The caller satisfied the security scheme your Agent Card declares. */
+    authenticated?: boolean;
+    /** Your server verified the caller's Agent Card signature (JWS). */
+    cardSignatureVerified?: boolean;
+    authScheme?: string;
+  };
+}
+
 export interface EventContext {
   library: LibraryContext;
   page?: PageContext;
@@ -2653,6 +2731,10 @@ export interface EventContext {
   /** Active delegation grant covering this action, if any. */
   delegationId?: string;
   delegationScope?: string[];
+  /** Server SDK: evidence about the request being handled (verified, then dropped at ingestion). */
+  requestEvidence?: RequestEvidence;
+  /** Server SDK: MCP client / A2A caller identity (graded, then replaced at ingestion). */
+  agentProtocol?: AgentProtocolEvidence;
 
   /** Identity-stitching metadata. */
   identityConfidence?: number;          // 0..1

@@ -35,13 +35,14 @@ from shared.projection_engine.lens_set import LensSet  # noqa: E402
 
 
 def test_registry_is_generated_and_sorted() -> None:
-    """The singleton is backed by the generated lens registry (31 lenses = 1
-    base + 30 overlays; M9 added the socialfi/engagementfi/narrative overlays)."""
+    """The singleton is backed by the generated lens registry (32 lenses = 1
+    base + 31 overlays; M9 added the socialfi/engagementfi/narrative overlays
+    and the propagation slice added the propagation overlay)."""
     ids = lens_registry.ids()
     assert "standard" in ids
-    assert len(lens_registry.list()) == 31
-    # The M9 social overlays explain the 31 (the registry was 28 at day-1).
-    assert {"socialfi", "engagementfi", "narrative"}.issubset(set(ids))
+    assert len(lens_registry.list()) == 32
+    # The M9 social overlays (28 -> 31) and the propagation overlay (-> 32).
+    assert {"socialfi", "engagementfi", "narrative", "propagation"}.issubset(set(ids))
     assert ids == tuple(sorted(ids))
 
 

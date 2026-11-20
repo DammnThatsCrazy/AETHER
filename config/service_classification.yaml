@@ -67,6 +67,7 @@ services:
   delivery: {class: core, stage: action, reason: "durable provider dispatch and outcome tracking"}
   demo_seed: {class: internal, stage: product, reason: "explicit backend-owned synthetic demonstration data"}
   derivatives: {class: experimental, stage: intake, reason: "observation-only derivatives intelligence"}
+  device_integrity: {class: experimental, stage: intake, reason: "flag-gated (AETHER_DEVICE_INTEGRITY_ENABLED, default off) App Attest / Play Integrity device-integrity evidence for agent detection"}
   diagnostics: {class: internal, stage: control-plane, reason: "diagnostics and error monitoring"}
   dsr_propagation: {class: core, stage: control-plane, reason: "data subject request propagation records"}
   dune_feeder: {class: beta, stage: intake, reason: "governed Dune analytics feeder (admin-only)"}
@@ -124,8 +125,9 @@ services:
   policy: {class: core, stage: control-plane, reason: "consent policy decision evidence"}
   population: {class: beta, stage: intelligence, reason: "population segmentation and macro-to-micro intelligence"}
   population360: {class: beta, stage: product, reason: "Population360 projection provider and demographic lens"}
-  prediction_markets: {class: experimental, stage: intake, reason: "observation-only Polymarket and Kalshi market normalization"}
+  prediction_markets: {class: experimental, stage: intake, reason: "observation-only Polymarket and Kalshi market observation store; normalizers live in derivatives event contracts"}
   product_catalog: {class: beta, stage: product, reason: "product catalog and instrumentation registry"}
+  propagation: {class: experimental, stage: intelligence, reason: "flag-gated tenant exposure-to-adoption propagation lens over Relationship360/Social360; read-only, default off"}
   profile: {class: core, stage: product, reason: "Profile 360 entity omniview composition"}
   profile360_workers: {class: core, stage: intelligence, reason: "Profile 360 derived-data workers"}
   projections: {class: core, stage: graph, reason: "projection restatement after identity changes"}
