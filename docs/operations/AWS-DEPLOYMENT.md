@@ -776,7 +776,9 @@ can never make a reviewed apply attempt a minor-version downgrade; the
 major-family parameter group remains `aurora-postgresql16`. Because the ignore
 covers every version change, a major upgrade must remove `engine_version` from
 `ignore_changes` for that reviewed apply (and move the parameter-group family),
-then restore it.
+then restore it. The imported legacy `aether-staging` cluster follows the same
+rule (pinned at its live 16.13, `engine_version` ignored), so a staging plan
+never proposes moving it back after an automatic minor upgrade.
 
 ### Production lead intake
 
