@@ -18,7 +18,7 @@ source_hashes:
   "services/api/intelligence/risk360/store.py": "sha256:722b5e112ca4126093ccbabb64c81dd209f4f213c61d0b8b436864aed4360894"
   "services/api/services/social360/evidence_authority.py": "sha256:0b4d377d5a8b0316e11f9cabc13f0fa69c62aac9fc4d7ac313e42d1b38647322"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
-  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
+  "services/api/value/x402/commerce_store.py": "sha256:c55caae3f9e9f81830f493b729c8bc5ef8ba1f4f6244628c7059580e429f216e"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store

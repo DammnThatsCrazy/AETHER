@@ -504,14 +504,15 @@ entries:
       - apps/kyber-web/src/components/graph/path-inspector.tsx
       - apps/kyber-web/src/features/graph/use-graph-health.ts
       - apps/kyber-web/src/lib/schemas/index.ts
-      - apps/kyber-web/src/components/commerce/lifecycle-trace-view.tsx
     duplicates: []
     retire: >-
-      eight Kyber files no entry point reaches, kept because deleting them is a
+      seven Kyber files no entry point reaches, kept because deleting them is a
       product call: three unrouted pages (fraud decisions, campaign registry
       health, which docs/product/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness
       scorecard name, and customer success), an unrendered agent profile, and
-      four modules kept alive only by their own tests. Each is mounted in a
+      three modules kept alive only by their own tests (the fourth, the
+      commerce lifecycle trace view, was deleted with the commerce control
+      plane under ADR-012). Each is mounted in a
       route or deleted with its test.
     consumers: []
     compatibility: none; none is reachable from the app today
@@ -730,7 +731,8 @@ entries:
     parity_evidence: >-
       not applicable: a field nothing reads has no behavior to preserve; the
       guarantees two of them claimed hold structurally (mandatory commerce
-      approval is DEFAULT_APPROVAL_REQUIRED_ALL in services/api/value/x402/policies.py;
+      approval was DEFAULT_APPROVAL_REQUIRED_ALL in the x402 policy engine, which
+      was later retired with the whole commerce control plane under ADR-012;
       context never merges identities, pinned by
       tests/unit/test_context_has_no_identity_merge_path.py)
     usage_evidence: >-

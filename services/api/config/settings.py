@@ -186,8 +186,10 @@ class IntelligenceGraphConfig:
     enable_x402_layer: bool = _env_bool("IG_X402_LAYER", False)             # L3b
     enable_onchain_layer: bool = _env_bool("IG_ONCHAIN_LAYER", False)       # L0
     enable_trust_scoring: bool = _env_bool("IG_TRUST_SCORING", False)       # Composite
-    # Agentic Commerce (L3b+) — extends x402 capture into full control plane.
-    enable_commerce_control_plane: bool = _env_bool("COMMERCE_CONTROL_PLANE_ENABLED", True)
+    # x402 is observation-only (ADR-012): there is no commerce control plane
+    # flag. These RPC URLs are the local/test-only default for on-chain
+    # settlement verification; deployed environments use the tenant's own RPC
+    # credential (value/x402/rpc_resolver.py).
     commerce_base_rpc: str = _env("COMMERCE_BASE_RPC", "https://mainnet.base.org")
     commerce_solana_rpc: str = _env("COMMERCE_SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 
@@ -205,10 +207,8 @@ class CommsConfig:
     (docs/product/comms/COMMS_RELEASE_READINESS.md).
     """
     ingestion_enabled: bool = _env_bool("AETHER_COMMS_INGESTION_ENABLED", True)
-    # Provider suppression write-back is a separately-authorized capability
-    # (read permission never implies suppression-write); OFF by default,
-    # observe-only per ADR-C1.
-    suppression_write_back_enabled: bool = _env_bool("AETHER_COMMS_SUPPRESSION_WRITE_BACK", False)
+    # Aether never writes suppressions back to a provider (observation-only,
+    # ADR-012), so there is no write-back flag.
 
 
 # ---------------------------------------------------------------------------

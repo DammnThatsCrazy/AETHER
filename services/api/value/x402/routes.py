@@ -1,6 +1,11 @@
 """
 Aether Service — x402 Routes (L3b)
-x402 payment capture, economic graph querying.
+x402 payment capture, on-chain settlement observation, economic graph querying.
+
+Observation only (ADR-012): a tenant's own server reports the x402 exchange it
+saw; Aether records it and, when the report carries a payment proof, checks the
+chain to see whether the payment actually settled. Aether never issues a 402
+challenge, approves a spend or grants access.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from shared.logger.logger import get_logger
 from .economic_graph import X402EconomicGraph
 from .interceptor import X402Interceptor
 from .models import CapturedX402Transaction
+from .settlement_observer import observe_settlement
 
 logger = get_logger("aether.service.x402.routes")
 router = APIRouter(prefix="/v1/x402", tags=["x402"])
@@ -24,7 +30,12 @@ _economic_graph = X402EconomicGraph()
 
 @router.post("/capture")
 async def capture_payment(body: CapturedX402Transaction, request: Request):
-    """Ingest a captured x402 payment from the interceptor proxy."""
+    """Ingest an x402 exchange a tenant's server observed, and check settlement.
+
+    The response carries ``settlement`` with state ``settled`` / ``failed``
+    (on-chain verdict), ``pending`` (not final yet; report again to re-check)
+    or ``not_observable`` (no proof, or an asset/chain Aether cannot verify).
+    """
     request.state.tenant.require_permission("x402:write")
 
     # Re-capture through the interceptor for event publishing
@@ -42,7 +53,8 @@ async def capture_payment(body: CapturedX402Transaction, request: Request):
     tenant_id = request.state.tenant.tenant_id
     await _economic_graph.add_payment(tx, tenant_id=tenant_id)
 
-    return APIResponse(data=tx.model_dump()).to_dict()
+    settlement = await observe_settlement(tenant_id, tx)
+    return APIResponse(data={**tx.model_dump(), "settlement": settlement}).to_dict()
 
 
 @router.get("/graph")

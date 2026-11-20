@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [tests/unit/stablecoin/, tests/unit/derivatives/, tests/unit/interop/, tests/unit/test_economic_noesis_ooda_wiring.py]
 canonical_owner: platform@aether
 source_hashes:
-  "tests/unit/derivatives/": "sha256:ca19c9493b2e884d37f70b6f9e410c1b04fc644dd94532e9b5350e6992cba08a"
+  "tests/unit/derivatives/": "sha256:6d3bc1585451650cb2be12d8a99c57aa9e44d6ff6e652724526e31e69cc6bc18"
   "tests/unit/interop/": "sha256:bcd2fb4f4ef848a76e7ddb843a7f423167469b93f598468df28586e99a38e86e"
   "tests/unit/stablecoin/": "sha256:22b6ec6271545c603ccdc2950387ed959afc6b04433787a7f4148d9b7718eac6"
   "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:fcf7ac56e7e4fb008fae05e265d60703dea60bce1581f005a91972eb67b8839d"
@@ -53,7 +53,11 @@ source_hashes:
   `public_reference` grants with no tenant, cross-tenant, training or
   commercial rights; public market records are admitted before registry rows
   are written; a revoked source stops counting and a denied raw write writes
-  nothing.
+  nothing. Kalshi (`test_kalshi_account.py`): RSA-PSS signature verifies
+  against the public key; signed portfolio reads project per-side
+  event-contract fills and positions; no credential means no read;
+  conformance and certification pass; key link then signed sync writes
+  admitted fills; wallet links are refused.
   Event contracts (`test_event_contracts.py`): canonical instrument shape,
   Kalshi current dollar-price fields, and a Polymarket account adapter that
   passes conformance and credentialless certification; pseudonymized live

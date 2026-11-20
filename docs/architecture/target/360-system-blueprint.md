@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:683c8355a25835c0564e9755f2ddfc29384afe77cbacf0cd82927a02393fa534"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
 ---
 
 # 360 System Blueprint
@@ -164,12 +164,13 @@ as a source fact for that namespace. Event-time status, fleet health, and
 source reliability remain unknown. Workflow360 `actions` preserves the exact
 tenant Tool vertex evidence for admitted execution-linked call edges. Under
 slot policy it may also expose the linked execution's recorded executor result
-and an exact current approved resource. Server-owned public HTTPS MCP invocation
-receipts now bind the actions reference for Workflow360 and Agent360 capabilities.
-The authenticated invocation route requires write and dispatch permissions, an
-exact running agent execution, an enabled observed tool, and a current exact
-invoke grant checked again after MCP initialization. DNS-pinned public transport
-performs the actual tools/call. Durable claims prevent duplicate execution, and
+and an exact current approved resource. Historical server-owned public HTTPS MCP
+invocation receipts bind the actions reference for Workflow360 and Agent360
+capabilities. Aether stopped invoking MCP tools and reading MCP resources for
+agents under ADR-012, so no new receipts are produced; the ones written by the
+retired invocation route stay readable. That route required write and dispatch
+permissions, an exact running agent execution, an enabled observed tool, and a
+current exact invoke grant checked again after MCP initialization, and its
 immutable completion receipts bind the principal, tenant, agent, execution, tool,
 workflow, policy, grant interval and provider result. Handshake failures do not
 prove invocation. Readers reject ambiguous, cross-scope, out-of-window and

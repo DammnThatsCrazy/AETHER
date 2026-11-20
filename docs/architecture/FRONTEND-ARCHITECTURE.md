@@ -46,7 +46,7 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
   "apps/aether-web/src/": "sha256:c04e4256426c0d0781e433dd5759dbed91a310844e18872729fef4b12916b2be"
-  "apps/kyber-web/src/": "sha256:5e9cd64433118dece9555f7876a7b32b5369a61619accee30926ac77c7aa11c9"
+  "apps/kyber-web/src/": "sha256:0b63786d40dfe1ba6a95c2082fe643c38ec498472131b541f27283db6c3893e4"
   "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
 ---
 
@@ -1056,11 +1056,11 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 
 ## Agentic Commerce Components (Kyber, v8.9.0)
 
-Commerce control plane code in `apps/kyber-web/src/`:
-
-**Mounted:** the Review page renders `components/commerce/approval-queue.tsx`
-(`ApprovalQueue`) from `features/approvals`, using the consolidated API adapter
-`lib/api/commerce.ts` and schemas in `lib/schemas/commerce.ts`.
+The commerce control plane was retired by ADR-012, so Kyber no longer has a
+commerce approval queue: the Review page's Commerce Approvals tab,
+`components/commerce/` (`ApprovalQueue`, `LifecycleTraceView`),
+`features/approvals`, `lib/api/commerce.ts` and `lib/schemas/commerce.ts` were
+deleted with their tests.
 
 **Removed as unmounted:** the modular feature hooks (`settlement`, `policies`,
 `facilitators`, `resources`, `entitlements`), their API adapters and schemas, and
@@ -1073,11 +1073,7 @@ history, and the design intent for these surfaces stays in
 primitives and mount it in a route when it is productized. Tracked as ledger row
 `product-kyber-unmounted-code`.
 
-`components/commerce/lifecycle-trace-view.tsx` is kept only because a component
-test covers it; nothing mounts it.
-
-The commerce modules that remain call their API adapters in normal runtime.
-Reusable synthetic records, when needed by unit/component tests, live only in
+No Kyber commerce modules remain. Reusable synthetic records, when needed by unit/component tests, live only in
 test-only paths and cannot be imported by a production entrypoint.
 
 ## Reward Enablement Components (A6, v8.10.0)

@@ -1694,7 +1694,7 @@ async def test_execution_tool_receipt_requires_exact_edge_bindings(
     principal: str,
     accepted: bool,
 ) -> None:
-    import actions.agent.invocation_runtime as invocation_runtime
+    import actions.agent.invocation_receipts as invocation_runtime
     from actions.agent.execution360_provider import _read_execution_tool_receipt
 
     raw = {
