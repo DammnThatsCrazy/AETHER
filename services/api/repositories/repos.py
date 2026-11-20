@@ -4589,6 +4589,39 @@ class StorageLegalHoldRepository(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+class PropagationRunRepository(BaseRepository):
+    """Saved propagation runs of one tenant (derived intelligence).
+
+    A row keeps the query, the computed run, the grants of the fills it used
+    and the linked population it was computed over, so a later read can say
+    whether the run is stale. ``subject_refs`` lists every subject the run
+    names; DSR erasure hard-deletes the runs that name the subject.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("propagation_runs")
+
+    async def list_for_tenant(self, tenant_id: str, *, limit: int = 100) -> list[dict]:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+        return [r for r in rows if r.get("tenant_id") == tenant_id]
+
+    async def get_for_tenant(self, tenant_id: str, run_id: str) -> Optional[dict]:
+        record = await self.find_by_id(run_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            return None
+        return record
+
+    async def delete_naming_subject(self, tenant_id: str, subject_id: str, *, limit: int = 10000) -> int:
+        """DSR erasure: hard-delete every saved run that names the subject."""
+        rows = await self.list_for_tenant(tenant_id, limit=limit)
+        doomed = [r["id"] for r in rows if subject_id in (r.get("subject_refs") or []) and r.get("id")]
+        if not doomed:
+            return 0
+        return await self.delete_for_tenant_where(tenant_id, "id", doomed)
+
+
 class VenueAccountLinkRepository(BaseRepository):
     """Tenant-held links between a subject and a read-only venue account.
 

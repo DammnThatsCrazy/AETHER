@@ -32,7 +32,7 @@ source_hashes:
   "config/readiness/features/interoperability-intelligence.yaml": "sha256:99f3bd9c8f300ddaf4acddc0f8fa1ca1398c40a85714f23ea838c9990b0b2293"
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
-  "config/storage_policies.yaml": "sha256:79b44accf707f668710c02c75a09580c977822c0e9daa2e539cdf5ec6f897b8a"
+  "config/storage_policies.yaml": "sha256:58e2ed6c49220a7e31bec5fd6dcf39a86899b17a268eb66d3b0293ab3d7d1b81"
   "docs/_generated/adapter-certification-matrix.json": "sha256:d3973ff39e724aac7e0f8ff414f4a13374633d5227eacb53658eb135a051129c"
   "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
   "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
@@ -222,7 +222,9 @@ conservative relative to its code and tests (§4).
   and an inferred organic/viral/coordinated classification for one tenant's
   linked users. Each link provisions a provider connection and a data-rights
   grant; linked-account sync and tenant-pushed fills go through provider raw
-  rights admission, and propagation uses only admitted fills. Pseudonymized
+  rights admission, and propagation uses only admitted fills. Propagation runs
+  need the `derivatives.enabled` entitlement, are metered, and can be saved
+  (with staleness checks, recompute and DSR erasure). Pseudonymized
   live captures from public Hyperliquid and Polymarket endpoints are replayed
   in tests.
 - **Limits:** no readiness feature record, no worker, no Aether/Kyber page, no

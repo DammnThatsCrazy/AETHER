@@ -191,8 +191,11 @@ async def test_route_runs_for_caller_tenant_only(monkeypatch):
             return await PropagationService(sources()[0]).run(q)
 
     granted = []
+    metered = []
     monkeypatch.setattr(settings, "social360", SimpleNamespace(propagation_lens_enabled=True))
     monkeypatch.setattr(service, "PropagationService", FakeService)
+    await _entitle(T)
+    monkeypatch.setattr(routes, "_meter", _recording_meter(metered))
     tenant = SimpleNamespace(tenant_id=T, require_permission=granted.append)
     request = SimpleNamespace(state=SimpleNamespace(tenant=tenant))
     body = routes.PropagationRunRequest(window_start=at(-60).isoformat(), window_end=at(600).isoformat())
@@ -200,6 +203,48 @@ async def test_route_runs_for_caller_tenant_only(monkeypatch):
     assert seen["tenant"] == T
     assert response["data"]["tenant_id"] == T
     assert set(granted) == {"analytics", "derivatives:read"}
+    assert metered == [(T, "run")]
+
+
+async def _entitle(tenant_id):
+    from billing.billing.revops import TenantEntitlementRepository
+
+    await TenantEntitlementRepository().insert(f"ent_{tenant_id}", {
+        "tenant_id": tenant_id, "feature_key": "derivatives.enabled", "enabled": True,
+    })
+
+
+def _recording_meter(sink):
+    async def meter(tenant_id, result, *, kind, include_live):
+        sink.append((tenant_id, kind))
+    return meter
+
+
+async def test_route_requires_the_derivatives_entitlement(monkeypatch):
+    from fastapi import HTTPException
+
+    from config.settings import settings
+    from intelligence.propagation import routes
+
+    monkeypatch.setattr(settings, "social360", SimpleNamespace(propagation_lens_enabled=True))
+    tenant = SimpleNamespace(tenant_id="tenant_unentitled", require_permission=lambda p: None)
+    body = routes.PropagationRunRequest(window_start=at(0).isoformat(), window_end=at(10).isoformat())
+    with pytest.raises(HTTPException) as exc:
+        await routes.create_propagation_run(body, SimpleNamespace(state=SimpleNamespace(tenant=tenant)))
+    assert exc.value.status_code == 403 and exc.value.detail["code"] == "derivatives_not_entitled"
+
+
+async def test_meter_records_one_idempotent_usage_event_per_run():
+    from billing.billing.revops import UsageMeteringEventRepository
+    from intelligence.propagation import routes
+
+    result = SimpleNamespace(run_id="prun_meter_1", episodes=())
+    await routes._meter("tenant_meter", result, kind="run", include_live=False)
+    await routes._meter("tenant_meter", result, kind="run", include_live=False)
+    rows = await UsageMeteringEventRepository().find_many(
+        filters={"tenant_id": "tenant_meter", "event_type": "propagation_run_computed"}, limit=10,
+    )
+    assert len(rows) <= 1
 
 
 async def test_capped_link_population_is_a_run_limitation():
@@ -211,3 +256,88 @@ async def test_capped_link_population_is_a_run_limitation():
     src._links = CappedLinks()
     result = await PropagationService(src).run(query())
     assert "venue_account_link_scan_capped" in result.limitations
+
+
+# ── Saved runs: staleness, recompute, erasure ────────────────────────────────
+
+class FakeGrant:
+    def __init__(self, status="active"):
+        self.status = SimpleNamespace(value=status)
+        self.revoked_at = None if status == "active" else "2026-11-20T00:00:00+00:00"
+
+
+class FakeGrants:
+    def __init__(self):
+        self.status = {"drg_1": "active"}
+
+    async def get_grant(self, grant_id, tenant_id=None):
+        return FakeGrant(self.status[grant_id]) if grant_id in self.status else None
+
+
+class BoundedLinks(FakeLinks):
+    def __init__(self):
+        self.extra = {}
+
+    async def subjects_by_account_bounded(self, tenant_id):
+        return {**(await self.subjects_by_account(tenant_id)), **self.extra}, False
+
+
+def _store(links, grants):
+    from intelligence.propagation.runs import PropagationRunStore
+    from intelligence.propagation.service import PropagationService
+    from repositories.repos import PropagationRunRepository
+
+    PropagationRunRepository()._store.clear()
+
+    def factory():
+        src, _, _ = sources()
+        src._links = links
+        return PropagationService(src)
+
+    return PropagationRunStore(link_service=links, grant_service=grants, service_factory=factory), factory
+
+
+async def test_saved_run_is_fresh_then_stale_after_revocation_or_link_change():
+    links, grants = BoundedLinks(), FakeGrants()
+    store, factory = _store(links, grants)
+    service = factory()
+    run = await service.run(query())
+    record = await store.save(run, service.last_inputs, include_live=False)
+    assert record["grant_refs"] == ["drg_1"]
+    assert {"u1", "u2"} <= set(record["subject_refs"])
+    assert (await store.get(T, run.run_id))["stale"] is False
+
+    links.extra = {("hyperliquid", "0x99"): "u99"}
+    assert (await store.get(T, run.run_id))["stale_reasons"] == ["linked_population_changed"]
+    links.extra = {}
+    grants.status["drg_1"] = "revoked"
+    assert (await store.get(T, run.run_id))["stale_reasons"] == ["source_grant_revoked"]
+    assert await store.get("another_tenant", run.run_id) is None
+
+
+async def test_recompute_saves_a_superseding_run():
+    links, grants = BoundedLinks(), FakeGrants()
+    store, factory = _store(links, grants)
+    service = factory()
+    run = await service.run(query())
+    await store.save(run, service.last_inputs, include_live=False)
+    new = await store.recompute(T, run.run_id)
+    assert new["supersedes"] == run.run_id
+    assert [r["run_id"] for r in await store.list(T)]
+
+
+async def test_erasure_deletes_runs_naming_the_subject():
+    from governance.consent.erasure_planes import (
+        PROPAGATION_RUNS_COMPONENT,
+        ErasureSubject,
+        erase_propagation_runs_plane,
+    )
+
+    links, grants = BoundedLinks(), FakeGrants()
+    store, factory = _store(links, grants)
+    service = factory()
+    run = await service.run(query())
+    await store.save(run, service.last_inputs, include_live=False)
+    receipts = await erase_propagation_runs_plane(ErasureSubject(tenant_id=T, user_id="u2"))
+    assert receipts[PROPAGATION_RUNS_COMPONENT].records_impacted == 1
+    assert await store.get(T, run.run_id) is None

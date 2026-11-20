@@ -32,17 +32,17 @@ reviewed_source_commits:
 source_hashes:
   "services/api/actions/": "sha256:f56cc32e5aea69b1f386c121eb3881952540a1cd92ce65c94bd4d77cf7410ce6"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
+  "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
-  "services/api/governance/": "sha256:6694e54ed4e8795cbb43107b1b6960ef35b2a27d2fa50c9262bee6fb7e0fd2e3"
+  "services/api/governance/": "sha256:e58aa729dabca28978fed0766f2af7dddcf07610c9c4223caf594dd18be1308f"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:47c5efad9f19e50367a0c6f9d01fb21fbeb611999c607f43868ddd91f1dc008a"
-  "services/api/intelligence/": "sha256:f1da4aa1874ce12f5c1bb620896d3218273dd009a03fa775306c7fb05d5f91de"
+  "services/api/intelligence/": "sha256:25918f45684cffffc679bd82c6c1c5c920625b263222752e62ebf903d1cad35a"
   "services/api/journeys/": "sha256:c3e647829f3988c929ace6946d834c3d10e3a7ec5002b832ce08064c62297876"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:17b1bd8e69002ee8632d330f34d46542802fe2adfe2000d3d1192d15f8372eba"
+  "services/api/value/": "sha256:ea8bbe46e8fbd077a442655d8e2d5344d0510b0cf4335d7587b0cc5646de07ea"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5599,14 +5599,20 @@ credentials and then deletes the rows. A client cannot supply
 ## Propagation & Diffusion lens
 
 Gated by `AETHER_PROPAGATION_LENS_ENABLED` (default off; `503` while off).
-Requires `analytics` and `derivatives:read`. Read-only: computes over the
-caller's own linked subjects and never writes graph truth. Responses follow
+Requires `analytics` and `derivatives:read`, and computing a run requires the
+tenant's `derivatives.enabled` entitlement (`403` `derivatives_not_entitled`).
+Each computed run, subject summary or recompute records one
+`propagation_run_computed` usage event. Read-only: computes over the caller's
+own linked subjects and never writes graph truth. Responses follow
 `packages/shared/contracts/propagation-run.schema.json`.
 
 | Method | Path | Summary |
 |---|---|---|
 | POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` first syncs the tenant's linked accounts through rights admission. Runs use only fills admitted under a grant; others are excluded and reported as `unadmitted_fills_excluded` |
 | POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
+| GET | `/v1/social360/propagation/runs` | Saved runs of the tenant (runs created with `save=true`), newest first |
+| GET | `/v1/social360/propagation/runs/{run_id}` | One saved run with `stale` and `stale_reasons`: `source_grant_revoked` when a grant behind one of its fills is no longer active, `linked_population_changed` when links were added, revoked or reassigned. `404` for another tenant's run |
+| POST | `/v1/social360/propagation/runs/{run_id}/recompute` | Run the saved query again over current inputs and save the new run with `supersedes` set |
 
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
