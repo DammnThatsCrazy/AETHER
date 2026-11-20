@@ -300,9 +300,7 @@
       "pagination_model": "none",
       "permissions": [],
       "provider": "drift",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -338,9 +336,7 @@
       "pagination_model": "none",
       "permissions": [],
       "provider": "dydx",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -385,9 +381,7 @@
       "pagination_model": "none",
       "permissions": [],
       "provider": "gmx",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -424,9 +418,7 @@
       "pagination_model": "cursor",
       "permissions": [],
       "provider": "hyperliquid",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],

@@ -222,7 +222,7 @@ class VenueAccountSync:
         fill_id = payload.get("fill_id")
         if not fill_id:
             return False
-        refs = _fill_source_refs(payload)
+        refs = strip_governance_refs(_fill_source_refs(payload))
         for key in ("source_id", "source_grant_ref", "rights_decision_ref"):
             if admission.get(key):
                 refs.append(f"{key}={admission[key]}")
@@ -240,4 +240,51 @@ class VenueAccountSync:
         return bool(await repo.insert(record))
 
 
-__all__ = ["LinkSyncResult", "TenantSyncResult", "VenueAccountSync", "default_adapter_factory"]
+# Governance references only the server writes; a client never supplies them.
+SERVER_GOVERNANCE_REF_KEYS = frozenset({"source_id", "source_grant_ref", "rights_decision_ref"})
+
+
+def strip_governance_refs(refs: list[str]) -> list[str]:
+    return [r for r in refs if str(r).split("=", 1)[0] not in SERVER_GOVERNANCE_REF_KEYS]
+
+
+async def admit_pushed_fill(
+    tenant_id: str, payload: dict[str, Any], *, link_service: Any = None, raw_store: Any = None,
+) -> Optional[list[str]]:
+    """Admit a tenant-pushed fill under the governing link of its account.
+
+    Returns the server governance refs to store with the fill, or ``None`` when
+    no governing link names ``(venue_id, account_ref)``; such a fill is stored
+    unadmitted and propagation does not use it. A denial raises
+    ``ProviderRawRightsDenied``.
+    """
+    from value.derivatives.account_links import GOVERNING_STATUSES, VenueAccountLinkService
+
+    venue = str(payload.get("venue_id") or "").strip().lower()
+    account = str(payload.get("account_ref") or "").strip()
+    if not venue or not account:
+        return None
+    service = link_service or VenueAccountLinkService()
+    links = await service.list_links(tenant_id, venue=venue, active_only=False)
+    governing = [
+        link for link in links
+        if link.status in GOVERNING_STATUSES and link.account_ref == account and link.grant_id
+    ]
+    if len(governing) != 1:
+        return None
+    sync = VenueAccountSync(link_service=service, raw_store=raw_store)
+    admission = await sync._admit(governing[0], "fill", {
+        "event_name": "derivatives_fill_observed", "payload": payload,
+    })
+    return [f"{key}={admission[key]}" for key in sorted(SERVER_GOVERNANCE_REF_KEYS) if admission.get(key)]
+
+
+__all__ = [
+    "LinkSyncResult",
+    "SERVER_GOVERNANCE_REF_KEYS",
+    "TenantSyncResult",
+    "VenueAccountSync",
+    "admit_pushed_fill",
+    "default_adapter_factory",
+    "strip_governance_refs",
+]

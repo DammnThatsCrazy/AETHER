@@ -33,7 +33,7 @@ source_hashes:
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
   "config/storage_policies.yaml": "sha256:79b44accf707f668710c02c75a09580c977822c0e9daa2e539cdf5ec6f897b8a"
-  "docs/_generated/adapter-certification-matrix.json": "sha256:fd0c63e32c2ae146f0ae885d53f719f308116c087cc74c7ce8621eb254d2ff9f"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:d3973ff39e724aac7e0f8ff414f4a13374633d5227eacb53658eb135a051129c"
   "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
   "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
@@ -220,13 +220,19 @@ conservative relative to its code and tests (§4).
   and the propagation lens (`intelligence/propagation/`,
   `/v1/social360/propagation`) derives first-entry adoption, exposure paths,
   and an inferred organic/viral/coordinated classification for one tenant's
-  linked users. Pseudonymized live captures from public Hyperliquid and
-  Polymarket endpoints are replayed in tests.
+  linked users. Each link provisions a provider connection and a data-rights
+  grant; linked-account sync and tenant-pushed fills go through provider raw
+  rights admission, and propagation uses only admitted fills. Pseudonymized
+  live captures from public Hyperliquid and Polymarket endpoints are replayed
+  in tests.
 - **Limits:** no readiness feature record, no worker, no Aether/Kyber page, no
   service-catalog or meter entry. The market observation adapters accept
-  caller-submitted payloads only. The Polymarket account adapter reads public
-  wallet activity only when a tenant link exists, and no tenant-linked staging
-  run has been recorded. Kalshi account data, live polling, and order
+  caller-submitted payloads only. Venue account adapters read public wallet
+  activity only when a governed tenant link exists, and no tenant-linked
+  staging run has been recorded. Nothing writes the global
+  `derivatives_markets` reference registry yet, and `derivatives_fills`
+  references it, so synced fills need market reference rows before PostgreSQL
+  accepts them. Kalshi account data, live polling, and order
   execution are unsupported.
 - **Activation:** `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` and
   `AETHER_PROPAGATION_LENS_ENABLED` default off in settings and are turned on
@@ -251,8 +257,9 @@ conservative relative to its code and tests (§4).
   `docs/_generated/adapter-certification-matrix.json`.
 - **Current state:** 29 first-release providers on development, all
   `credential_waiting`, zero live. Domains: communications 8, derivatives 5
-  (including the Polymarket account adapter, which needs a tenant wallet link
-  rather than a credential), interop 7, payments 5,
+  (all five venue adapters read account activity by public wallet, so they
+  need a tenant wallet link rather than a credential and declare no required
+  credential), interop 7, payments 5,
   prediction_market 2, stablecoin_chain 2. No import errors.
 - **Rule:** `credential_waiting` is not production-ready. The generated matrix is
   authoritative for counts and per-provider state; the guide no longer hardcodes

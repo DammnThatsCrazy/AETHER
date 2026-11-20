@@ -28,7 +28,7 @@ source_hashes:
   "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
-  "services/api/shared/integration_contracts/": "sha256:9fee97d77b5d9951645e66decafed7f85ee7c5de18200c1805116cd8b10dda63"
+  "services/api/shared/integration_contracts/": "sha256:e26d0434b4ac22605023e01835195cd0e68d36176c35aa2770b08cf274eaa4eb"
   "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
 ---
 
@@ -126,7 +126,7 @@ services/api/
 │   │   ├── correlation_token.py        #   tenant-bound agent correlation tokens
 │   │   ├── source_objects.py           #   non-identity object refs, logical event key
 │   │   ├── certification.py            #   CertificationReport, readiness tokens
-│   │   ├── catalog.py                  #   derived catalog — 4 groups (connectors, ad-platforms, payment-rails, credit bureaus)
+│   │   ├── catalog.py                  #   derived catalog — 5 groups (connectors, ad-platforms, payment-rails, derivatives venues, credit bureaus)
 │   │   ├── experience.py               #   ExperienceCategory + experience_category_for (customer-facing projection)
 │   │   ├── aliases.py                  #   boundary-family aliases (twitter_ads→x_ads, …) + canonical_family_id
 │   │   └── ...                         #   lifecycle, deployment, health

@@ -164,9 +164,7 @@
       "rate_limit_behavior": "unspecified",
       "record_id": "derivatives:drift",
       "release_domain": "derivatives",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -217,9 +215,7 @@
       "rate_limit_behavior": "unspecified",
       "record_id": "derivatives:dydx",
       "release_domain": "derivatives",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -283,9 +279,7 @@
       "rate_limit_behavior": "unspecified",
       "record_id": "derivatives:gmx",
       "release_domain": "derivatives",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -336,9 +330,7 @@
       "rate_limit_behavior": "unspecified",
       "record_id": "derivatives:hyperliquid",
       "release_domain": "derivatives",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],

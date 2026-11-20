@@ -49,8 +49,16 @@ class LinkMethod(StrEnum):
 
 
 class LinkStatus(StrEnum):
+    """``active`` reads the account; ``disconnected`` stops reading but its grant
+    still governs what was already admitted; ``revoked`` ends the grant."""
+
     ACTIVE = "active"
+    DISCONNECTED = "disconnected"
     REVOKED = "revoked"
+
+
+# Links whose grant still governs the account's admitted history.
+GOVERNING_STATUSES = (LinkStatus.ACTIVE, LinkStatus.DISCONNECTED)
 
 
 class AccountLinkError(DerivativesValidationError):
@@ -77,6 +85,7 @@ class VenueAccountLink:
     linked_at: str = ""
     revoked_at: Optional[str] = None
     revocation_reason: Optional[str] = None
+    disconnected_at: Optional[str] = None
     connection_id: Optional[str] = None
     source_id: Optional[str] = None
     grant_id: Optional[str] = None
@@ -99,6 +108,7 @@ class VenueAccountLink:
             "linked_at": self.linked_at,
             "revoked_at": self.revoked_at,
             "revocation_reason": self.revocation_reason,
+            "disconnected_at": self.disconnected_at,
             "connection_id": self.connection_id,
             "source_id": self.source_id,
             "grant_id": self.grant_id,
@@ -124,6 +134,7 @@ class VenueAccountLink:
             linked_at=row.get("linked_at") or "",
             revoked_at=row.get("revoked_at"),
             revocation_reason=row.get("revocation_reason"),
+            disconnected_at=row.get("disconnected_at"),
             connection_id=row.get("connection_id"),
             source_id=row.get("source_id"),
             grant_id=row.get("grant_id"),
@@ -180,6 +191,16 @@ class VenueAccountLinkService:
 
             self._evidence_repo = VerificationEvidenceRepository()
         return self._evidence_repo
+
+    async def _governing_rows(
+        self, tenant_id: str, *, venue: Optional[str] = None, limit: int = LINK_SCAN_LIMIT,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for status in GOVERNING_STATUSES:
+            rows.extend(await self._repo.list_for_tenant(
+                tenant_id, venue=venue, status=status.value, limit=limit,
+            ))
+        return rows
 
     async def link_wallet(
         self,
@@ -314,9 +335,7 @@ class VenueAccountLinkService:
         # One venue account belongs to at most one subject per tenant: a second
         # active owner would make fill attribution ambiguous. Checked before any
         # connection or grant is provisioned.
-        others = await self._repo.list_for_tenant(
-            link.tenant_id, venue=link.venue, status=LinkStatus.ACTIVE.value, limit=LINK_SCAN_LIMIT,
-        )
+        others = await self._governing_rows(link.tenant_id, venue=link.venue)
         if any(
             r.get("account_ref") == link.account_ref and r.get("subject_id") != link.subject_id
             for r in others
@@ -324,14 +343,27 @@ class VenueAccountLinkService:
             raise AccountLinkError("account_already_linked_to_another_subject")
         existing = await self._repo.get_for_tenant(link.tenant_id, link.link_id)
         previous = VenueAccountLink.from_record(existing) if existing is not None else None
-        if previous is not None and previous.status is LinkStatus.ACTIVE and previous.grant_id:
-            # Re-linking an active, governed link keeps its connection, grant
-            # and admitted history; a supplied credential rotates in place.
+        if (
+            previous is not None
+            and previous.status in GOVERNING_STATUSES
+            and previous.grant_id
+            and await self._sources().grant_active(link.tenant_id, previous.grant_id)
+        ):
+            # Re-linking (or reconnecting) a governed link keeps its connection,
+            # grant and admitted history; a supplied credential is stored in place.
             try:
-                credential_ref = await self._sources().rotate_credential(
-                    tenant_id=link.tenant_id, connection_id=previous.connection_id,
-                    credential=credential,
-                ) if credential is not None else previous.credential_ref
+                if previous.status is LinkStatus.DISCONNECTED:
+                    credential_ref = await self._sources().reconnect(
+                        tenant_id=link.tenant_id, connection_id=previous.connection_id,
+                        method=link.method.value, credential=credential,
+                    )
+                elif credential is not None:
+                    credential_ref = await self._sources().rotate_credential(
+                        tenant_id=link.tenant_id, connection_id=previous.connection_id,
+                        credential=credential,
+                    )
+                else:
+                    credential_ref = previous.credential_ref
             except VenueSourceError as exc:
                 raise AccountLinkError(exc.reason) from exc
             link = replace(
@@ -372,6 +404,28 @@ class VenueAccountLinkService:
         else:
             await self._repo.update(link.link_id, {**existing, **record})
         return link
+
+    async def disconnect(
+        self, *, tenant_id: str, link_id: str, actor: str = "system",
+    ) -> Optional[VenueAccountLink]:
+        """Stop reading the account. The grant stays, so already admitted
+        activity keeps its governed uses; revoke ends those too."""
+        existing = await self._repo.get_for_tenant(_required(tenant_id, "tenant_id_required"), link_id)
+        if existing is None:
+            return None
+        if existing.get("status") != LinkStatus.ACTIVE.value:
+            return VenueAccountLink.from_record(existing)
+        await self._sources().disconnect(
+            tenant_id=tenant_id, connection_id=existing.get("connection_id"),
+        )
+        updated = {
+            **existing,
+            "status": LinkStatus.DISCONNECTED.value,
+            "disconnected_at": utc_now().isoformat(),
+            "credential_ref": None,
+        }
+        await self._repo.update(link_id, updated)
+        return VenueAccountLink.from_record(updated)
 
     async def revoke(
         self, *, tenant_id: str, link_id: str, reason: str = "", actor: str = "system",
@@ -415,7 +469,7 @@ class VenueAccountLinkService:
         )
 
     async def subjects_by_account(self, tenant_id: str, venue: Optional[str] = None) -> dict[tuple[str, str], str]:
-        """Active ``(venue, account_ref) -> subject_id`` map for one tenant."""
+        """Governed ``(venue, account_ref) -> subject_id`` map for one tenant."""
         mapping, _truncated = await self.subjects_by_account_bounded(tenant_id, venue=venue)
         return mapping
 
@@ -427,11 +481,10 @@ class VenueAccountLinkService:
         Reads ``limit + 1`` rows so a capped read is reported instead of being
         presented as the tenant's complete linked population.
         """
-        rows = await self._repo.list_for_tenant(
-            _required(tenant_id, "tenant_id_required"),
-            venue=venue,
-            status=LinkStatus.ACTIVE.value,
-            limit=limit + 1,
+        # Disconnected links still govern their admitted history, so their
+        # accounts stay attributed; revoked links do not.
+        rows = await self._governing_rows(
+            _required(tenant_id, "tenant_id_required"), venue=venue, limit=limit + 1,
         )
         links = sorted(
             (VenueAccountLink.from_record(r) for r in rows if r.get("tenant_id") == tenant_id),
@@ -516,6 +569,7 @@ class VenueAccountLinkService:
 
 __all__ = [
     "AccountLinkError",
+    "GOVERNING_STATUSES",
     "LinkMethod",
     "LinkStatus",
     "VenueAccountLink",

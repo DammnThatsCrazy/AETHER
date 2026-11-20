@@ -141,3 +141,31 @@ async def test_link_without_a_grant_is_not_read(linked):
         link_service=service, fill_repo=Fills(), adapter_factory=_factory,
     ).sync_link(replace(link, grant_id=None))
     assert (result.status, result.reason) == ("skipped", "link_not_governed")
+
+
+async def test_tenant_pushed_fill_is_admitted_under_its_link():
+    from value.derivatives.account_sync import admit_pushed_fill
+
+    VenueAccountLinkRepository()._store.clear()
+    service = VenueAccountLinkService()
+    link = await service.link_tenant_push(
+        tenant_id=TENANT, subject_id="trader_9", venue="hyperliquid", account_ref="0xpush",
+        consent_receipt_id="cr_push",
+    )
+    fill = {"fill_id": "pf1", "venue_id": "hyperliquid", "account_ref": "0xpush",
+            "executed_at": "2026-11-20T10:00:00+00:00"}
+    refs = await admit_pushed_fill(TENANT, fill, link_service=service)
+    as_map = dict(r.split("=", 1) for r in refs)
+    assert as_map["source_grant_ref"] == link.grant_id and as_map["rights_decision_ref"]
+    # No governing link for the account: stored unadmitted, not used.
+    assert await admit_pushed_fill(TENANT, {**fill, "account_ref": "0xother"}, link_service=service) is None
+
+
+async def test_client_cannot_forge_governance_refs():
+    from value.derivatives.account_sync import strip_governance_refs
+    from value.derivatives.runtime_routes import _governed_fill_refs
+
+    forged = ["source_grant_ref=drg_x", "rights_decision_ref=rd_x", "source_id=s", "outcome=Yes"]
+    assert strip_governance_refs(forged) == ["outcome=Yes"]
+    refs = await _governed_fill_refs(TENANT, {"fill_id": "f", "source_refs": forged})
+    assert not any(r.startswith(("source_grant_ref", "rights_decision_ref", "source_id")) for r in refs)

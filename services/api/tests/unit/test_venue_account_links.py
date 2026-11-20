@@ -404,3 +404,39 @@ async def test_backfill_governs_links_created_before_sources(service):
     (governed,) = [link for link in await svc.list_links(TENANT) if link.subject_id == "user_7"]
     assert (await _grant(governed.grant_id)).consent_basis == "cr_old"
     assert (await svc.backfill_sources(TENANT))["already_governed"] == 1
+
+
+async def test_disconnect_stops_reading_but_keeps_the_grant(service):
+    from connectors.provider_runtime.rights_admission import ProviderRawRightsAdmission
+
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    disconnected = await svc.disconnect(tenant_id=TENANT, link_id=link.link_id)
+    assert disconnected.status is LinkStatus.DISCONNECTED and disconnected.disconnected_at
+    assert (await _grant(link.grant_id)).revoked_at is None
+    assert (await _connection(link.connection_id)).state.value in ("revoked", "disabled")
+    # Admitted history stays attributed to its subject.
+    assert await svc.subjects_by_account(TENANT) == {("polymarket", WALLET.lower()): "user_1"}
+    # The grant still governs; the sync simply no longer reads (status gate).
+    assert (await ProviderRawRightsAdmission().admit(_raw(link))).source_grant_ref == link.grant_id
+
+
+async def test_reconnect_reuses_the_grant_and_reopens_the_connection(service):
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    await svc.disconnect(tenant_id=TENANT, link_id=link.link_id)
+    again = await _link(svc, evidence.add("ev_2"), proof_evidence_id="ev_2")
+    assert again.status is LinkStatus.ACTIVE
+    assert (again.grant_id, again.connection_id) == (link.grant_id, link.connection_id)
+    assert (await _connection(link.connection_id)).state.value == "connected"
+
+
+async def test_disconnected_account_still_blocks_another_owner(service):
+    svc, _ = service
+    link = await svc.link_tenant_push(tenant_id=TENANT, subject_id="alice", venue="hyperliquid",
+                                      account_ref="Account-Y", consent_receipt_id="cr")
+    await svc.disconnect(tenant_id=TENANT, link_id=link.link_id)
+    with pytest.raises(AccountLinkError) as exc:
+        await svc.link_tenant_push(tenant_id=TENANT, subject_id="bob", venue="hyperliquid",
+                                   account_ref="Account-Y", consent_receipt_id="cr")
+    assert exc.value.reason == "account_already_linked_to_another_subject"

@@ -246,6 +246,45 @@ class VenueSourceProvisioner:
             connection = self._advance(connection, ("verifying", "verified", "connected"))
             await self._orch().connections.upsert(connection)
 
+    async def grant_active(self, tenant_id: str, grant_id: str) -> bool:
+        grant = await self._grant_service().get_grant(grant_id, tenant_id=tenant_id)
+        status = getattr(getattr(grant, "status", None), "value", getattr(grant, "status", None))
+        return bool(grant is not None and status == "active" and getattr(grant, "revoked_at", None) is None)
+
+    async def disconnect(self, *, tenant_id: str, connection_id: Optional[str]) -> None:
+        """Stop acquisition: drop the credential and disable the connection.
+        The grant is untouched."""
+        if not connection_id:
+            return
+        connection = await self._orch().connections.find(connection_id)
+        if connection is None or connection.tenant_id != tenant_id:
+            return
+        if connection.credential_ref:
+            await self._orch().delete_credential(connection)
+        await self._close(connection)
+
+    async def reconnect(
+        self, *, tenant_id: str, connection_id: Optional[str], method: str, credential: Any,
+    ) -> Optional[str]:
+        """Reopen a disconnected link's connection under its existing grant."""
+        from shared.integration_contracts.lifecycle import ConnectionState, can_transition
+
+        connection = await self._orch().connections.find(connection_id) if connection_id else None
+        if connection is None or connection.tenant_id != tenant_id:
+            raise VenueSourceError("link_connection_missing")
+        access = access_for_method(method)
+        if access in (API_KEY_ACCESS, OAUTH_ACCESS) and credential is None:
+            raise VenueSourceError("credential_required")
+        orchestrator = self._orch()
+        if can_transition(connection.state, ConnectionState.AVAILABLE):
+            connection = orchestrator.transition(connection, ConnectionState.AVAILABLE)
+        if credential is not None:
+            connection = await orchestrator.store_credential(connection, credential)
+        elif access == WALLET_ACCESS:
+            connection = self._advance(connection, ("verifying", "verified", "connected"))
+        await orchestrator.connections.upsert(connection)
+        return connection.credential_ref or None
+
     async def rotate_credential(self, *, tenant_id: str, connection_id: Optional[str], credential: Any) -> str:
         """Replace the credential on a link's existing connection."""
         connection = await self._orch().connections.find(connection_id) if connection_id else None

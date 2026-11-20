@@ -259,9 +259,13 @@ async def list_venue_account_links(
 ) -> dict:
     _require_account_links_enabled()
     _require_derivatives_read(request)
+    from value.derivatives.account_links import LinkStatus
+
     links = await _link_service().list_links(
-        _tenant_id(request), venue=venue, subject_id=subject_id, active_only=not include_revoked,
+        _tenant_id(request), venue=venue, subject_id=subject_id, active_only=False,
     )
+    if not include_revoked:
+        links = [link for link in links if link.status is not LinkStatus.REVOKED]
     return APIResponse(data={"items": [link.to_record() for link in links]}).to_dict()
 
 
@@ -342,6 +346,19 @@ async def sync_venue_account_link(link_id: str, request: Request) -> dict:
         raise NotFoundError("Venue account link")
     result = await VenueAccountSync(link_service=service).sync_link(link)
     return APIResponse(data=result.to_dict()).to_dict()
+
+
+@router.post("/account-links/{link_id}/disconnect")
+async def disconnect_venue_account_link(link_id: str, request: Request) -> dict:
+    """Stop reading the account; its grant still governs admitted history."""
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    link = await _link_service().disconnect(
+        tenant_id=_tenant_id(request), link_id=link_id, actor=_actor(request),
+    )
+    if link is None:
+        raise NotFoundError("Venue account link")
+    return APIResponse(data=link.to_record()).to_dict()
 
 
 @router.post("/account-links/{link_id}/revoke")

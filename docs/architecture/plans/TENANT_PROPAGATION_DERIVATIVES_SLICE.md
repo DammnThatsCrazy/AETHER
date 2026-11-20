@@ -112,6 +112,12 @@ reserved and withheld until incrementality evidence exists.
 
 ## Follow-ups
 
+Done since the first slice: venue links now provision a connection and a
+data-rights grant each, linked accounts sync through provider raw rights
+admission, propagation uses only admitted fills, and links can be
+disconnected (grant kept) as well as revoked (see
+`docs/architecture/target/source-authority.md`, "Derivatives venue sources").
+
 - Fill the reserved Social360 `social_contagion` / `propagation` and Risk360
   `financial_contagion` slots from propagation runs once those providers are
   live; today the computation is served by its own route.
