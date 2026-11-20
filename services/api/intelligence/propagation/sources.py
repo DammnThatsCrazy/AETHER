@@ -4,9 +4,11 @@ Every read is bounded and scoped to one tenant:
 
 * **Population and account map** — active venue account links
   (``VenueAccountLinkService``). Only linked subjects are in scope.
-* **Fills** — persisted ``derivatives_fills`` rows of linked accounts, or a
-  bounded live read-only pull through the venue adapters for public-wallet
-  venues (``include_live``). Live pulls never write and need no credential.
+* **Fills** — persisted ``derivatives_fills`` rows of linked accounts that were
+  admitted under a held grant (their ``source_refs`` carry ``source_grant_ref``
+  and ``rights_decision_ref``). ``include_live`` first runs a bounded account
+  sync for the tenant's links (``VenueAccountSync``), which goes through the
+  same raw admission; nothing is read around it.
 * **Relationship exposures** — tenant graph edges of the registered exposure
   predicates (``get_edges_for_tenant``), mapped by ``exposure.py``.
 * **In-app exposures** — ``silver_exposure_facts`` rows in the run window that
@@ -26,8 +28,6 @@ from intelligence.propagation.contracts import ExposureChannel, PropagationQuery
 _EDGE_LIMIT = 10_000
 _FILL_LIMIT = 5_000
 _IN_APP_LIMIT = 10_000
-_LIVE_LINK_LIMIT = 50
-_LIVE_VENUES = frozenset({"hyperliquid", "polymarket"})
 
 
 @dataclass
@@ -47,6 +47,27 @@ class PropagationSources(Protocol):
     async def load(self, query: PropagationQuery, *, include_live: bool = False) -> SourceBundle: ...
 
 
+def _source_context(row: dict[str, Any]) -> dict[str, str]:
+    refs = row.get("source_refs")
+    if isinstance(refs, str):
+        try:
+            import json
+
+            refs = json.loads(refs)
+        except ValueError:
+            refs = []
+    if isinstance(refs, dict):
+        return {k: str(v) for k, v in refs.items() if v}
+    if isinstance(refs, list):
+        return dict(str(r).split("=", 1) for r in refs if "=" in str(r))
+    return {}
+
+
+def _admitted(row: dict[str, Any]) -> bool:
+    context = _source_context(row)
+    return bool(context.get("source_grant_ref") and context.get("rights_decision_ref"))
+
+
 def _fill_row_to_event(row: dict[str, Any]) -> dict[str, Any]:
     market = str(row.get("canonical_market_id") or "")
     payload = {
@@ -64,20 +85,9 @@ def _fill_row_to_event(row: dict[str, Any]) -> dict[str, Any]:
     }
     # Event-contract identity and venue direction travel in source_refs when the
     # runtime stored them; absent fields stay absent (token-level instrument).
-    refs = row.get("source_refs")
-    if isinstance(refs, str):
-        try:
-            import json
-
-            refs = json.loads(refs)
-        except ValueError:
-            refs = []
-    context: dict[str, str] = {}
-    if isinstance(refs, dict):
-        context = {k: str(v) for k, v in refs.items() if v}
-    elif isinstance(refs, list):
-        context = dict(str(r).split("=", 1) for r in refs if "=" in str(r))
-    for key in ("instrument_type", "event_contract_ref", "outcome", "direction"):
+    context = _source_context(row)
+    for key in ("instrument_type", "event_contract_ref", "outcome", "direction",
+                "source_id", "source_grant_ref", "rights_decision_ref"):
         if context.get(key):
             payload[key] = context[key]
     return {"event_name": "derivatives_fill_observed", "payload": payload}
@@ -93,20 +103,22 @@ class RepositoryPropagationSources:
         fill_repo: Any = None,
         graph_client: Any = None,
         pool_factory: Any = None,
-        adapter_factory: Any = None,
+        account_sync: Any = None,
+        account_key: Any = None,
     ) -> None:
         self._links = link_service
         self._fills = fill_repo
         self._graph = graph_client
         self._pool_factory = pool_factory
-        self._adapter_factory = adapter_factory
+        self._account_sync = account_sync
+        self._account_key = account_key or _adapter_account_key
 
     async def load(self, query: PropagationQuery, *, include_live: bool = False) -> SourceBundle:
         reasons: set[str] = set()
         subjects = await self._subjects(query.tenant_id, reasons)
+        if include_live and subjects:
+            await self._sync(query.tenant_id, reasons)
         fills = await self._stored_fills(query.tenant_id, subjects, reasons)
-        if include_live:
-            fills.extend(await self._live_fills(query.tenant_id, subjects, reasons))
         edges = await self._edges(query, reasons)
         in_app = await self._in_app(query, reasons)
         return SourceBundle(subjects, fills, edges, in_app, reasons)
@@ -142,42 +154,48 @@ class RepositoryPropagationSources:
 
             self._fills = FillRepo()
         events: list[dict[str, Any]] = []
+        excluded = 0
         try:
-            for _venue, account in sorted(subjects):
+            for venue, account in sorted(subjects):
                 # derivatives_fills has no created_at column: order explicitly.
                 rows = await self._fills.find_many(
-                    {"tenant_id": tenant_id, "trading_account_id": f"acct_{account}"},
+                    {"tenant_id": tenant_id, "trading_account_id": self._account_key(venue, account)},
                     limit=_FILL_LIMIT,
                     order_by="executed_at",
                     descending=False,
                 )
                 if len(rows) >= _FILL_LIMIT:
                     reasons.add("stored_fill_scan_capped")
-                events.extend(_fill_row_to_event(r) for r in rows if r.get("tenant_id") == tenant_id)
+                for row in rows:
+                    if row.get("tenant_id") != tenant_id:
+                        continue
+                    if not _admitted(row):
+                        # Never admitted under a grant (legacy intake): not used.
+                        excluded += 1
+                        continue
+                    events.append(_fill_row_to_event(row))
         except Exception:  # noqa: BLE001
             reasons.add("stored_fill_authority_unavailable")
+        if excluded:
+            reasons.add("unadmitted_fills_excluded")
         return events
 
-    async def _live_fills(
-        self, tenant_id: str, subjects: dict[tuple[str, str], str], reasons: set[str],
-    ) -> list[dict[str, Any]]:
-        factory = self._adapter_factory or _default_adapter_factory
-        events: list[dict[str, Any]] = []
-        live = [(v, a) for v, a in sorted(subjects) if v in _LIVE_VENUES]
-        if len(live) > _LIVE_LINK_LIMIT:
-            reasons.add("live_fill_link_scan_capped")
-            live = live[:_LIVE_LINK_LIMIT]
-        for venue, account in live:
-            try:
-                adapter = factory(venue, account)
-                pulled, checkpoint = await adapter.pull_events()
-            except Exception:  # noqa: BLE001 - one venue outage never fails the run
-                reasons.add(f"live_fill_pull_failed:{venue}")
-                continue
-            if checkpoint.get("provider_health") not in (None, "ok"):
-                reasons.add(f"live_fill_provider_degraded:{venue}")
-            events.extend(pulled)
-        return events
+    async def _sync(self, tenant_id: str, reasons: set[str]) -> None:
+        sync = self._account_sync
+        if sync is None:
+            from value.derivatives.account_sync import VenueAccountSync
+
+            sync = VenueAccountSync(link_service=self._links)
+        try:
+            result = await sync.sync_tenant(tenant_id)
+        except Exception:  # noqa: BLE001 - a sync outage never fails the run
+            reasons.add("account_sync_unavailable")
+            return
+        if result.truncated:
+            reasons.add("account_sync_link_scan_capped")
+        for link in result.links:
+            if link.status in ("failed", "denied", "degraded"):
+                reasons.add(f"account_sync_{link.status}")
 
     async def _edges(self, query: PropagationQuery, reasons: set[str]) -> list[Any]:
         from intelligence.propagation.exposure import exposure_edge_types
@@ -253,13 +271,14 @@ class RepositoryPropagationSources:
         return out
 
 
-def _default_adapter_factory(venue: str, account_ref: str) -> Any:
-    import httpx
-
+def _adapter_account_key(venue: str, account_ref: str) -> str:
+    """The stored ``trading_account_id`` for a linked account, from its adapter."""
     from value.derivatives.adapters import VENUE_ADAPTERS
 
-    adapter_cls = type(VENUE_ADAPTERS[venue])
-    return adapter_cls(http_transport=httpx.AsyncHTTPTransport(), account_ref=account_ref, max_pages=5)
+    adapter = VENUE_ADAPTERS.get(venue)
+    if adapter is None or not hasattr(adapter, "trading_account_id_for"):
+        return f"acct_{account_ref}"
+    return adapter.trading_account_id_for(account_ref)
 
 
 __all__ = ["PropagationSources", "RepositoryPropagationSources", "SourceBundle"]

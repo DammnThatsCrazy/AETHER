@@ -246,6 +246,19 @@ class VenueSourceProvisioner:
             connection = self._advance(connection, ("verifying", "verified", "connected"))
             await self._orch().connections.upsert(connection)
 
+    async def rotate_credential(self, *, tenant_id: str, connection_id: Optional[str], credential: Any) -> str:
+        """Replace the credential on a link's existing connection."""
+        connection = await self._orch().connections.find(connection_id) if connection_id else None
+        if connection is None or connection.tenant_id != tenant_id:
+            raise VenueSourceError("link_connection_missing")
+        if not connection.credential_ref:
+            raise VenueSourceError("wallet_link_takes_no_credential")
+        from shared.credentials.service import credential_service
+
+        # rotate keeps the ref and replaces the stored version.
+        await credential_service.rotate(tenant_id, connection.credential_ref, credential)
+        return connection.credential_ref
+
     async def _discard_connection(self, connection: Any) -> None:
         orchestrator = self._orch()
         try:

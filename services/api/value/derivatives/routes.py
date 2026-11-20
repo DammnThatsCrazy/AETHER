@@ -319,6 +319,31 @@ async def create_credential_account_link(body: CredentialLinkRequest, request: R
     return APIResponse(data=link.to_record()).to_dict()
 
 
+@router.post("/account-links/sync")
+async def sync_venue_account_links(request: Request) -> dict:
+    """Read every active governed link of this tenant through rights admission."""
+    from value.derivatives.account_sync import VenueAccountSync
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    result = await VenueAccountSync(link_service=_link_service()).sync_tenant(_tenant_id(request))
+    return APIResponse(data=result.to_dict()).to_dict()
+
+
+@router.post("/account-links/{link_id}/sync")
+async def sync_venue_account_link(link_id: str, request: Request) -> dict:
+    from value.derivatives.account_sync import VenueAccountSync
+
+    _require_account_links_enabled()
+    _require_derivatives_connect(request)
+    service = _link_service()
+    link = await service.get_link(_tenant_id(request), link_id)
+    if link is None:
+        raise NotFoundError("Venue account link")
+    result = await VenueAccountSync(link_service=service).sync_link(link)
+    return APIResponse(data=result.to_dict()).to_dict()
+
+
 @router.post("/account-links/{link_id}/revoke")
 async def revoke_venue_account_link(link_id: str, body: RevokeLinkRequest, request: Request) -> dict:
     _require_account_links_enabled()

@@ -156,6 +156,15 @@ async def test_credential_link_stores_the_secret_behind_its_connection(service, 
     assert stored.api_key.get_secret_value() == "sk_read_only"
     assert link.source_relationship == "personal_account"
 
+    rotated = await svc.link_credential(
+        tenant_id=TENANT, subject_id="user_2", venue="hyperliquid", account_ref="acct",
+        method=LinkMethod.READ_ONLY_API_KEY, credential=ApiKeyCredential(api_key="sk_rotated"),
+        scopes=["read"], consent_receipt_id="cr_3",
+    )
+    assert (rotated.credential_ref, rotated.grant_id) == (link.credential_ref, link.grant_id)
+    stored = await credential_broker.reveal(TENANT, link.credential_ref)
+    assert stored.api_key.get_secret_value() == "sk_rotated"
+
 
 async def test_tenant_push_and_erasure(service):
     svc, evidence = service
@@ -350,13 +359,23 @@ async def test_unlinked_account_on_the_same_connection_is_not_admitted(service):
         await ProviderRawRightsAdmission().admit(other)
 
 
-async def test_relink_supersedes_the_previous_grant(service):
+async def test_relink_keeps_the_governing_source(service):
     svc, evidence = service
     first = await _link(svc, evidence.add("ev_1"))
     second = await _link(svc, evidence.add("ev_2"), proof_evidence_id="ev_2", consent_receipt_id="cr_9")
-    assert second.link_id == first.link_id and second.grant_id != first.grant_id
+    assert second.link_id == first.link_id
+    assert (second.grant_id, second.connection_id) == (first.grant_id, first.connection_id)
+    assert second.consent_receipt_id == "cr_9"
+    assert (await _grant(first.grant_id)).revoked_at is None
+
+
+async def test_relink_after_revocation_provisions_a_new_source(service):
+    svc, evidence = service
+    first = await _link(svc, evidence.add("ev_1"))
+    await svc.revoke(tenant_id=TENANT, link_id=first.link_id)
+    second = await _link(svc, evidence.add("ev_2"), proof_evidence_id="ev_2")
+    assert second.grant_id != first.grant_id and second.status is LinkStatus.ACTIVE
     assert (await _grant(first.grant_id)).revoked_at
-    assert (await _grant(second.grant_id)).revoked_at is None
 
 
 async def test_erasure_revokes_every_grant_and_credential(service):

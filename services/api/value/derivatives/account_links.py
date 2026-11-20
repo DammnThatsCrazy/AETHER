@@ -81,6 +81,7 @@ class VenueAccountLink:
     source_id: Optional[str] = None
     grant_id: Optional[str] = None
     source_relationship: Optional[str] = None
+    sync_state: Optional[dict[str, Any]] = None
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -102,6 +103,7 @@ class VenueAccountLink:
             "source_id": self.source_id,
             "grant_id": self.grant_id,
             "source_relationship": self.source_relationship,
+            "sync_state": self.sync_state,
             "execution_by_aether": False,
         }
 
@@ -126,6 +128,7 @@ class VenueAccountLink:
             source_id=row.get("source_id"),
             grant_id=row.get("grant_id"),
             source_relationship=row.get("source_relationship"),
+            sync_state=row.get("sync_state"),
         )
 
 
@@ -321,6 +324,27 @@ class VenueAccountLinkService:
             raise AccountLinkError("account_already_linked_to_another_subject")
         existing = await self._repo.get_for_tenant(link.tenant_id, link.link_id)
         previous = VenueAccountLink.from_record(existing) if existing is not None else None
+        if previous is not None and previous.status is LinkStatus.ACTIVE and previous.grant_id:
+            # Re-linking an active, governed link keeps its connection, grant
+            # and admitted history; a supplied credential rotates in place.
+            try:
+                credential_ref = await self._sources().rotate_credential(
+                    tenant_id=link.tenant_id, connection_id=previous.connection_id,
+                    credential=credential,
+                ) if credential is not None else previous.credential_ref
+            except VenueSourceError as exc:
+                raise AccountLinkError(exc.reason) from exc
+            link = replace(
+                link,
+                connection_id=previous.connection_id,
+                source_id=previous.source_id,
+                grant_id=previous.grant_id,
+                source_relationship=previous.source_relationship,
+                credential_ref=credential_ref,
+                sync_state=previous.sync_state,
+            )
+            await self._repo.update(link.link_id, {**existing, **link.to_record()})
+            return link
         try:
             source = await self._sources().provision(
                 tenant_id=link.tenant_id,
@@ -347,13 +371,6 @@ class VenueAccountLinkService:
             await self._repo.insert(link.link_id, record)
         else:
             await self._repo.update(link.link_id, {**existing, **record})
-        if previous is not None and previous.connection_id and previous.connection_id != link.connection_id:
-            # A re-link replaces the earlier connection and grant (new consent,
-            # possibly a rotated credential); the earlier ones stop governing.
-            await self._sources().revoke(
-                tenant_id=link.tenant_id, connection_id=previous.connection_id,
-                grant_id=previous.grant_id, actor=actor, reason="superseded_by_relink",
-            )
         return link
 
     async def revoke(
@@ -429,6 +446,16 @@ class VenueAccountLinkService:
         self.last_ambiguous_accounts = sorted(k for k, v in owners.items() if len(v) > 1)
         mapping = {k: next(iter(v)) for k, v in owners.items() if len(v) == 1}
         return mapping, truncated
+
+    async def record_sync_state(self, tenant_id: str, link_id: str, state: dict[str, Any]) -> None:
+        """Store the link's read checkpoint (no secret, no account payload)."""
+        existing = await self._repo.get_for_tenant(_required(tenant_id, "tenant_id_required"), link_id)
+        if existing is not None:
+            await self._repo.update(link_id, {**existing, "sync_state": state})
+
+    async def get_link(self, tenant_id: str, link_id: str) -> Optional[VenueAccountLink]:
+        row = await self._repo.get_for_tenant(_required(tenant_id, "tenant_id_required"), link_id)
+        return VenueAccountLink.from_record(row) if row is not None else None
 
     async def erase_subject(self, tenant_id: str, subject_id: str) -> int:
         tenant_id = _required(tenant_id, "tenant_id_required")
