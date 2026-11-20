@@ -56,6 +56,20 @@ async def _noop(_s):
     return None
 
 
+class Markets:
+    """Market reference fake: every market has its reference row unless listed."""
+
+    def __init__(self, missing=()):
+        self.missing_ids = set(missing)
+
+    async def ensure(self, ids):
+        from value.derivatives.market_reference import EnsureResult
+
+        missing = set(ids) & self.missing_ids
+        return EnsureResult(present=set(ids) - missing, missing=missing,
+                            reasons={"market_reference_source_missing:polymarket"} if missing else set())
+
+
 def _factory(venue, account_ref, credential=None):
     assert venue == "polymarket" and credential is None
 
@@ -85,7 +99,8 @@ async def linked():
 async def test_sync_admits_raw_records_and_writes_governed_fills(linked):
     service, link = linked
     fills = Fills()
-    sync = VenueAccountSync(link_service=service, fill_repo=fills, adapter_factory=_factory)
+    sync = VenueAccountSync(link_service=service, fill_repo=fills, adapter_factory=_factory,
+                            market_reference=Markets())
     result = await sync.sync_link(link)
     assert result.status == "ok", result
     assert result.fills_written == len(PM["trades"]["data"])
@@ -169,3 +184,24 @@ async def test_client_cannot_forge_governance_refs():
     assert strip_governance_refs(forged) == ["outcome=Yes"]
     refs = await _governed_fill_refs(TENANT, {"fill_id": "f", "source_refs": forged})
     assert not any(r.startswith(("source_grant_ref", "rights_decision_ref", "source_id")) for r in refs)
+
+
+async def test_fills_wait_for_their_market_reference(linked):
+    service, link = linked
+    fills = Fills()
+    first_market = None
+
+    def recording_factory(venue, account_ref, credential=None):
+        return _factory(venue, account_ref, credential)
+
+    events, _ = await recording_factory("polymarket", link.account_ref).pull_events()
+    first_market = next(e["payload"]["canonical_market_id"] for e in events
+                        if e["event_name"] == "derivatives_fill_observed")
+    result = await VenueAccountSync(
+        link_service=service, fill_repo=fills, adapter_factory=_factory,
+        market_reference=Markets(missing={first_market}),
+    ).sync_link(link)
+    assert result.status == "degraded" and result.reason.startswith("market_reference_missing")
+    assert all(r["canonical_market_id"] != first_market for r in fills.rows.values())
+    # The checkpoint did not move, so the waiting fills are read again later.
+    assert (await service.get_link(TENANT, link.link_id)).sync_state is None

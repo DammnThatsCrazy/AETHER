@@ -42,7 +42,7 @@ source_hashes:
   "services/api/journeys/": "sha256:c3e647829f3988c929ace6946d834c3d10e3a7ec5002b832ce08064c62297876"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:a8c177095215bb84f77efb2f742d1bb464fbaf74c58be73033b3adb510e6746c"
+  "services/api/value/": "sha256:17b1bd8e69002ee8632d330f34d46542802fe2adfe2000d3d1192d15f8372eba"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5581,6 +5581,15 @@ Polymarket, dYdX, GMX, Drift) accept only wallet and tenant-push links
 | POST | `/v1/derivatives/account-links/{link_id}/sync` | `derivatives:connect` | Same, for one link |
 | POST | `/v1/derivatives/account-links/{link_id}/disconnect` | `derivatives:connect` | Stop reading the account: the credential is deleted and the connection disabled. The grant stays, so admitted activity keeps its governed uses. Linking again reconnects under the same grant |
 | POST | `/v1/derivatives/account-links/{link_id}/revoke` | `derivatives:connect` | Revoke the grant first (the next raw write for the account is denied), then delete the credential and close the connection. Later propagation runs exclude the account. `404` for another tenant's link |
+
+Orders, fills and positions need their market's reference row first; intake
+of one without it returns `409` `market_reference_missing`. Kyber operators
+provision the Olympus market sources that fill the registry:
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/admin/kyber/derivatives/runtime/market-sources` | Kyber operator | Olympus market-reference source per supported venue (Hyperliquid, dYdX, Polymarket), or `null` when none is provisioned or its grant was revoked |
+| POST | `/v1/admin/kyber/derivatives/runtime/market-sources/{venue}` | Kyber operator | Provision the venue's source under the reserved `olympus` scope: a connection for `<venue>.markets.market_data` and a `public_reference` grant of class `olympus_provider`. Idempotent; `400` `market_reference_not_supported` for venues without a public market fetcher |
 
 DSR erasure revokes each of the subject's link grants, deletes their
 credentials and then deletes the rows. A client cannot supply

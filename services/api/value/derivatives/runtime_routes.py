@@ -139,6 +139,22 @@ def _fill_source_refs(fill: dict[str, Any]) -> list[str]:
     return refs
 
 
+async def _require_market_reference(fact: dict[str, Any]) -> None:
+    """Orders, fills and positions reference the global market registry; a
+    market without its Olympus reference row is refused with a clear code
+    instead of a foreign-key failure."""
+    market = str(fact.get("canonical_market_id") or "")
+    if not market:
+        return
+    from value.derivatives.market_reference import MarketReferenceService
+
+    result = await MarketReferenceService().ensure({market})
+    if market in result.missing:
+        raise HTTPException(status_code=409, detail={
+            "code": "market_reference_missing", "reasons": sorted(result.reasons),
+        })
+
+
 async def _governed_fill_refs(tenant_id: str, fill: dict[str, Any]) -> list[str]:
     """Fill refs with client-supplied governance stripped; when a governing
     venue link names the fill's account, the fill is admitted under its grant."""
@@ -413,6 +429,8 @@ async def ingest_observation(payload: DerivativesObservationIn, request: Request
         **{k: v for k, v in payload.payload.items() if k != "execution_by_aether"},
     }
     repo = repo_cls()
+    if id_field in ("fill_id", "position_id", "order_id"):
+        await _require_market_reference(payload.payload)
     if id_field == "fill_id":
         record["source_refs"] = await _governed_fill_refs(tenant_id, payload.payload)
     record = {k: v for k, v in record.items() if k in repo.columns}

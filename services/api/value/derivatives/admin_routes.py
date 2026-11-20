@@ -97,3 +97,45 @@ async def run_adapter_conformance(adapter_id: str, request: Request):
         raise HTTPException(status_code=404, detail=f"unknown adapter: {adapter_id}")
     report = await run_conformance(adapter)
     return report
+
+
+@admin_router.get("/market-sources")
+async def list_market_sources(request: Request):
+    """Olympus market-reference sources (reserved ``olympus`` scope) per venue."""
+    _gate(request)
+    from value.derivatives.market_reference import MARKET_FETCHERS, OlympusMarketSourceProvisioner
+
+    provisioner = OlympusMarketSourceProvisioner()
+    items = []
+    for venue in sorted(MARKET_FETCHERS):
+        connection = await provisioner.find(venue)
+        items.append({"venue": venue, "source": _source_view(connection)})
+    return {"items": items, "count": len(items)}
+
+
+@admin_router.post("/market-sources/{venue}", status_code=201)
+async def provision_market_source(venue: str, request: Request):
+    """Provision the Olympus public-reference market source for one venue.
+
+    Creates a connection under the reserved ``olympus`` scope and a
+    ``public_reference`` grant of class ``olympus_provider``. The grant passes
+    the same classification and Rights Authority checks as every other grant;
+    it licenses nothing for any customer tenant.
+    """
+    _gate(request)
+    from governance.security.request_context import require_kyber_operator
+    from value.derivatives.market_reference import MarketReferenceError, OlympusMarketSourceProvisioner
+
+    operator = require_kyber_operator(request)
+    try:
+        return await OlympusMarketSourceProvisioner().provision(venue=venue, actor=operator.actor_id)
+    except MarketReferenceError as exc:
+        raise HTTPException(status_code=400, detail={"code": exc.reason}) from exc
+
+
+def _source_view(connection) -> Optional[dict]:
+    if connection is None:
+        return None
+    from value.derivatives.market_reference import _source_record
+
+    return _source_record(connection)

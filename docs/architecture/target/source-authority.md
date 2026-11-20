@@ -110,7 +110,7 @@ Each invariant names the tests that pin it. Test names are relative to `services
 | 6 | BYOK does not imply data rights | `provider_runtime/test_rights_admission.py::test_byok_or_mismatched_source_grant_cannot_admit_tenant_raw_data` |
 | 7 | `olympus_source` does not provide an Olympus bypass | `unit/test_data_rights_grant_routes.py::test_tenant_cannot_claim_the_olympus_scope`; `unit/test_data_rights_source_relationship.py::test_invalid_pairings_are_rejected`; `provider_runtime/test_rights_admission_classes.py::test_denials_fail_closed`, `::test_olympus_class_grant_under_customer_tenant_has_no_retention_use`, `::test_retention_use_table`; `provider_runtime/test_bridge.py::test_olympus_scope_events_never_enter_the_tenant_pipeline`; `provider_runtime/test_replay.py::test_dry_run_does_not_count_olympus_scope_events_as_admitted` |
 | 8 | `partner_feed` does not imply cross-tenant reuse | `provider_runtime/test_rights_admission_classes.py::test_wrong_tenant_and_wrong_source_deny`; `ingestion/test_import_source_relationship.py::test_non_tenant_grant_cannot_admit_an_import` |
-| 9 | `public_reference` does not imply unrestricted commercial reuse | not pinned |
+| 9 | `public_reference` does not imply unrestricted commercial reuse | derivatives market reference: `tests/unit/derivatives/test_market_reference.py::test_olympus_source_is_a_public_reference_grant_without_tenant_rights`; other reference sources not pinned |
 | 10 | Revoked grants block subsequent provider raw writes | `provider_runtime/test_rights_admission.py::test_expired_or_revoked_grant_denies_admission`; `provider_runtime/test_rights_revocation_fence.py`; `tests/prod_equivalent/test_real_stack_rights_revocation_fence.py::test_a_write_after_a_committed_revocation_is_denied` |
 | 11 | One tenant's connection cannot bind another tenant's account | `provider_runtime/test_shop_account_binding.py::test_shop_held_by_another_tenant_is_rejected` |
 | 12 | Public reference data does not auto-merge with tenant-private identity | not pinned |
@@ -137,6 +137,8 @@ consent receipt as `consent_basis`); tenant push is `organization_system`
 (owner `tenant`). All use `tenant_byod_data`. Account sync and tenant-pushed
 fills go through `ProviderRawRightsAdmission`. Venue market data is a separate
 `<venue>.markets.market_data` capability for the `olympus` reference scope and
-never becomes tenant evidence. Disconnect stops acquisition and keeps the
+never becomes tenant evidence: `market_reference.py` admits public market
+records under an operator-provisioned `public_reference` grant and writes only
+the global market registry that tenant fills reference. Disconnect stops acquisition and keeps the
 grant; revoke ends the grant; erasure revokes and deletes.
 

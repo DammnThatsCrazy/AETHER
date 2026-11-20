@@ -52,6 +52,18 @@ def _jsonb(value: Any) -> str:
     return json.dumps(value, default=str)
 
 
+def _instant(column: str, value: Any) -> Any:
+    """Bind an ISO-8601 string for a ``*_at`` (timestamptz) column as an aware
+    datetime: asyncpg rejects strings for timestamptz parameters. Unparseable
+    or non-string values pass through unchanged, so PostgreSQL still decides."""
+    if not column.endswith("_at") or not isinstance(value, str) or not value:
+        return value
+    from shared.temporal.instant import try_parse_instant
+
+    instant, _reason = try_parse_instant(value)
+    return instant if instant is not None else value
+
+
 class TypedTableRepository:
     """Typed access to one Alembic-owned table.
 
@@ -98,7 +110,7 @@ class TypedTableRepository:
         placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
         params = [
             _jsonb(record[c]) if c in self.jsonb_columns and record[c] is not None
-            else record[c]
+            else _instant(c, record[c])
             for c in cols
         ]
         conflict = ", ".join(self.conflict_key)

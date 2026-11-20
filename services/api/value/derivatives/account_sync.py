@@ -97,12 +97,14 @@ class VenueAccountSync:
         fill_repo: Any = None,
         adapter_factory: Optional[Callable[..., Any]] = None,
         provisioner: Any = None,
+        market_reference: Any = None,
     ) -> None:
         self._links = link_service
         self._raw_store = raw_store
         self._fills = fill_repo
         self._factory = adapter_factory or default_adapter_factory
         self._provisioner = provisioner
+        self._markets = market_reference
 
     def _link_service(self) -> Any:
         if self._links is None:
@@ -124,6 +126,13 @@ class VenueAccountSync:
 
             self._fills = FillRepo()
         return self._fills
+
+    def _market_reference(self) -> Any:
+        if self._markets is None:
+            from value.derivatives.market_reference import MarketReferenceService
+
+            self._markets = MarketReferenceService()
+        return self._markets
 
     def _sources(self) -> Any:
         if self._provisioner is None:
@@ -168,6 +177,15 @@ class VenueAccountSync:
         except Exception:  # noqa: BLE001 - one venue outage never fails the sweep
             return LinkSyncResult(link.link_id, "failed", reason="venue_read_failed")
 
+        # Fills reference the global market registry; make sure each market has
+        # its Olympus reference row before any fill is written.
+        markets = {
+            str((e.get("payload") or {}).get("canonical_market_id") or "")
+            for e in events if e.get("event_name") == "derivatives_fill_observed"
+        } - {""}
+        reference = await self._market_reference().ensure(markets) if markets else None
+        unreferenced = set(reference.missing) if reference is not None else set()
+
         result = LinkSyncResult(link.link_id, "ok")
         for event in events:
             kind = _ACCOUNT_EVENT_TYPES.get(str(event.get("event_name") or ""))
@@ -181,8 +199,16 @@ class VenueAccountSync:
                 result.status, result.reason = "denied", "rights_denied"
                 return result
             result.admitted += 1
-            if kind == "fill" and await self._write_fill(link, event, admission):
+            market = str((event.get("payload") or {}).get("canonical_market_id") or "")
+            if kind == "fill" and market not in unreferenced and await self._write_fill(link, event, admission):
                 result.fills_written += 1
+
+        if unreferenced:
+            # Raw records are admitted and kept; the fills wait for their market
+            # reference rows, so the checkpoint does not move past them.
+            result.status = "degraded"
+            result.reason = "market_reference_missing:" + ",".join(sorted(reference.reasons))
+            return result
 
         await self._link_service().record_sync_state(link.tenant_id, link.link_id, {
             "connection_id": link.connection_id,
