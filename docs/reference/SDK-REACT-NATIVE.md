@@ -11,8 +11,8 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:70c1c086cd0471606b52c8d41b6ef3ac3982fddc44213f2e0b5d98fd9c7bbdd2"
-  "packages/sdk/react-native/src/index.tsx": "sha256:04a3dc4d417f7ffe71ca99712bd37ce158b506100492de8b04eb0de8195864cf"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:0179a67f331ef1c4d0429aaed32b5ded70685831270b997fe31cb7093b66838f"
+  "packages/sdk/react-native/src/index.tsx": "sha256:e194497e0710fba511874a35c6b055bfbd4bc1bf22a8f2586e564a574a8a02a3"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"

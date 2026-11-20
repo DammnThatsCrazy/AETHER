@@ -44,8 +44,9 @@ reviewed_source_commits:
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 source_hashes:
-  "apps/aether-web/src/": "sha256:c04e4256426c0d0781e433dd5759dbed91a310844e18872729fef4b12916b2be"
+  "apps/aether-web/src/": "sha256:6b68bedf92c4fe7ceea27f85b87dfebfc2d802c4c5c849bb4845eacf4fc65567"
   "apps/kyber-web/src/": "sha256:5e9cd64433118dece9555f7876a7b32b5369a61619accee30926ac77c7aa11c9"
   "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
 ---

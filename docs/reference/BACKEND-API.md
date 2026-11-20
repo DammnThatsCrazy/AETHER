@@ -29,6 +29,7 @@ reviewed_source_commits:
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 source_hashes:
   "services/api/actions/": "sha256:f56cc32e5aea69b1f386c121eb3881952540a1cd92ce65c94bd4d77cf7410ce6"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -37,7 +38,7 @@ source_hashes:
   "services/api/governance/": "sha256:51f72b87ef8db8f17887dec8e03982edad27e78486ce6db0b5424640813a737e"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:47c5efad9f19e50367a0c6f9d01fb21fbeb611999c607f43868ddd91f1dc008a"
+  "services/api/ingestion/": "sha256:ebbf2f62871b02acb0b8aa94e0b1188548b970521c6ace7d3d40c1266dbbb4bb"
   "services/api/intelligence/": "sha256:a1371d546f1a62b17f349cf6374cf0e2e000dfcf81e3c565d92ca34bbbe168fa"
   "services/api/journeys/": "sha256:c3e647829f3988c929ace6946d834c3d10e3a7ec5002b832ce08064c62297876"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"

@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:53635bb48461322dc7e32dd0e79ba6a72f1ced80940f53fc23503a76a3d89913"
+  "packages/sdk/web/src/index.ts": "sha256:4e88d988574aeb94850688bfbdefb97a3892a779d9efa6bcd1be65f3c1d6fbf9"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:b7951a75cfb47b19da22cae331399bb32a29e0545699cb8a49d63a1ee34fc3f9"
   "packages/shared/acquisition-evidence.ts": "sha256:e4e871496633b6b1712a313a0c6e99f29e61d50f6ba2c162579ca957f0468d4b"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"

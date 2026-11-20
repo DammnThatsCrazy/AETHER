@@ -17,8 +17,9 @@ reviewed_source_commits:
     reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction. It uses the API response type directly; tenant-owned webhook state, delivery history, and one-time secret behavior are unchanged."
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 source_hashes:
-  "apps/aether-web/": "sha256:60fe177daee405d124182f6764dbd38f1723ffbc47bab785a6fde4116ae811f0"
+  "apps/aether-web/": "sha256:2c9c56b7669698a07fdef3eca22005f844378741161b04a3143444a5b5f42780"
   "apps/demo/": "sha256:3ac6a6e98824000241d9e03ba38cfb251190a6e86a8c1abfddfd0b384b091902"
   "apps/kyber-web/": "sha256:ed7f2489ff3f141f1fc566cd898ab5423b19c8cfeb2045db6fb74811bb1b5750"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"

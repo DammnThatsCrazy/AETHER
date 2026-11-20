@@ -33,18 +33,19 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
   - {'commit': '1b75e2b8', 'reason': 'Merge of development (publish-sdk and repo-health workflow changes, reviewed upstream) with this PR''s pilot and remote staging plan changes; no further doc change.'}
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 source_hashes:
-  ".github/workflows/": "sha256:79a4f71369f962da36d17879a8e52df4a7bc8e06dd318d3e41c2ec2877837e8a"
+  ".github/workflows/": "sha256:5c7be818e6066efeb7cbb1c9f18ee32ff4be91b020469a8b96176673718ad3a4"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:327097c1efc7b214e8b56ead967d30dbab9376854840c20a2d59372660f2b6d5"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
-  "infra/cicd/aether-cicd/README.md": "sha256:e5ed5aba6b590ed3c78463a402d4a6b6da4adb9e68579f945aace9165b187f89"
+  "infra/cicd/aether-cicd/README.md": "sha256:666df63ebe85777e1b112c4ccbd6f10c8fce32211564464f07d162d18535a5e0"
   "infra/cicd/aether-cicd/main.py": "sha256:45ea58ecdc9250e8bedffcd9d9a369b1025c5dc7a1da23d38e0f6c1670494c0f"
   "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
-  "infra/cicd/aether-cicd/stages/": "sha256:1f2dfa70664b4aaf5135732225860b49e96419733d96558edafd3786c1c97d0a"
+  "infra/cicd/aether-cicd/stages/": "sha256:9b2cd637a45a28806e6aa2ed920dee2974212e0cbe7dce68dc0c79d105c3a238"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"

@@ -58,6 +58,7 @@ reviewed_source_commits:
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
   - {'commit': '61cd0dd6', 'reason': 'Reviewed 61cd0dd6: staging customer_services.access-mcp.repository is now true (the staging aether-access-mcp ECR repository is provisioned on the next reviewed apply; the service stays disabled), and staging plan tests pass the declared flag. Only the staging enablement status changes; cost impact is one ECR repository.'}
   - {'commit': '5797361b', 'reason': 'Two staging plan test runs now pass the declared MCP repository flag; no documented behavior changes.'}
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -82,9 +83,9 @@ source_hashes:
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "config/terraform_state_access_policy.yaml": "sha256:474ebd2cd035d8c27e09e6fd20da2b752ba5171225d8c832ab1c1fcb72a724d6"
   "infra/aws/README.md": "sha256:0da523ab56c398fcc42c98f4fdad5065fbd4737a5badd539fd68f738af39f3f8"
-  "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
+  "infra/aws/config/": "sha256:9cfdd0d8e4aab72fa147e005d075e6fd38e32e3bcedee13f491f9ecb7394961e"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
-  "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
+  "infra/aws/main.py": "sha256:4083fa2a81def1557b4a9086895cb69da89523bfbbfa1d63b7abf08ed282c068"
   "infra/aws/terraform/": "sha256:cf59fcd3e186f1a48843004f4e3d7b9fd01e00d1645a3d41a8837ec6d2c20e4c"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"

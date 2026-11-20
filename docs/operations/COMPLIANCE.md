@@ -15,7 +15,7 @@ source_hashes:
   "services/compliance/gdpr/": "sha256:2298051ab00184ea73d4a7ee7136c6944c1beaccaec007a9b2079087544fbda3"
   "services/compliance/main.py": "sha256:2b8ddf37aca8aa4b645e40abb4a80be50828046b41afa9e97ddb1d29bf8ee2b8"
   "services/compliance/policies/": "sha256:68c0713cd6d1b4ab6f25cab6d2874d9fb25c00804335367ce9dc897c150aed8a"
-  "services/compliance/soc2/": "sha256:01f35cf74d6b93f14ade0b69b3269848972a20e7f3ace46413745918a7c7096a"
+  "services/compliance/soc2/": "sha256:51589309e9b249d5feef95879586b196f95c8e8e318314729721f19b0b507d33"
 ---
 
 # Compliance Framework — GDPR & SOC 2
