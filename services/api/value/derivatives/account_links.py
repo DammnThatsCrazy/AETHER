@@ -32,6 +32,9 @@ from shared.common.common import utc_now
 from value.derivatives.models import DerivativesValidationError, validate_read_only_scopes
 
 
+LINK_SCAN_LIMIT = 1000
+
+
 class LinkMethod(StrEnum):
     WALLET_PROOF = "wallet_proof"
     READ_ONLY_API_KEY = "read_only_api_key"
@@ -310,10 +313,29 @@ class VenueAccountLinkService:
 
     async def subjects_by_account(self, tenant_id: str, venue: Optional[str] = None) -> dict[tuple[str, str], str]:
         """Active ``(venue, account_ref) -> subject_id`` map for one tenant."""
-        return {
-            (link.venue, link.account_ref): link.subject_id
-            for link in await self.list_links(tenant_id, venue=venue)
-        }
+        mapping, _truncated = await self.subjects_by_account_bounded(tenant_id, venue=venue)
+        return mapping
+
+    async def subjects_by_account_bounded(
+        self, tenant_id: str, venue: Optional[str] = None, *, limit: int = LINK_SCAN_LIMIT,
+    ) -> tuple[dict[tuple[str, str], str], bool]:
+        """Active account map plus whether the read hit ``limit``.
+
+        Reads ``limit + 1`` rows so a capped read is reported instead of being
+        presented as the tenant's complete linked population.
+        """
+        rows = await self._repo.list_for_tenant(
+            _required(tenant_id, "tenant_id_required"),
+            venue=venue,
+            status=LinkStatus.ACTIVE.value,
+            limit=limit + 1,
+        )
+        links = sorted(
+            (VenueAccountLink.from_record(r) for r in rows if r.get("tenant_id") == tenant_id),
+            key=lambda link: (link.venue, link.subject_id, link.account_ref),
+        )
+        truncated = len(links) > limit
+        return {(l.venue, l.account_ref): l.subject_id for l in links[:limit]}, truncated
 
     async def erase_subject(self, tenant_id: str, subject_id: str) -> int:
         return await self._repo.delete_by_principal(

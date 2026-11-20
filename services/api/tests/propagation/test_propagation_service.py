@@ -185,3 +185,14 @@ async def test_route_runs_for_caller_tenant_only(monkeypatch):
     assert seen["tenant"] == T
     assert response["data"]["tenant_id"] == T
     assert set(granted) == {"analytics", "derivatives:read"}
+
+
+async def test_capped_link_population_is_a_run_limitation():
+    class CappedLinks(FakeLinks):
+        async def subjects_by_account_bounded(self, tenant_id):
+            return await self.subjects_by_account(tenant_id), True
+
+    src, _, _ = sources()
+    src._links = CappedLinks()
+    result = await PropagationService(src).run(query())
+    assert "venue_account_link_scan_capped" in result.limitations
