@@ -16,7 +16,7 @@ source_hashes:
   "services/api/graph/interop/providers/ibc.py": "sha256:e3877b2a59b68ea507699246dc0d693dc3c3be3f281da2c7655f5e2da2234fee"
   "services/api/graph/interop/providers/layerzero_v2.py": "sha256:d0023a52c1d79801a9e635d224eee544f6c2cec9516b49cb6be8aa08c9d470e1"
   "services/api/graph/interop/providers/wormhole.py": "sha256:0bf5064d4968017fc3b2c386c10ab1b623dc08bb50221fb5527b2b9fe415cb90"
-  "services/api/value/derivatives/adapters/venue_base.py": "sha256:7ae90b4120648e02410f5725674cd59c812e8623b6d48b740a7df7f931f9dd60"
+  "services/api/value/derivatives/adapters/venue_base.py": "sha256:ad88b63cbe3eed7dbe8fc27358e51cfa5f9a5466e2082aa98c65409fa401e30b"
   "services/api/value/stablecoins/price_feed.py": "sha256:2a88c6769b436ccd3931e73d8523cf15023440a2a9b43a532af0eec0816648f1"
 ---
 

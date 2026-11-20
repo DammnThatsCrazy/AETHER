@@ -125,6 +125,8 @@ class RepositoryPropagationSources:
                 # The population (and so adoptions and baseline denominators)
                 # is a capped subset; say so rather than present it as complete.
                 reasons.add("venue_account_link_scan_capped")
+            if getattr(self._links, "last_ambiguous_accounts", None):
+                reasons.add("venue_account_link_ownership_ambiguous")
             return mapping
         except Exception:  # noqa: BLE001 - link authority failures stay explicit
             reasons.add("venue_account_link_authority_unavailable")

@@ -142,6 +142,7 @@ class VenueAccountLinkService:
             repo = VenueAccountLinkRepository()
         self._repo = repo
         self._evidence_repo = evidence_repo
+        self.last_ambiguous_accounts: list[tuple[str, str]] = []
 
     def _evidence(self) -> Any:
         if self._evidence_repo is None:
@@ -271,6 +272,16 @@ class VenueAccountLinkService:
         ))
 
     async def _upsert(self, link: VenueAccountLink) -> VenueAccountLink:
+        # One venue account belongs to at most one subject per tenant: a second
+        # active owner would make fill attribution ambiguous.
+        others = await self._repo.list_for_tenant(
+            link.tenant_id, venue=link.venue, status=LinkStatus.ACTIVE.value, limit=LINK_SCAN_LIMIT,
+        )
+        if any(
+            r.get("account_ref") == link.account_ref and r.get("subject_id") != link.subject_id
+            for r in others
+        ):
+            raise AccountLinkError("account_already_linked_to_another_subject")
         record = link.to_record()
         existing = await self._repo.get_for_tenant(link.tenant_id, link.link_id)
         if existing is None:
@@ -335,7 +346,14 @@ class VenueAccountLinkService:
             key=lambda link: (link.venue, link.subject_id, link.account_ref),
         )
         truncated = len(links) > limit
-        return {(l.venue, l.account_ref): l.subject_id for l in links[:limit]}, truncated
+        owners: dict[tuple[str, str], set[str]] = {}
+        for link in links[:limit]:
+            owners.setdefault((link.venue, link.account_ref), set()).add(link.subject_id)
+        # Accounts with more than one active owner (rows written before the
+        # single-owner rule) are excluded rather than assigned to one subject.
+        self.last_ambiguous_accounts = sorted(k for k, v in owners.items() if len(v) > 1)
+        mapping = {k: next(iter(v)) for k, v in owners.items() if len(v) == 1}
+        return mapping, truncated
 
     async def erase_subject(self, tenant_id: str, subject_id: str) -> int:
         return await self._repo.delete_by_principal(

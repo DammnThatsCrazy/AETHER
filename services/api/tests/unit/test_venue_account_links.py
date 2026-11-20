@@ -193,3 +193,32 @@ async def test_capped_account_map_reports_truncation(service):
     assert len(mapping) == 2 and truncated is True
     mapping, truncated = await svc.subjects_by_account_bounded(TENANT, limit=3)
     assert len(mapping) == 3 and truncated is False
+
+
+async def test_one_venue_account_cannot_have_two_active_owners(service):
+    svc, _ = service
+    await svc.link_tenant_push(tenant_id=TENANT, subject_id="alice", venue="hyperliquid",
+                               account_ref="Account-X", consent_receipt_id="cr")
+    with pytest.raises(AccountLinkError) as exc:
+        await svc.link_tenant_push(tenant_id=TENANT, subject_id="bob", venue="hyperliquid",
+                                   account_ref="Account-X", consent_receipt_id="cr")
+    assert exc.value.reason == "account_already_linked_to_another_subject"
+    # Re-linking the same owner is an idempotent upsert, not a conflict.
+    await svc.link_tenant_push(tenant_id=TENANT, subject_id="alice", venue="hyperliquid",
+                               account_ref="Account-X", consent_receipt_id="cr2")
+
+
+async def test_legacy_ambiguous_accounts_are_excluded_from_the_map(service):
+    from value.derivatives.account_links import LinkMethod, VenueAccountLink, link_id_for
+
+    svc, _ = service
+    for subject in ("alice", "bob"):  # rows written before the single-owner rule
+        link = VenueAccountLink(
+            link_id=link_id_for(TENANT, subject, "hyperliquid", "Account-X"), tenant_id=TENANT,
+            subject_id=subject, venue="hyperliquid", account_ref="Account-X",
+            method=LinkMethod.TENANT_PUSH, consent_receipt_id="cr",
+        )
+        await svc._repo.insert(link.link_id, link.to_record())
+    mapping, _ = await svc.subjects_by_account_bounded(TENANT)
+    assert ("hyperliquid", "Account-X") not in mapping
+    assert svc.last_ambiguous_accounts == [("hyperliquid", "Account-X")]

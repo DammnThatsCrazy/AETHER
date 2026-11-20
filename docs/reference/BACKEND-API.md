@@ -38,11 +38,11 @@ source_hashes:
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:05e0cd3c263d9886d3d91e255bc323c59ac8fe2e7d8c0137753c3322e55bb750"
-  "services/api/intelligence/": "sha256:b211e2492d4fe5891002a2887f2cfb029d9c84b5397a64a264d1229767e5bfad"
+  "services/api/intelligence/": "sha256:a1371d546f1a62b17f349cf6374cf0e2e000dfcf81e3c565d92ca34bbbe168fa"
   "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:868f4d541d28e9aed9cba3bac984cd500d7419d6926faab2b963e91da7ca5ad1"
+  "services/api/value/": "sha256:90c89d0135932f020cf0b8d33bbe34ce983ed8d2420827c726c88a6c5115bd2f"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -5553,7 +5553,9 @@ integer-cent `last_price` still accepted.
 Gated by `AETHER_VENUE_ACCOUNT_LINKS_ENABLED` (default off; `503` while off).
 A link binds one tenant subject to one read-only venue account and scopes that
 account's fills and positions to the tenant. Every link needs a consent
-receipt; no secret is stored.
+receipt; no secret is stored. A venue account has at most one active owner per
+tenant: linking it to a second subject returns `400`
+`account_already_linked_to_another_subject`.
 
 | Method | Path | Permission | Summary |
 |---|---|---|---|
