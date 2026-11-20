@@ -425,6 +425,12 @@ jobs:
               *) echo "::error::deployment_lane must be pilot or full, got $DEPLOYMENT_LANE"; exit 1 ;;
             esac
             plan_args+=("-var=deployment_lane=${DEPLOYMENT_LANE}")
+            # Carry the declared staging Access Kit MCP state
+            # (config/runtime_deployment.yaml customer_services.access-mcp) so the
+            # plan satisfies the lifecycle agreement precondition.
+            mcp_raw="$(python "${GITHUB_WORKSPACE}/scripts/release/staging_customer_services.py" --terraform-vars)"
+            mapfile -t mcp_vars <<< "$mcp_raw"
+            plan_args+=("${mcp_vars[@]}")
           fi
           terraform plan "${plan_args[@]}" -out="tfplan-${PROFILE}"
           # The human-readable rendering redacts sensitive values itself and

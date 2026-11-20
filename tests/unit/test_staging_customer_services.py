@@ -134,3 +134,35 @@ def test_every_job_calling_the_helper_installs_pyyaml_first():
             continue
         installs = [i for i, run in enumerate(runs) if "pip install" in run and "pyyaml" in run]
         assert installs and min(installs) < min(uses_helper), name
+
+
+def test_terraform_vars_mirror_the_promote_inputs(capsys):
+    assert MODULE.main(["--terraform-vars"]) == 0
+    printed = capsys.readouterr().out.splitlines()
+    expected = [f"-var={name}={value}" for name, value in MODULE.access_mcp_promote_inputs("staging")]
+    assert printed == expected
+
+
+def test_pilot_plan_passes_the_mcp_inputs():
+    """Every staging planner must carry the declared MCP state, or the
+    agreement precondition in infra/aws/terraform/outputs.tf fails."""
+    text = (ROOT / ".github/workflows/pilot-staging.yml").read_text()
+    plan = text.split("            plan)", 1)[1].split(";;", 1)[0]
+    assert "staging_customer_services.py --promote-inputs" in plan
+    assert '"${access_mcp_inputs[@]}"' in plan
+    doc = yaml.safe_load(text)
+    job = doc["jobs"]["dispatch-authority"]
+    checkout = next(s for s in job["steps"] if "actions/checkout" in str(s.get("uses", "")))
+    paths = checkout["with"]["sparse-checkout"].split()
+    assert {"scripts/release", "config"} <= set(paths)
+    runs = [str(s.get("run", "")) for s in job["steps"]]
+    install = next(i for i, r in enumerate(runs) if "pip install" in r and "pyyaml" in r)
+    use = next(i for i, r in enumerate(runs) if "staging_customer_services.py" in r)
+    assert install < use
+
+
+def test_remote_ci_plan_passes_the_mcp_vars_for_staging():
+    text = (ROOT / ".github/workflows/infrastructure.yml").read_text()
+    staging_branch = text.split('if [ "$PROFILE" = staging ]; then', 1)[1].split("          fi", 1)[0]
+    assert "staging_customer_services.py\" --terraform-vars" in staging_branch
+    assert '"${mcp_vars[@]}"' in staging_branch

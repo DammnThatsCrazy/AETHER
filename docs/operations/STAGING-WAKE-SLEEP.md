@@ -48,7 +48,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:5438ebb42b66a0d798a3488b24c463e17725337b4c19e8ec2ca522c563217be7"
-  ".github/workflows/pilot-staging.yml": "sha256:36ebc8a80d84008b4b55c2fd562b28aa67f6a02e08478de9e4a4cbd77897a07a"
+  ".github/workflows/pilot-staging.yml": "sha256:6db71f1a5bd78bb73aafa7f6785d5848f9bea49183ff6483b0c9442d23eb703b"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:b48c4f2b4edfc25be0b4de2aba35213dca689af9684e13d34856ee76c77e08b1"
   ".github/workflows/staging-lifecycle.yml": "sha256:c0e9550d8465d09c1a82a81f68e43e6d7b5109685a81dbbc8777a03c630a9b24"
@@ -56,7 +56,7 @@ source_hashes:
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
+  "config/runtime_deployment.yaml": "sha256:a06f7a35966acf7aa9447d19b0d3ca7d39ef45db3ab28922ba8f4c074ab7fa8b"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -124,12 +124,18 @@ matrix, under `profiles.staging.customer_services.access-mcp` in
 
 Enabling it is ordered, because the staging account owns its own
 `aether-access-mcp` repository. Every step is a reviewed change to
-`profiles.staging.customer_services.access-mcp`, which the lifecycle passes to
-each wake and sleep plan (`staging_customer_services.py --promote-inputs`), so
-the applied MCP state survives every wake and sleep:
+`profiles.staging.customer_services.access-mcp`. Every staging planner reads
+that entry: the lifecycle wake and sleep plans and the `pilot-staging.yml` plan
+pass it as workflow inputs (`staging_customer_services.py --promote-inputs`),
+and the `infrastructure.yml` remote CI plan passes it as Terraform variables
+(`--terraform-vars`). The applied MCP state therefore survives every wake, sleep
+and pilot plan. A direct `terraform-promote.yml` staging dispatch must pass the
+same values (print them with `--promote-inputs`), or the agreement precondition
+fails the plan:
 
 1. Set `repository: true` and plan and apply staging (which passes
-   `enable_access_mcp_repository=true`).
+   `enable_access_mcp_repository=true`). *Declared in the runtime matrix; the
+   repository exists once the next reviewed staging apply runs.*
 2. Publish an image with **Publish Access Kit MCP image** (`target: staging`,
    from `main` or `staging`), using the staging environment's
    `AWS_ACCESS_MCP_PUBLISH_ROLE_ARN`.

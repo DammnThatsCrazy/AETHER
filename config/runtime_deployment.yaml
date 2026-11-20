@@ -88,7 +88,7 @@ profiles:
       access-mcp:
         enabled: false
         desired_count: 1
-        repository: false
+        repository: true
         image_digest: ""
         oauth: false
         dcr: false
