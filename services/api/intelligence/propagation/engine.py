@@ -307,18 +307,35 @@ def _episode(
     # ── coordination ─────────────────────────────────────────────────────
     lockstep = _lockstep_groups(adopters, query.lockstep_window_seconds, query.lockstep_min_entities)
     funding: set[tuple[str, str]] = set()
+    funding_time_unknown = False
     for (a, b), exposures in exposures_by_pair.items():
-        if a in adopter_ids and b in adopter_ids and a < b and any(
-            e.channel is ExposureChannel.ONCHAIN for e in exposures
-        ):
-            ta, tb = at[a], at[b]
-            if ta and tb and abs((ta - tb).total_seconds()) <= query.lockstep_window_seconds:
+        if not (a in adopter_ids and b in adopter_ids and a < b):
+            continue
+        ta, tb = at[a], at[b]
+        if not (ta and tb and abs((ta - tb).total_seconds()) <= query.lockstep_window_seconds):
+            continue
+        # Funding is coordination evidence only when it was in force before
+        # the first of the two entries; a later payment cannot explain them.
+        first_entry = min(ta, tb)
+        for exposure in exposures:
+            if exposure.channel is not ExposureChannel.ONCHAIN:
+                continue
+            observed = _parse(exposure.observed_at)
+            valid_to = _parse(exposure.valid_to)
+            if observed is None:
+                funding_time_unknown = True
+                continue
+            if observed <= first_entry and (valid_to is None or valid_to > first_entry):
                 funding.add((a, b))
+                break
     c_reasons = []
     if lockstep:
         c_reasons.append("lockstep_entry_group")
     if funding:
         c_reasons.append("shared_onchain_funding_lockstep_entry")
+    coordinated = bool(lockstep or funding)
+    if funding_time_unknown and not funding:
+        c_reasons.append("funding_time_unknown")
     coordination = CoordinationSignal(
         lockstep_groups=tuple(lockstep),
         shared_funding_pairs=tuple(sorted(funding)),
@@ -331,8 +348,10 @@ def _episode(
     reasons: list[str]
     if len(adopters) < 2:
         classification, reasons = EpisodeClassification.INSUFFICIENT_DATA, ["single_adopter"]
-    elif coordination.reason_codes:
-        classification, reasons = EpisodeClassification.COORDINATED, list(coordination.reason_codes)
+    elif coordinated:
+        classification, reasons = EpisodeClassification.COORDINATED, [
+            r for r in coordination.reason_codes if r != "funding_time_unknown"
+        ]
     elif not exposure_known:
         classification, reasons = EpisodeClassification.INSUFFICIENT_DATA, ["no_exposure_evidence"]
     elif not sizes_ok:

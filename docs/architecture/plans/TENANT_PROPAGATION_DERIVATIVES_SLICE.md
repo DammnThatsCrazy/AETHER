@@ -57,6 +57,8 @@ Each episode is labelled `organic`, `viral`, `coordinated`, or
 - **Coordination.** At least `lockstep_min_entities` distinct adopters inside
   one `lockstep_window_seconds` window, or adopter pairs linked by on-chain
   `PAYS` who entered within that window, mark the episode `coordinated`. The
+  funding link counts only if it was in force before the first of the two
+  entries; a later payment is never coordination evidence. The
   defaults (60 seconds, 5 entities, 2.0 lift) are pattern discovery's
   `DetectorConfig` defaults, so lockstep means the same thing in both places.
 - **Insufficient data.** Too few linked users, no unexposed comparison group,

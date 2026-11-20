@@ -300,3 +300,17 @@ def test_mixed_utc_offsets_order_chronologically():
     (episode,) = result.episodes
     assert episode.seed_subject == "u1"  # 10:00Z precedes 11:00Z despite the string order
     assert episode.metrics.exposed_adopters == 1
+
+
+def test_funding_after_the_entries_is_not_coordination_evidence():
+    def pays(start):
+        return {"type": "PAYS", "from": "u1", "to": "u2", "properties": {
+            "tenant_id": T, "relationship_predicate": "PAYS", "valid_from": at(start),
+            "evidence_refs": [{"id": f"tx:{start}"}], "idempotency_key": f"pays:{start}"}}
+
+    later = run([adopt("u1", 0), adopt("u2", 0.5)], [pays(9 * 24 * 60)], POP)
+    episode = later.episodes[0]
+    assert episode.coordination.shared_funding_pairs == ()
+    assert episode.classification is not EpisodeClassification.COORDINATED
+    before = run([adopt("u1", 0), adopt("u2", 0.5)], [pays(-100)], POP)
+    assert before.episodes[0].classification is EpisodeClassification.COORDINATED
