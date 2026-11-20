@@ -67,6 +67,7 @@ services:
   delivery: {class: core, stage: action, reason: "durable provider dispatch and outcome tracking"}
   demo_seed: {class: internal, stage: product, reason: "explicit backend-owned synthetic demonstration data"}
   derivatives: {class: experimental, stage: intake, reason: "observation-only derivatives intelligence"}
+  device_integrity: {class: experimental, stage: evidence, reason: "opt-in, flag-gated mobile app attestation (App Attest, Play Integrity) verified into per-event device evidence"}
   diagnostics: {class: internal, stage: control-plane, reason: "diagnostics and error monitoring"}
   dsr_propagation: {class: core, stage: control-plane, reason: "data subject request propagation records"}
   dune_feeder: {class: beta, stage: intake, reason: "governed Dune analytics feeder (admin-only)"}
