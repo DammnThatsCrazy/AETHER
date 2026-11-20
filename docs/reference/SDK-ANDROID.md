@@ -207,7 +207,7 @@ payment, or finality in the graph.
 ## Consent Management
 
 The platform's canonical consent registry
-(`packages/shared/contracts/consent-registry.json`) defines **12 purposes**:
+(`packages/shared/contracts/consent-registry.json`) defines the purposes:
 base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
 `commerce`, plus explicit opt-in purposes `financial_activity`, `credit`,
 `location`, `economic_observability`, `cross_chain_observability`, and
@@ -215,16 +215,16 @@ base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
 by an accept-all path. Present each explicit opt-in purpose as a separate
 consent choice in your UI.
 
-The Android runtime exposes all 12 as `canonicalConsentPurposes`, each stamped
-into per-event `context.consent`, and the six explicit opt-in purposes as
-`explicitOptInPurposes`. `grantAll()` grants exactly the six base purposes.
+The Android runtime exposes every registry purpose as `canonicalConsentPurposes`, each stamped
+into per-event `context.consent`, and the explicit opt-in purposes as
+`explicitOptInPurposes`. `grantAll()` grants the canonical purposes minus the explicit opt-in ones.
 `validate_sdk_parity` fails if either list drifts from `packages/shared/consent.ts`.
 
 ```kotlin
 // Grant specific purposes
 Aether.grantConsent(listOf("analytics", "marketing"))
 
-// Grant the six base purposes (never an explicit opt-in purpose)
+// Grant every base purpose (never an explicit opt-in purpose)
 Aether.grantAll()
 
 // Explicitly grant credit after showing separate consent UI

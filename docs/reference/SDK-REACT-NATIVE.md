@@ -245,13 +245,13 @@ payment, or finality in the graph.
 
 ## Consent Management
 
-Consent purposes are **registry-derived** — the canonical set of 12 purposes
+Consent purposes are **registry-derived** — the canonical set of purposes
 lives in `packages/shared/contracts/consent-registry.json`. Base purposes
 (`analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`) can
 be granted together; explicit opt-in purposes (`financial_activity`, `credit`,
 `location`, `economic_observability`, `cross_chain_observability`,
 `fraud_prevention`) **always require separate opt-in** and are never granted by
-`grantAll()` (which grants exactly the six base purposes). Present each
+`grantAll()` (which grants exactly the base purposes, `GRANT_ALL_PURPOSES`). Present each
 explicit opt-in purpose as a separate consent choice in your UI.
 
 ```typescript

@@ -230,8 +230,16 @@ class ActivationService:
         # looks for the first SDK event until one is recorded (then never again).
         if not record.get("first_sdk_event"):
             await self._reconcile_first_sdk_event(record)
-            if record.get("first_sdk_event"):
-                record = await self.repo.save_or_update(record)
+            evidence = record.get("first_sdk_event")
+            if evidence:
+                # Persist only the evidence: the snapshot above predates the
+                # awaited Bronze read, and writing it back whole could undo a
+                # transition another request made in the meantime.
+                stored = await self.repo.record_first_sdk_event(
+                    record["activation_id"], tenant_id, evidence
+                )
+                if stored is not None:
+                    record = stored
         return await self._status_view(record)
 
     async def select_plan(self, tenant_id: str, plan_tier: str) -> dict[str, Any]:

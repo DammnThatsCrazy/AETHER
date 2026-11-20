@@ -37,11 +37,11 @@ source_hashes:
   "services/api/governance/": "sha256:51f72b87ef8db8f17887dec8e03982edad27e78486ce6db0b5424640813a737e"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:e4d96a1192a29f06fedbbb2a10d4c171402064c5768698850ef7f7940a017e73"
+  "services/api/ingestion/": "sha256:05e0cd3c263d9886d3d91e255bc323c59ac8fe2e7d8c0137753c3322e55bb750"
   "services/api/intelligence/": "sha256:05083eef07cb394fd0e9d37143b2f0a6d98f6507a71f8081018e09baca71d3d2"
   "services/api/journeys/": "sha256:1d607b61e6d15127563097bfadedd5ee339d3043398775c6dd8904688b497c28"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
+  "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
   "services/api/value/": "sha256:868f4d541d28e9aed9cba3bac984cd500d7419d6926faab2b963e91da7ca5ad1"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
