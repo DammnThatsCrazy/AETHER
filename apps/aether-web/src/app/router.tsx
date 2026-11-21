@@ -120,7 +120,7 @@ export function AppRouter() {
       <Route
         path="/signup"
         element={
-          <PageSuspense>
+          <PageSuspense frameless>
             <SignupPage />
           </PageSuspense>
         }

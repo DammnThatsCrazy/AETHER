@@ -9,7 +9,6 @@
 
 import type { ReactNode } from 'react';
 import { Card, CardContent, EmptyState, ErrorState, LoadingState, Badge } from '@aether/ui';
-import { KyberSessionBanners } from '@kyber/features/auth';
 
 interface SecurityPageShellProps {
   readonly title: string;
@@ -26,7 +25,6 @@ export function SecurityPageShell({
 }: SecurityPageShellProps) {
   return (
     <div className="flex flex-col">
-      <KyberSessionBanners />
       <div className="p-6 max-w-6xl space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>

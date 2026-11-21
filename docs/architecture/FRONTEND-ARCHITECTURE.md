@@ -45,9 +45,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:112a08aa1c4e9059249364b4546319f6b88cffec9e07a4aef5f922d1d08f9ec3"
-  "apps/kyber-web/src/": "sha256:3a75efc5a3abc2fe63ede4835f0d06722cca632b813b69818e35475804e357c1"
-  "packages/ui/core/src/": "sha256:4146ce910b5dfc015e11e3f0a886b1bf501e1d3c9314d94533b475269dda8ff5"
+  "apps/aether-web/src/": "sha256:c99e185b2d7678f8e32ccbbcdee6705d875f9ca7b723ce41f28aafec56c82495"
+  "apps/kyber-web/src/": "sha256:5bcc84037e56c027dd6b529e4767005f87972e4d87a4ebfec8eab4c898c73660"
+  "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -84,7 +84,7 @@ the root.
   is shown as a wait message built from `retry_after_seconds`
   (`features/auth/rate-limit.ts`) rather than as a wrong password or code. Login
   mirrors the public website's portal (shared `AuthPortal*` primitives in
-  `@aether/ui`, also used by Kyber's operator login) and is email-first; the
+  `@aether/ui`, also used by Kyber's operator login; Kyber's session banners, including **Step-up required** with **Re-verify with Google**, are mounted once in its app shell so they show on every console page) and is email-first; the
   website's "Sign in" link `/app/signin` redirects to `/login`. Google and Apple
   (full-width) and Microsoft and Slack (compact) appear for each social
   connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`
