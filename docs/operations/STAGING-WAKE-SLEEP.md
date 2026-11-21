@@ -480,6 +480,12 @@ otherwise, in New York time:
 | 08:15 | `plan-wake` for the newest release built from `staging`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum` and `max_awake_hours=8`. Staging is ready at about 08:45. |
 | 17:00 | `apply-sleep` with the same newest release's backend digest and commit (`backend_image_digest`, `intended_release_sha`), so the reconcile can bind Terraform to an image tagged with the reviewed commit. If no release can be found or read (listing, download, checksum or release JSON errors), the sleep still runs and stops staging; only the Terraform state reconcile fails, loudly. |
 
+"Newest release" is the newest successful push-to-`staging` delivery run that
+still carries its `release-<sha>` artifact. The workflow lists runs unfiltered
+and selects successful ones itself, because GitHub's `?status=success` run
+index can lag a finished run by over half an hour and would otherwise pick an
+older release whose commit no longer matches the staging Amplify build.
+
 It holds no AWS credentials and runs no Terraform. It dispatches the same
 lifecycle actions an operator would, so every check above still applies:
 `apply-wake` re-validates the plan it was handed, and `terraform-promote.yml`
