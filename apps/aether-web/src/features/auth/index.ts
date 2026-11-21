@@ -3,3 +3,5 @@ export { RequireAuth } from './require-auth';
 export { resolveAuthGrant } from './grant';
 export type { AuthGrantResponse, HumanSessionGrant, ResolvedAuthGrant } from './grant';
 export { describeAuthRateLimit, rateLimiter, retryAfterSeconds } from './rate-limit';
+export { SignInCodeStep } from './sign-in-code-step';
+export type { SignInCodeKind } from './sign-in-code-step';

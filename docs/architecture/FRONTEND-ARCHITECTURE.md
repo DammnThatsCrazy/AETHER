@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:4ec9bc77bc244a0c80fcc9786b9867f70d4128f836e9164ebf7b1cf4e68669d1"
+  "apps/aether-web/src/": "sha256:af3fcd939145bf172a8d1299590b58b3dc48cd9e8878225bdd05eed7c5741c46"
   "apps/kyber-web/src/": "sha256:5bcc84037e56c027dd6b529e4767005f87972e4d87a4ebfec8eab4c898c73660"
   "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
@@ -103,7 +103,7 @@ the root.
   session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
   the next sign-in asks again instead of silently reusing it; if Auth0 cannot
   be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
-  `/v1/auth/sso/callback`, which links a verified email to its existing user or
+  `/v1/auth/sso/callback`; a first-time sign-up then shows **Check your email** and finishes with the emailed 6-digit code (the same token sent again with `signup_code`), and a user with two-step verification gets the **Two-step verification** code step (authenticator or recovery code, `/v1/auth/mfa/verify`), which also follows the password step on `/login` (`SignInCodeStep` in `features/auth`). Settings → Personal → Profile has the opt-in **Two-step verification** card: set up with a QR code (`qrcode-generator`) or the key, confirm with a code, save recovery codes, turn off or replace codes with a current code. `/v1/auth/sso/callback` which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
   Auth0 configured, `/signup` is the portal sign-up screen (same primitives as
   sign-in; it shows the chosen plan, the same social buttons, and a work email

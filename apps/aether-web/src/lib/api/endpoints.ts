@@ -57,6 +57,20 @@ export interface AuthGrantResponse {
   api_key?: string;
   message?: string;
   name?: string;
+  /** Sign-in stopped for two-step verification; finish with auth.mfaVerify. */
+  mfa_required?: boolean;
+  mfa_challenge?: string;
+  /** First-time SSO sign-up: a code was emailed; resend the token with it. */
+  signup_verification_required?: boolean;
+  email?: string;
+  recovery_codes_remaining?: number;
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  method: 'totp' | null;
+  enrolled_at: string | null;
+  recovery_codes_remaining: number;
 }
 
 // ─── Response wrapper ────────────────────────────────────────────────────────
@@ -1852,13 +1866,35 @@ export const api = {
 
     /** Exchange Auth0 JWT for an Aether session (or legacy API key) — SSO callback. */
     // Body field must match SSOCallbackRequest (services/api/tenancy/auth/routes.py).
-    ssoCallback: (jwt: string) =>
-      restClient.post('/v1/auth/sso/callback', wrap(unknownSchema), { token: jwt })
+    // A first-time sign-up is answered with signup_verification_required; send
+    // the same token again with the emailed code to finish.
+    ssoCallback: (jwt: string, signupCode?: string) =>
+      restClient.post('/v1/auth/sso/callback', wrap(unknownSchema), { token: jwt, signup_code: signupCode })
+        .then(r => r.data as AuthGrantResponse),
+
+    /** Second step for an account with two-step verification. */
+    mfaVerify: (challenge: string, code: string) =>
+      restClient.post('/v1/auth/mfa/verify', wrap(unknownSchema), { challenge, code })
         .then(r => r.data as AuthGrantResponse),
   },
 
   // ── Self-service account (me) ──────────────────────────────────────────────
   me: {
+    /** Opt-in two-step verification for the signed-in user. */
+    mfa: {
+      status: () => restClient.get('/v1/me/mfa', wrap(unknownSchema)).then(r => r.data as MfaStatus),
+      enroll: () =>
+        restClient.post('/v1/me/mfa/enroll', wrap(unknownSchema), {})
+          .then(r => r.data as { secret: string; otpauth_uri: string; expires_in_seconds: number }),
+      confirm: (code: string) =>
+        restClient.post('/v1/me/mfa/enroll/confirm', wrap(unknownSchema), { code })
+          .then(r => r.data as { enabled: true; recovery_codes: string[] }),
+      disable: (code: string) =>
+        restClient.post('/v1/me/mfa/disable', wrap(unknownSchema), { code }).then(r => r.data as { enabled: false }),
+      regenerateRecoveryCodes: (code: string) =>
+        restClient.post('/v1/me/mfa/recovery-codes', wrap(unknownSchema), { code })
+          .then(r => r.data as { recovery_codes: string[] }),
+    },
     /** Authenticated tenant profile, plan, and billing. */
     profile: () =>
       restClient.get('/v1/me', wrap(z.object({ graph_scope: graphScopeAuthoritySchema }).passthrough())).then(r => r.data as {

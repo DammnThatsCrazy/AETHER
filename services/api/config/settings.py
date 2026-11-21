@@ -561,6 +561,10 @@ class TrustPlaneConfig:
     sso_self_signup_enabled: bool = _env_bool(
         "SSO_SELF_SIGNUP_ENABLED", _env("AETHER_ENV", "local") != "staging"
     )
+    # A first-time Auth0 sign-up (any connection) must enter a one-time code
+    # emailed to its address before a workspace is created. Returning users and
+    # accepted invitations are never asked.
+    sso_signup_email_code_required: bool = _env_bool("SSO_SIGNUP_EMAIL_CODE_REQUIRED", True)
 
     # One-time, staging-only first-admin bootstrap.  This is deliberately
     # disabled by default and requires a high-entropy operator token plus an

@@ -40,7 +40,7 @@ source_hashes:
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/api/repositories/repos.py": "sha256:fe2d94f66f7df1d52bc135c9021d1039fc39140378587b7ed2b24f123164a324"
-  "services/api/tenancy/auth/routes.py": "sha256:28646c94b30efa7f437fe477209cb7877202c0692caf8076689b7bc407bf7c76"
+  "services/api/tenancy/auth/routes.py": "sha256:3e7e703144432cd93cc9adc992764263061926bd6cec4a94b1d522da867b175e"
 ---
 
 # AETHER first-admin bootstrap
@@ -90,9 +90,12 @@ or extraction budget, and access to the operator-only `/v1/admin/**` and
 `/v1/diagnostics/**` routes; see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
 Signing in to `app.staging` through Auth0 with the bootstrap email, verified by
 the identity provider, links that Auth0 identity to the admin user and lands in
-this tenant. Use **Continue with Olympus sign-in** on the login page (Auth0
-Universal Login; sign up or reset the password there). Do not use **Create
-one** (`/signup`): it registers a new customer tenant on a plan instead. Teammates and advisors are invited from it with
+this tenant. On the login page enter the email, then use **Use another
+sign-in method** (Auth0 Universal Login; sign up or reset the password there),
+or **Continue with Google** when the address is a Google account. Because the
+email links to an existing user, no sign-up code is asked. Do not use **Create
+a workspace** (`/signup`): it registers a new customer tenant on a plan, and a
+first-time sign-up there must enter the 6-digit code emailed to it. Teammates and advisors are invited from it with
 `POST /v1/account/organization/invitations`; their first Auth0 sign-in joins it.
 Founders and internal staff need no invitation: their addresses are listed in
 Terraform `platform_operator_emails` (`PLATFORM_OPERATOR_EMAILS`, pilot lane

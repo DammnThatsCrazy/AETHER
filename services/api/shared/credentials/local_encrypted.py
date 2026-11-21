@@ -120,6 +120,14 @@ class LocalEncryptedCredentialBackend(CredentialBackend):
                 )
         return base64.urlsafe_b64decode(ciphertext.encode()).decode()
 
+    def seal(self, plaintext: str) -> str:
+        """Encrypt a small secret with the active key (public seam for non-credential secrets)."""
+        return self._encrypt(plaintext)
+
+    def unseal(self, ciphertext: str) -> str:
+        """Decrypt a value from :meth:`seal`, falling back to the previous key."""
+        return self._decrypt(ciphertext)
+
     # ── interface ──────────────────────────────────────────────────────────
     async def create(
         self,

@@ -53,6 +53,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     # SSO via Auth0 (Google, Apple, Microsoft, Twitter/X, Slack).
     "/v1/auth/sso/callback",
     "/v1/auth/sso/providers",
+    # Second step of sign-in for users with two-step verification: the caller
+    # holds only a short-lived challenge from a completed first factor.
+    "/v1/auth/mfa/verify",
     # One-time, staging-only first-admin bootstrap. The handler requires a
     # high-entropy Secrets Manager token and an allowlisted operator email.
     "/v1/auth/bootstrap/first-admin",

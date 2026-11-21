@@ -30,7 +30,7 @@ source_hashes:
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
   "services/api/actions/agent_lineage/engine.py": "sha256:da90a532b17db5e7359823c15ad44b7c45583038c5f40cf8edbcf6eda2fc3f04"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
-  "services/api/config/settings.py": "sha256:b1c2ebd96136fe70afcbaf79ebef7ac4076c4727de20cd8fb955fa07c78bf508"
+  "services/api/config/settings.py": "sha256:a70791807925c42cc1fea6409fee12f13dc91a57323ac916c2929305755fc64c"
   "services/api/ingestion/device_integrity/app_attest.py": "sha256:c0c8337aa587799fb87ae67cfd942c2c32db4f7fab4e23a4a39684181e8b3a4e"
   "services/api/ingestion/device_integrity/play_integrity.py": "sha256:556236e83bcc2e4db2a43a4116c3b87794ecffb02e24a43592362ebea4c98178"
   "services/api/ingestion/device_integrity/routes.py": "sha256:28f99915d7dc6a7ce96caf318bce4adc682687cc3aafcb26dd245bb95fcf67aa"

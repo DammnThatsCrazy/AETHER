@@ -34,7 +34,7 @@ source_hashes:
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
   "config/storage_policies.yaml": "sha256:58e2ed6c49220a7e31bec5fd6dcf39a86899b17a268eb66d3b0293ab3d7d1b81"
   "docs/_generated/adapter-certification-matrix.json": "sha256:a0905786f6c85708910a404e3a9212ca4ffcf06ef1ef48938729b87aa1c4967c"
-  "services/api/config/settings.py": "sha256:b1c2ebd96136fe70afcbaf79ebef7ac4076c4727de20cd8fb955fa07c78bf508"
+  "services/api/config/settings.py": "sha256:a70791807925c42cc1fea6409fee12f13dc91a57323ac916c2929305755fc64c"
   "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
   "services/api/workers/runtime/consumer_specs.py": "sha256:03cfaa1cf4341a5ac31b6222d09b29e2823162e5c6c0aac10e7c8215089cf516"

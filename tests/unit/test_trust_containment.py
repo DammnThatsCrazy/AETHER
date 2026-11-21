@@ -158,9 +158,15 @@ class TestHumanAuthIssuesSessionsNotKeys:
                 return {"sub": "sub-1", "email": "s@x.io", "name": "S", "email_verified": True}
             monkeypatch.setattr(a0, "validate_auth0_token", _claims)
 
+            ver = importlib.import_module("shared.auth.verification")
+            monkeypatch.setattr(ver, "generate_otp", lambda: "246810")
             auth = importlib.import_module("tenancy.auth.routes")
             repos = importlib.import_module("repositories.repos")
-            resp = _run(auth.sso_callback(auth.SSOCallbackRequest(token="tok"), Response()))
+            # A first-time sign-up is asked for the emailed code before anything exists.
+            first = _run(auth.sso_callback(auth.SSOCallbackRequest(token="tok"), Response()))["data"]
+            assert first["signup_verification_required"] is True
+            assert "session" not in first and "tenant_id" not in first
+            resp = _run(auth.sso_callback(auth.SSOCallbackRequest(token="tok", signup_code="246810"), Response()))
             data = resp["data"]
             assert "api_key" not in data
             assert data["session"]["token"].startswith("sess_")
