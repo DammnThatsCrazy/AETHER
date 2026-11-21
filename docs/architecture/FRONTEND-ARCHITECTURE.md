@@ -51,7 +51,7 @@ reviewed_source_commits:
   - {'commit': 'f74f8919', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
   "apps/aether-web/src/": "sha256:fcfe2d51a7c1cf121cd942a8cc1fb79b0ee630f8de92f5a97e4f0cb6099c79ff"
-  "apps/kyber-web/src/": "sha256:cbf923596a1fe7d94ce28c525cdfcbf4ceaed1759c78970428ce108cb58efda1"
+  "apps/kyber-web/src/": "sha256:6f221ade2b355146a8a61e2d0645705229a1da75c99cfcab6b4729cdd7bd08d0"
   "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
 
