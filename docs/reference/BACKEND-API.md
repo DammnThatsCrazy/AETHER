@@ -44,7 +44,7 @@ source_hashes:
   "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:5ceff0bbbecfb574462743938e4647843e88a1c58b8b0de5540bc585695c8553"
+  "services/api/tenancy/": "sha256:fdd2c0ba8ab3a3f86cabb6736070cbdc3630dcd7ee1ec2a873ba42a3e43c17b6"
   "services/api/value/": "sha256:000220c291567fc2fc4dfabb735f69947d1dd6f4c030be874e1a903ccb8bf44a"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---

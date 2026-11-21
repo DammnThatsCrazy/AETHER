@@ -371,7 +371,10 @@ for abuse. The email/password endpoints under `/v1/auth` carry their own small
 limits (`shared/rate_limit/auth_throttle.py`: per client IP per minute, and per
 address (and address-from-one-client) for failed logins, wrong verification codes and
 codes mailed), keyed on the load-balancer-appended `X-Forwarded-For` hop and held in
-Redis, or per process when Redis is down. Five failed logins from one client lock only
+the platform's shared cache (`CacheClient`: DynamoDB when `DYNAMODB_CACHE_TABLE` is
+set, otherwise Redis), so every API process counts against one budget; they fall back
+to per-process memory only if the cache errors. Emailed sign-in and sign-up codes live
+in the same cache and are accepted once, even for overlapping requests. Five failed logins from one client lock only
 that client out of that address for 15 minutes; the account holder on another network
 is not affected until 25 failures have arrived from anywhere. A wrong-code lockout on
 verification waits out the same window; there is no operator reset. Other public endpoints still depend on an

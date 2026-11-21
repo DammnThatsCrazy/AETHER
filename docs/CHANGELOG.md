@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:0d7b2b6faf6f29321499025ecb0aa37fb09680be9af6dca69ee4c3c658a6633d"
+  "CHANGELOG.md": "sha256:6d0e1197667dba76ab844e7bb9886ad84bc9bf7c1a0232b13dc11bfc61ed057b"
 ---
 # Changelog
 
@@ -59,6 +59,7 @@ source_hashes:
 
 ### Fixed
 
+- Sign-in rate limits and emailed codes now use the platform's shared cache (`CacheClient`, Redis or DynamoDB) instead of reading a `_redis` attribute the client never had, which left them in per-process memory. Every API process now counts against the same budget; each throttle window gets its own counter key, so concurrent hits never reset each other; and an emailed code is compared in constant time and accepted only once, even for overlapping requests.
 - Feed ingestion: revoking or expiring a source's data-rights grant now stops `/v1/ingest/feed` (and Dune ingestion) for that source. The tenant-only legacy fallback applies only to sources that have never had a grant and only counts feed rows written before grants were required; a lake-denying grant or an unreadable rights authority denies.
 - Selecting a provider account creates its `organization_system` grant under a per-source claim in the shared cache, so overlapping selections no longer create two grants that leave the source ambiguous and refuse its syncs.
 - Two-step verification: sign-in now refuses (`503`) instead of skipping the second factor when the user record cannot be read; challenges and pending enrolments use the shared cache instead of process memory, so any API process can finish them; and overlapping verifies are serialized per user, so a challenge, recovery code or authenticator time step can be used only once.

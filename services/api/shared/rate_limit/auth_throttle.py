@@ -18,14 +18,17 @@ on another network; a larger ceiling per address bounds guessing spread across m
 addresses. Verification codes keep a single small per-address budget: a 6-digit code
 is only safe with a hard cap on guesses, whoever makes them.
 
-Counters live in Redis when it is reachable and in bounded process memory
-otherwise (the in-memory fallback is per process, so it is a floor, not a
-guarantee, when several replicas run without Redis).
+Counters live in the platform's shared cache (``CacheClient``: Redis or DynamoDB in
+deployed environments), so every API process counts against the same budget. Each
+window is opened atomically (``set_nx``) and gets its own counter key, so concurrent
+hits never reset each other. Bounded process memory is used only when no cache is
+given or the cache errors; it is per process, so it is a floor, not a guarantee.
 """
 
 from __future__ import annotations
 
 import hashlib
+import secrets
 import time
 from typing import Any, Callable, Mapping, Optional
 
@@ -65,13 +68,6 @@ def email_ip_digest(email: str, ip: str) -> str:
     return hashlib.sha256(f"{email.strip().lower()}|{ip}".encode("utf-8")).hexdigest()[:32]
 
 
-_REFUND_SCRIPT = (
-    "local v = redis.call('GET', KEYS[1]) "
-    "if v and tonumber(v) > 0 then return redis.call('DECR', KEYS[1]) end "
-    "return 0"
-)
-
-
 class AttemptCounter:
     """Counts events per key in a window that opens at the first event."""
 
@@ -87,8 +83,11 @@ class AttemptCounter:
     def name(self) -> str:
         return self._name
 
-    def _redis_key(self, key: str) -> str:
-        return f"auththrottle:{self._name}:{key}"
+    def _window_key(self, key: str) -> str:
+        return f"auththrottle:{self._name}:{key}:window"
+
+    def _count_key(self, key: str, window_id: str) -> str:
+        return f"auththrottle:{self._name}:{key}:{window_id}"
 
     def _live(self, key: str, now: float) -> Optional[list[float]]:
         entry = self._memory.get(key)
@@ -97,18 +96,33 @@ class AttemptCounter:
             return None
         return entry
 
-    async def hit(self, key: str, redis: Any = None) -> tuple[int, int]:
+    async def _open_window(self, cache: Any, key: str, now: float) -> tuple[str, float]:
+        """The current window for ``key`` as ``(window id, closes at)``, opening one if none.
+
+        ``set_nx`` makes exactly one caller the opener; everyone else reads the window
+        it stored. The id is unique per window, so a new window starts a new count.
+        """
+        wkey = self._window_key(key)
+        for _ in range(3):
+            closes = now + self._window
+            window_id = f"{closes:.6f}-{secrets.token_hex(4)}"
+            if await cache.set_nx(wkey, window_id, self._window):
+                return window_id, closes
+            current = await cache.get(wkey)
+            if current:
+                return str(current), float(str(current).split("-", 1)[0])
+        raise RuntimeError("auth throttle window kept expiring")
+
+    async def hit(self, key: str, cache: Any = None) -> tuple[int, int]:
         """Count one event; return ``(events in the window, seconds until it closes)``."""
-        if redis is not None:
+        now = self._clock()
+        if cache is not None:
             try:
-                rkey = self._redis_key(key)
-                count = int(await redis.incr(rkey))
-                if count == 1:
-                    await redis.expire(rkey, self._window)
-                return count, await self._ttl(redis, rkey)
+                window_id, closes = await self._open_window(cache, key, now)
+                count = int(await cache.incr_by(self._count_key(key, window_id), 1, self._window))
+                return count, max(1, int(closes - now))
             except Exception:  # noqa: BLE001 - fall back to the local window
                 pass
-        now = self._clock()
         entry = self._live(key, now)
         if entry is None:
             if len(self._memory) >= self._MAX_MEMORY_KEYS:
@@ -122,42 +136,45 @@ class AttemptCounter:
         entry[0] += 1
         return int(entry[0]), max(1, int(entry[1] - now))
 
-    async def refund(self, key: str, redis: Any = None) -> None:
+    async def refund(self, key: str, cache: Any = None) -> None:
         """Give back one counted event, for a request refused by a different limit."""
-        if redis is not None:
+        if cache is not None:
             try:
-                # Only ever decrement an existing positive count: a plain DECR on a key that a
-                # concurrent success just cleared would create -1 and admit one extra attempt.
-                await redis.eval(_REFUND_SCRIPT, 1, self._redis_key(key))
+                window_id = await cache.get(self._window_key(key))
+                if window_id:
+                    ckey = self._count_key(key, str(window_id))
+                    # Never leave a count below zero (a refund racing a clear, or a
+                    # window with no hits yet), so a refund cannot admit an extra
+                    # attempt. Counters are only read through incr_by: DynamoDB keeps
+                    # them in a separate attribute from get/set values.
+                    if int(await cache.incr_by(ckey, -1, self._window)) < 0:
+                        await cache.incr_by(ckey, 1, self._window)
             except Exception:  # noqa: BLE001
                 pass
         entry = self._memory.get(key)
         if entry is not None and entry[0] > 0:
             entry[0] -= 1
 
-    async def clear(self, key: str, redis: Any = None) -> None:
-        if redis is not None:
+    async def clear(self, key: str, cache: Any = None) -> None:
+        if cache is not None:
             try:
-                await redis.delete(self._redis_key(key))
+                wkey = self._window_key(key)
+                window_id = await cache.get(wkey)
+                await cache.delete(wkey)
+                if window_id:
+                    await cache.delete(self._count_key(key, str(window_id)))
             except Exception:  # noqa: BLE001
                 pass
         self._memory.pop(key, None)
-
-    async def _ttl(self, redis: Any, rkey: str) -> int:
-        ttl = int(await redis.ttl(rkey))
-        if ttl < 0:  # a key without an expiry would otherwise lock the caller out for good
-            await redis.expire(rkey, self._window)
-            return self._window
-        return max(1, ttl)
 
     def reset(self) -> None:
         """Forget every in-memory count (tests)."""
         self._memory.clear()
 
 
-async def enforce_rate(counter: AttemptCounter, key: str, limit: int, redis: Any = None) -> None:
+async def enforce_rate(counter: AttemptCounter, key: str, limit: int, cache: Any = None) -> None:
     """Count one request and refuse it once ``key`` is over ``limit`` in the window."""
-    count, retry_after = await counter.hit(key, redis)
+    count, retry_after = await counter.hit(key, cache)
     if count > limit:
         raise RateLimitedError(retry_after=retry_after, limiter=counter.name)
 
