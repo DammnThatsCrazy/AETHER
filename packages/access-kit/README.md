@@ -39,8 +39,15 @@ container image described below. Release validation is available through the
 manual `Publish Access Kit CLI and MCP` workflow; it defaults to a pack
 dry-run. Before enabling a public release, configure the npm-production
 environment with at least one required reviewer and an NPM_TOKEN. The
-workflow fails closed if that reviewer rule is absent. The package is not yet
-published.
+workflow fails closed if that reviewer rule is absent. The package stays
+internal until the staging proof passes: a real publish also requires the
+`ACCESS_KIT_PUBLIC_RELEASE_APPROVED` repository variable to be `true`. The
+package is not yet published.
+
+The CLI and MCP offer reads and observation submission only; they offer no
+operation that acts on the world (sending messages, pausing campaigns). The
+API refuses any call they label as theirs that is not one of their named
+capabilities.
 CLI login requires a persistent native credential store: macOS Keychain,
 Windows Credential Manager, or Linux Secret Service. Linux kernel keyutils is
 not used as a fallback because it does not persist across restarts.

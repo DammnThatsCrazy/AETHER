@@ -66,6 +66,48 @@ _ACCESS_KIT_CAPABILITIES = {
     ("POST", "/v1/experience360/frames"): "experience360.frame.read",
     ("POST", "/v1/profile/resolve"): "profile360.identifier.resolve",
 }
+# Further Access Kit capabilities kept out of ``_ACCESS_KIT_CAPABILITIES`` on
+# purpose: that map drives the per-credential operation cap, which follows the
+# route for every caller (the Aether app and every SDK included). These are
+# recognised by the kernel and audited when the CLI or MCP calls them, never
+# capped here; observations are metered by ingestion itself.
+_ACCESS_KIT_UNCAPPED_ROUTES = {
+    ("POST", "/v1/batch"): "observations.submit",
+    ("GET", "/v1/agent/agents/{agent_ref}/behavior"): "agents.behavior.read",
+    ("GET", "/v1/agent/agents/{agent_ref}/decisions/{decision_id}"): "agents.decision.read",
+}
+# The Access Kit kernel's capability classes. ``act`` (changing something in the
+# world: sending a message, pausing a campaign) is deliberately not offered by
+# the CLI or MCP yet; a call classed ``act`` is refused even if it is named.
+_ACCESS_KIT_CAPABILITY_CLASS = {
+    "observations.submit": "observe",
+    "continuations.create": "write",
+    "auth.sessions.list": "auth",
+    "auth.sessions.revoke": "auth",
+}
+_ACCESS_KIT_ALLOWED_CLASSES = frozenset({"query", "observe", "write", "auth"})
+_ACCESS_KIT_PROTOCOL = {"cli": "cli", "mcp_stdio": "mcp", "mcp_http": "mcp", "access_sdk": "sdk"}
+
+
+def _access_kit_capability(method: str, route_template: Optional[str]) -> Optional[str]:
+    key = (method.upper(), route_template)
+    return _ACCESS_KIT_CAPABILITIES.get(key) or _ACCESS_KIT_UNCAPPED_ROUTES.get(key)
+
+
+def _access_kit_class(capability_id: str) -> str:
+    return _ACCESS_KIT_CAPABILITY_CLASS.get(capability_id, "query")
+
+
+def _access_kit_refusal(request: Request, route_template: str) -> Optional[AetherError]:
+    """Refuse a CLI/MCP-marked call that is not a named, offered kernel capability."""
+    surface = request.headers.get("x-aether-access-surface", "")
+    if surface not in _ACCESS_KIT_SURFACES or _is_public_path(route_template):
+        return None
+    capability = _access_kit_capability(request.method, route_template)
+    if capability is not None and _access_kit_class(capability) in _ACCESS_KIT_ALLOWED_CLASSES:
+        return None
+    from shared.common.common import ForbiddenError
+    return ForbiddenError("ACCESS_KIT_CAPABILITY_UNAVAILABLE")
 # POST routes that carry a read body but have no write effect. They are checked
 # against the ``read`` permission, attributed as reads, and (for delegated MCP
 # tokens) eligible for the read-route allowlist. Keep this set exact: a route
@@ -151,10 +193,11 @@ async def _record_access_interaction(request: Request, response: Response) -> di
     """Best-effort audit, non-billable metering, and event publication for Access Kit calls."""
     surface = request.headers.get("x-aether-access-surface", "")
     route_template = getattr(request.state, "access_route_template", None)
-    capability_id = _ACCESS_KIT_CAPABILITIES.get((request.method.upper(), route_template))
+    capability_id = _access_kit_capability(request.method, route_template)
     tenant = getattr(request.state, "tenant", None)
     if surface not in _ACCESS_KIT_SURFACES or not capability_id or tenant is None:
         return {}
+    interaction_class = _access_kit_class(capability_id)
 
     request_id = getattr(request.state, "request_id", "")
     if not isinstance(request_id, str) or not request_id:
@@ -172,6 +215,8 @@ async def _record_access_interaction(request: Request, response: Response) -> di
     unmetered = capability_id in _UNMETERED_ACCESS_CAPABILITIES
     if unmetered and outcome == "allowed":
         return {}
+    # Observations are metered by ingestion; the interaction is audited only.
+    audit_only = interaction_class == "observe"
     event_type = {
         "allowed": "access.interaction.completed",
         "blocked": "access.interaction.blocked",
@@ -186,6 +231,10 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         }.get(request.method.upper(), "read")
     metadata = {
         "surface": surface,
+        # Protocol-neutral interaction record: the same fields whichever
+        # protocol (CLI, MCP, SDK) carried the call.
+        "protocol": _ACCESS_KIT_PROTOCOL.get(surface, surface),
+        "interaction_class": interaction_class,
         "capability_id": capability_id,
         "operation": operation,
         "outcome": outcome,
@@ -215,7 +264,7 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         logger.warning("access interaction audit write failed (%s)", type(exc).__name__)
 
     try:
-        if unmetered:
+        if unmetered or audit_only:
             raise _SkipMetering
         from billing.billing.revops import MeteringService, UsageMeteringEvent
 
@@ -660,6 +709,14 @@ def register_middleware(app: FastAPI) -> None:
             return JSONResponse(status_code=denial.code.value, content=denial.to_dict())
         route_template = route_template or request.url.path
         request.state.access_route_template = route_template
+
+        # Access Kit kernel: a call the CLI or MCP marks as theirs must be one
+        # of the kernel's named capabilities, and never an ``act`` capability.
+        # (A signed-in user can still call their own API directly; delegated
+        # MCP tokens are separately limited to named reads.)
+        access_refusal = _access_kit_refusal(request, route_template)
+        if access_refusal is not None:
+            return JSONResponse(status_code=access_refusal.code.value, content=access_refusal.to_dict())
 
         # Bind the request for service-layer code that authorizes against the
         # Kyber workforce plane but is not handed a Request (Noesis). The
