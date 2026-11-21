@@ -57,7 +57,7 @@ describe('one-tag bootstrap', () => {
       expect.objectContaining({
         apiKey: 'pk_live_abc',
         siteId: 'site_1',
-        endpoint: 'https://api.aether.network',
+        endpoint: 'https://api.olympuslabsml.com',
       }),
     );
 
@@ -188,7 +188,7 @@ describe('one-tag bootstrap', () => {
     });
 
     const first = sent[0];
-    expect(first.url).toBe('https://api.aether.network/v1/batch');
+    expect(first.url).toBe('https://api.olympuslabsml.com/v1/batch');
     expect(first.headers.Authorization).toBe('Bearer pk_live_abc');
     expect(first.headers['X-Aether-SDK']).toBe('web');
     expect(first.headers['X-Aether-Site']).toBe('site_9');
@@ -247,7 +247,7 @@ describe('one-tag bootstrap', () => {
     const sdk = fakeSdk();
     const { transport } = recordingTransport();
     const tag = {
-      src: 'https://cdn.aether.network/v1.js',
+      src: 'https://cdn.olympuslabsml.com/v1.js',
       getAttribute: (n: string) => SNIPPET[n as never] ?? null,
     };
     const doc = {
@@ -269,7 +269,7 @@ describe('one-tag bootstrap', () => {
   it('ignores unrelated script tags when recovering the snippet', async () => {
     const sdk = fakeSdk();
     const { transport } = recordingTransport();
-    const unrelated = ['https://example.com/analytics.js', 'https://cdn.aether.network/v2.js'];
+    const unrelated = ['https://example.com/analytics.js', 'https://cdn.olympuslabsml.com/v2.js'];
     const doc = {
       currentScript: null,
       getElementsByTagName: () => unrelated.map((src) => ({ src, getAttribute: () => 'nope' })),

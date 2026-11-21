@@ -17,7 +17,7 @@ class AetherNativeModule: RCTEventEmitter {
     @objc
     func initialize(_ config: NSDictionary) {
         let apiKey = config["apiKey"] as? String ?? ""
-        resolveEndpoint = config["endpoint"] as? String ?? "https://api.aether.network"
+        resolveEndpoint = config["endpoint"] as? String ?? "https://api.olympuslabsml.com"
         var aetherConfig = AetherConfig(apiKey: apiKey)
 
         if let env = config["environment"] as? String {

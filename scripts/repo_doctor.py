@@ -1227,7 +1227,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="SDK import boundary (client SDK surfaces must not import backend/legacy internals)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep SDK client surfaces thin — talk to api.aether.network; never import backend internals or the archived ingestion/lake duplicates (shrink scripts/allowlists/sdk_internal_import_allowlist.json only)",
+        remediation="keep SDK client surfaces thin — talk to api.olympuslabsml.com; never import backend internals or the archived ingestion/lake duplicates (shrink scripts/allowlists/sdk_internal_import_allowlist.json only)",
     )
     run(
         [sys.executable, "scripts/validate_model_governance.py"],

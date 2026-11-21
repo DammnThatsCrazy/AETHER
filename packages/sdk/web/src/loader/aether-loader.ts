@@ -1,8 +1,8 @@
 // =============================================================================
 // Aether SDK — CDN AUTO-LOADER
 // Lightweight loader at the stable URL that dynamically loads the latest SDK
-// Stable URL:    https://cdn.aether.network/v1.js
-// Versioned URL: https://cdn.aether.network/sdk/v<major>/loader.js
+// Stable URL:    https://cdn.olympuslabsml.com/v1.js
+// Versioned URL: https://cdn.olympuslabsml.com/sdk/v<major>/loader.js
 // =============================================================================
 
 interface LoaderConfig {
@@ -16,7 +16,7 @@ interface LoaderConfig {
   onError?: (error: Error) => void;
   /** Network timeout in ms. Default: 10000 */
   timeout?: number;
-  /** CDN base URL. Default: 'https://cdn.aether.network/sdk' */
+  /** CDN base URL. Default: 'https://cdn.olympuslabsml.com/sdk' */
   cdnBase?: string;
 }
 
@@ -25,6 +25,8 @@ interface CachedBundle {
   code: string;
   timestamp: number;
   hash: string;
+  /** CDN base the bundle was fetched from; a cache entry is only ever used for that same base. */
+  origin: string;
 }
 
 interface SDKManifest {
@@ -40,9 +42,13 @@ interface SDKManifest {
   generatedAt: string;
 }
 
-const STORAGE_KEY = '_aether_loader_bundle';
-const MANIFEST_KEY = '_aether_loader_manifest';
-const DEFAULT_CDN = 'https://cdn.aether.network/sdk';
+// v2: entries are bound to the CDN base they came from. Entries under the
+// legacy keys predate that binding (they may hold code from a CDN Aether no
+// longer uses), so they are deleted, never evaluated.
+const STORAGE_KEY = '_aether_loader_bundle_v2';
+const MANIFEST_KEY = '_aether_loader_manifest_v2';
+const LEGACY_STORAGE_KEYS = ['_aether_loader_bundle', '_aether_loader_manifest'];
+const DEFAULT_CDN = 'https://cdn.olympuslabsml.com/sdk';
 const DEFAULT_TTL = 3600000; // 1 hour
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 
@@ -50,10 +56,10 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  * AetherLoader — CDN Auto-Loader
  *
  * Loads the latest Aether SDK bundle from CDN with intelligent caching.
- * Place at a stable, never-changing URL: https://cdn.aether.network/v1.js
+ * Place at a stable, never-changing URL: https://cdn.olympuslabsml.com/v1.js
  *
  * Usage:
- *   <script src="https://cdn.aether.network/v1.js"></script>
+ *   <script src="https://cdn.olympuslabsml.com/v1.js"></script>
  *   <script>
  *     AetherLoader.load().then(aether => aether.init({ apiKey: 'your-key' }));
  *   </script>
@@ -93,8 +99,8 @@ const AetherLoader = {
     const requestedVersion = config.version ?? 'latest';
 
     try {
-      // 1. Check localStorage cache
-      const cached = this._getCachedBundle();
+      // 1. Check localStorage cache (only entries fetched from this CDN base)
+      const cached = this._getCachedBundle(cdnBase);
 
       if (cached && (Date.now() - cached.timestamp) < cacheTTL) {
         // Cache is fresh — use immediately
@@ -142,14 +148,15 @@ const AetherLoader = {
         code,
         timestamp: Date.now(),
         hash: manifest.downloads?.sdkBundleHash ?? '',
+        origin: cdnBase,
       });
 
       this._evaluateBundle(code);
       config.onReady?.(this._sdk);
       return this._sdk;
     } catch (error) {
-      // Fallback: try expired cache
-      const cached = this._getCachedBundle();
+      // Fallback: try expired cache, still only from this CDN base
+      const cached = this._getCachedBundle(cdnBase);
       if (cached) {
         console.warn('[Aether Loader] CDN unreachable, using cached SDK v' + cached.version);
         this._evaluateBundle(cached.code);
@@ -190,6 +197,7 @@ const AetherLoader = {
           code,
           timestamp: Date.now(),
           hash: manifest.downloads?.sdkBundleHash ?? '',
+          origin: cdnBase,
         });
 
         console.info(`[Aether Loader] SDK v${targetVersion} pre-cached. Will be active on next page load.`);
@@ -258,11 +266,18 @@ const AetherLoader = {
   /**
    * Get cached bundle from localStorage
    */
-  _getCachedBundle(): CachedBundle | null {
+  _getCachedBundle(cdnBase?: string): CachedBundle | null {
     try {
+      for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
-      return JSON.parse(raw);
+      const cached = JSON.parse(raw) as CachedBundle;
+      if (!cached || typeof cached.origin !== 'string') {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      if (cdnBase !== undefined && cached.origin !== cdnBase) return null;
+      return cached;
     } catch {
       return null;
     }
@@ -287,6 +302,7 @@ const AetherLoader = {
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(MANIFEST_KEY);
+      for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
     } catch {}
     this._loaded = false;
     this._sdk = null;

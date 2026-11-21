@@ -1,10 +1,10 @@
 // =============================================================================
 // Aether SDK — ONE-TAG BOOTSTRAP (the `v1.js` entry point)
 //
-// This is what https://cdn.aether.network/v1.js actually runs. It turns a
+// This is what https://cdn.olympuslabsml.com/v1.js actually runs. It turns a
 // single <script> tag into a working install with no follow-up JS:
 //
-//   <script async src="https://cdn.aether.network/v1.js"
+//   <script async src="https://cdn.olympuslabsml.com/v1.js"
 //     data-key="pk_live_..." data-site="site_..."></script>
 //
 // Sequence, and why it is this order:

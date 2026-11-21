@@ -246,7 +246,7 @@ class BreachHandler:
             "categories_of_data": incident.data_categories_affected,
             "approximate_number_of_subjects": incident.affected_users_count,
             "approximate_number_of_records": incident.affected_users_count * 50,
-            "dpo_contact": "dpo@aether.network",
+            "dpo_contact": "dpo@olympuslabsml.com",
             "likely_consequences": self._assess_consequences(incident),
             "measures_taken": incident.containment_actions,
             "measures_proposed": incident.remediation_actions or [
@@ -280,7 +280,7 @@ class BreachHandler:
 
         subject_notice = {
             "nature_of_breach": incident.description,
-            "dpo_contact": "dpo@aether.network",
+            "dpo_contact": "dpo@olympuslabsml.com",
             "likely_consequences": self._assess_consequences(incident),
             "measures_taken": incident.containment_actions,
             "recommended_actions": [
@@ -347,7 +347,7 @@ class BreachHandler:
         self.notify_dpa(incident.id)
         self.notify_subjects(incident.id)
         self.remediate(incident.id)
-        self.close_incident(incident.id, "https://wiki.aether.network/post-mortems/" + incident.id)
+        self.close_incident(incident.id, "https://wiki.olympuslabsml.com/post-mortems/" + incident.id)
 
         return incident
 

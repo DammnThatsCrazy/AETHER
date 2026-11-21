@@ -262,7 +262,7 @@ class DSRExecutor:
             "export_format": "application/json",
             "user_id": dsr.user_id,
             "exported_at": datetime.now(timezone.utc).isoformat(),
-            "schema_documentation_url": "https://docs.aether.network/api/data-portability-schema",
+            "schema_documentation_url": "https://docs.olympuslabsml.com/api/data-portability-schema",
             "data": {
                 "identity": {"profile": {}, "devices": [], "sessions_count": 0},
                 "events": {"total_count": 0, "categories": {}},

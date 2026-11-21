@@ -143,6 +143,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/reliability/incidents/:incidentId` | incident detail | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
 | `/intelligence-quality` | drift and contamination | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
 | `/connectors` | connector fleet | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
+| `/system-sources` | Olympus provider connections and grants, tenant sources by provider | no | I | A | A | A | I | `system-sources-page.test.tsx` |
 | `/dune-feeder` | feeder health and jobs | no | I | A | — | — | I | `kyber-noncritical-empty-routes.test.tsx` |
 | `/revops` | billing and usage fleet | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
 | `/pricing-architecture` | pricing registry | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
@@ -199,15 +200,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 170 data-bearing route patterns above: 81 Aether and
-89 Kyber routes.
+The denominator is the 171 data-bearing route patterns above: 81 Aether and
+90 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 37 / 170 (21.8%) | tracked for every route |
-| Empty-state assertions | 153 / 170 (90.0%) | at least 90% overall |
-| Error/unavailable assertions | 135 / 170 (79.4%) | 100% of critical routes |
-| Populated-state assertions | 67 / 170 (39.4%) | tracked for every route |
+| Explicit loading-state assertions | 37 / 171 (21.6%) | tracked for every route |
+| Empty-state assertions | 154 / 171 (90.1%) | at least 90% overall |
+| Error/unavailable assertions | 136 / 171 (79.5%) | 100% of critical routes |
+| Populated-state assertions | 68 / 171 (39.8%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

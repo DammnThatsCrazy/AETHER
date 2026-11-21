@@ -11,7 +11,7 @@ Enhancements over original:
   - Uses shared runner (no _run / _log duplication)
 
 Platforms:
-  - Web:          npm (@aether/sdk) + CDN (cdn.aether.network)
+  - Web:          npm (@aether/sdk) + CDN (cdn.olympuslabsml.com)
   - iOS:          CocoaPods + Swift Package Manager
   - Android:      Maven Central (com.aether:aether-android)
   - React Native: npm (@olympuslabs/aether-react-native), coordinated native deps
@@ -160,8 +160,8 @@ def release_web_sdk(
         ("Test",             "cd packages/sdk/web && npx jest --ci || true"),
         ("Changelog",        "npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/sdk/web || true"),
         ("Publish npm",      f"cd packages/sdk/web && npm publish --access public {npm_tag} || true"),
-        ("Upload CDN",       "aws s3 sync packages/sdk/web/dist/ s3://cdn.aether.network/ --acl public-read || true"),
-        ("CDN latest",       "aws s3 sync packages/sdk/web/dist/ s3://cdn.aether.network/latest/ --acl public-read || true"),
+        ("Upload CDN",       "aws s3 sync packages/sdk/web/dist/ s3://cdn.olympuslabsml.com/ --acl public-read || true"),
+        ("CDN latest",       "aws s3 sync packages/sdk/web/dist/ s3://cdn.olympuslabsml.com/latest/ --acl public-read || true"),
         ("Extract data modules", "python infra/cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
         ("Publish manifests", f"python infra/cicd/aether-cicd/stages/sdk/manifest_publisher.py --version {new_version} || true"),
         ("Git tag",          f"git tag sdk-web-v{new_version} && git push origin sdk-web-v{new_version} || true"),
@@ -177,8 +177,8 @@ def release_web_sdk(
     ]
     ctx.published_to = [
         f"npm: @aether/sdk@{new_version}",
-        "CDN: https://cdn.aether.network/v1.js",
-        "Manifests: https://cdn.aether.network/sdk/manifests/{platform}/latest.json",
+        "CDN: https://cdn.olympuslabsml.com/v1.js",
+        "Manifests: https://cdn.olympuslabsml.com/sdk/manifests/{platform}/latest.json",
     ]
     ctx.success = success
     log(f"Web SDK v{new_version} {'released' if success else 'FAILED'}", stage="SDK")

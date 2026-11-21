@@ -35,17 +35,17 @@ reviewed_source_commits:
   - {'commit': '1b75e2b8', 'reason': 'Merge of development (publish-sdk and repo-health workflow changes, reviewed upstream) with this PR''s pilot and remote staging plan changes; no further doc change.'}
   - {'commit': '2cc82835', 'reason': 'The legacy staging Aurora cluster now pins its live 16.13 release and ignores engine_version, matching the managed cluster rule these docs already describe.'}
 source_hashes:
-  ".github/workflows/": "sha256:c82be7af44ed64a3d5a4a88bb758efff6e52d174edf422be782bcfb8df8881fa"
+  ".github/workflows/": "sha256:5773bfef4889653efe773edaa5e9b98031a5a312a3fd17933cab866fea643d55"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:7f64eac565a8b41efd7fa7cdb76cfe09fc5e19e08cba5b6d7aa1a177d9bd81ba"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
-  "infra/cicd/aether-cicd/README.md": "sha256:e5ed5aba6b590ed3c78463a402d4a6b6da4adb9e68579f945aace9165b187f89"
+  "infra/cicd/aether-cicd/README.md": "sha256:666df63ebe85777e1b112c4ccbd6f10c8fce32211564464f07d162d18535a5e0"
   "infra/cicd/aether-cicd/main.py": "sha256:45ea58ecdc9250e8bedffcd9d9a369b1025c5dc7a1da23d38e0f6c1670494c0f"
   "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
-  "infra/cicd/aether-cicd/stages/": "sha256:1f2dfa70664b4aaf5135732225860b49e96419733d96558edafd3786c1c97d0a"
+  "infra/cicd/aether-cicd/stages/": "sha256:9b2cd637a45a28806e6aa2ed920dee2974212e0cbe7dce68dc0c79d105c3a238"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"

@@ -44,4 +44,12 @@ describe('SystemSourcesPage', () => {
     renderPage();
     expect(await screen.findByText('No Olympus sources yet')).toBeTruthy();
   });
+
+  it('reports a failed load instead of showing empty sources', async () => {
+    vi.mocked(api.admin.kyber.providerConnections.systemSources).mockRejectedValue(new Error('sources offline'));
+    renderPage();
+    expect(await screen.findByText('Unable to load sources')).toBeTruthy();
+    expect(screen.getByText('sources offline')).toBeTruthy();
+    expect(screen.queryByText('No Olympus sources yet')).toBeNull();
+  });
 });

@@ -44,9 +44,14 @@ reviewed_source_commits:
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
+  - {'commit': '2676ca17', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '418c78d4', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '0d252082', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': 'f74f8919', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/src/": "sha256:af3fcd939145bf172a8d1299590b58b3dc48cd9e8878225bdd05eed7c5741c46"
-  "apps/kyber-web/src/": "sha256:cbf923596a1fe7d94ce28c525cdfcbf4ceaed1759c78970428ce108cb58efda1"
+  "apps/aether-web/src/": "sha256:fcfe2d51a7c1cf121cd942a8cc1fb79b0ee630f8de92f5a97e4f0cb6099c79ff"
+  "apps/kyber-web/src/": "sha256:6f221ade2b355146a8a61e2d0645705229a1da75c99cfcab6b4729cdd7bd08d0"
   "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
 

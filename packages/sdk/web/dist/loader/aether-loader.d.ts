@@ -9,7 +9,7 @@ interface LoaderConfig {
     onError?: (error: Error) => void;
     /** Network timeout in ms. Default: 10000 */
     timeout?: number;
-    /** CDN base URL. Default: 'https://cdn.aether.network/sdk' */
+    /** CDN base URL. Default: 'https://cdn.olympuslabsml.com/sdk' */
     cdnBase?: string;
 }
 interface CachedBundle {
@@ -34,10 +34,10 @@ interface SDKManifest {
  * AetherLoader — CDN Auto-Loader
  *
  * Loads the latest Aether SDK bundle from CDN with intelligent caching.
- * Place at a stable, never-changing URL: https://cdn.aether.network/v1.js
+ * Place at a stable, never-changing URL: https://cdn.olympuslabsml.com/v1.js
  *
  * Usage:
- *   <script src="https://cdn.aether.network/v1.js"></script>
+ *   <script src="https://cdn.olympuslabsml.com/v1.js"></script>
  *   <script>
  *     AetherLoader.load().then(aether => aether.init({ apiKey: 'your-key' }));
  *   </script>
