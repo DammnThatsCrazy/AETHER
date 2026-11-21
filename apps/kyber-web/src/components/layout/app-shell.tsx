@@ -3,6 +3,7 @@ import { TopBar } from './top-bar';
 import type { ReactNode } from 'react';
 import { DemoTenantBanner } from '@aether/ui';
 import { useKyberScope } from '@kyber/features/auth/hooks';
+import { KyberSessionBanners } from '@kyber/features/auth';
 import { useDemoSeedStatus } from '@kyber/features/demo-seed/use-demo-seed-status';
 
 interface AppShellProps {
@@ -19,6 +20,8 @@ export function AppShell({ children }: AppShellProps) {
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
+        {/* Session state (step-up required, restricted, device, scope) on every page. */}
+        <KyberSessionBanners />
         {showDemoBanner && (
           <DemoTenantBanner
             tenantName={demoSeed.data?.tenant_name}
