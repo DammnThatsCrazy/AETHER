@@ -104,13 +104,22 @@ re-authenticates.
 
 | Factors actually verified | Strength | Status |
 |---|---|---|
-| `google_oidc` alone | `identity_only` | `restricted` |
+| `google_oidc` alone, `KYBER_DEVICE_TRUST_REQUIRED=false` (the default) | `identity_only` | `active` |
+| `google_oidc` alone, `KYBER_DEVICE_TRUST_REQUIRED=true` | `identity_only` | `restricted` |
 | `google_oidc` + `webauthn` + `device_proof` on a usable approved device | `device_bound` | `active` |
 | the above plus a live step-up grant | `stepped_up` | `active` |
 
 A caller cannot assert its own strength: the value is computed from the factor
 list plus a live device-usability check, so claiming `device_bound` without a
 device proof yields `identity_only`.
+
+Identity-approved sign-in is the current policy: an invited Google Workspace
+identity, with Workspace 2-Step Verification enforced in the Google admin
+console, gets an active session from any device. Devices are still recorded
+when presented and stay visible at `/security/devices`, and a presented device
+that has been revoked still denies. Requiring an approved device again is a
+single flag (`KYBER_DEVICE_TRUST_REQUIRED=true`); the read is fail-closed, so a
+missing settings object counts as required.
 
 ### 1.5 Rotation
 
@@ -143,6 +152,18 @@ would lock the operator out of their own session.
 
 A step-up grant proves the human at the keyboard re-asserted possession of the
 registered authenticator *now*.
+
+Two verifications mint a grant:
+
+* **Google re-authentication** (the default for identity-approved sessions).
+  `GET /v1/kyber/auth/step-up` sends the operator back to Google with
+  `prompt=login&max_age=0`. The callback requires an `auth_time` no older than
+  the transaction (120 s skew) and the same Google subject as the session, then
+  `StepUpService.grant_reauthenticated` mints the grant and rotates the handle.
+  Anything else is refused and recorded as `step_up_not_fresh` or a failed
+  step-up.
+* **WebAuthn assertion** (`/step-up/options` + `/step-up/verify`) on a
+  device-bound session.
 
 * **Bound to the session and the device.** Lifting a grant out of a captured
   session and replaying it elsewhere fails on the binding.
@@ -227,7 +248,7 @@ Every step fails closed, in this order:
 | — | Request shape for mutating methods: origin allow-list, `Sec-Fetch-Site: same-origin`, CSRF header vs. cookie | *(no `DenialReason` — a forged request is malformed, not an authorization outcome)* |
 | 2 | Principal resolves and is `active` + `kyber_enabled` | `principal_unknown`, `principal_inactive` |
 | 3 | Directory record is fresh (privileged roles lose authority while stale) | `directory_stale` |
-| 4 | Device resolves, is usable, and matches the session binding | `device_unapproved`, `device_revoked`, `device_mismatch` |
+| 4 | With `KYBER_DEVICE_TRUST_REQUIRED=true`: device resolves, is usable, and matches the session binding. Otherwise a presented device is observed and only a revoked one denies | `device_unapproved`, `device_revoked`, `device_mismatch` |
 | 5 | Route classification — an injected `RoutePolicy` may tighten the declared requirements, never loosen them | — |
 | 6 | Capability held; a live `deny` grant always wins over an allowing template | `capability_missing` |
 | 7 | Environment permitted by **every** bound role template and by the principal | `environment_not_allowed` |
@@ -311,6 +332,7 @@ assembly.
 | Method | Path | Capability |
 |---|---|---|
 | GET | `/session` | presence (`kyber.workforce.self.read`) |
+| GET | `/step-up` | `kyber.workforce.self.read` (Google re-authentication; served by the identity router) |
 | POST | `/step-up/options` | `kyber.workforce.self.read` |
 | POST | `/step-up/verify` | `kyber.workforce.self.read` |
 | GET | `/sessions` | `kyber.workforce.self.read` (self only) |

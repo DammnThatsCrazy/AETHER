@@ -34,7 +34,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
-  "services/api/governance/": "sha256:e58aa729dabca28978fed0766f2af7dddcf07610c9c4223caf594dd18be1308f"
+  "services/api/governance/": "sha256:58f8dceaedaf44f62c49f51f24b7a6588ebc4714665e204c78f0347afaf89278"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:b6213f37eb693cbd8217b682b05b14d62c6a31a034d06bf026b5f093d420a14e"
@@ -4949,6 +4949,19 @@ a matching pair. Response body includes the session fields (`session_id`,
 `rotated_at`, `revoked_at`, `risk_state`), the step-up state (`stepped_up`,
 `step_up_expires_at`, `step_up_capability_id`), and
 `meta: { "csrf_token", "granted_disclosure" }`.
+
+### GET /v1/kyber/auth/step-up
+
+Google re-authentication step-up, the path for identity-approved sessions (no
+bound device). Requires `require_kyber_access(SELF_CAPABILITY)`. Query:
+optional `capability`, optional same-origin `next`. Responds with a redirect to
+Google carrying `prompt=login&max_age=0`. The shared
+`GET /v1/kyber/auth/callback` completes it: Google must report an `auth_time`
+no older than the transaction (120 s skew) and the same subject as the
+session; then a grant is minted (reason `google_reauthentication`), the session
+handle rotates, new cookies are set, and the browser is sent to `next` with a
+303. A stale sign-in is denied as `step_up_not_fresh`; a different account is
+refused and recorded as a failed step-up.
 
 ### POST /v1/kyber/auth/step-up/options
 

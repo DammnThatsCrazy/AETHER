@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:6707a59e51031985ffb9c5c2901ab0f6c6873fca079b04234919941b0abab256"
-  "apps/kyber-web/src/": "sha256:87457fce9066ec624193df95a8c67e06da0e41966231ff315dc6a20433d17e81"
+  "apps/aether-web/src/": "sha256:cb93813cf525c9223dee84a13e0a273df120b246618b60d2e95fa48bb9f2daf7"
+  "apps/kyber-web/src/": "sha256:2b14dfcc2c14d7cdb091ee3d54127a6a52fdef1ad8b7a8ab6887b23f0827d50d"
   "packages/ui/core/src/": "sha256:4146ce910b5dfc015e11e3f0a886b1bf501e1d3c9314d94533b475269dda8ff5"
 ---
 
@@ -89,7 +89,9 @@ the root.
   (full-width) and Microsoft and Slack (compact) appear for each social
   connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`
   (`google=aether-staging-google,…`) and open that Auth0 connection directly;
-  Terraform lists none when social connections are off (the pilot lane). After
+  Terraform lists only the providers it created: every provider when social
+  connections are on, and in the pilot lane only those whose Auth0 credentials
+  are provisioned (`TF_AUTH0_GOOGLE_*`, `TF_AUTH0_APPLE_*`). After
   the work email: a domain listed in `VITE_AUTH0_ENTERPRISE_CONNECTIONS`
   (`acme.com=acme-okta,…`) goes straight to that company SSO connection;
   every other address gets the same next step, so the screen never reveals
@@ -103,8 +105,11 @@ the root.
   be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
-  Auth0 configured, `/signup` opens Auth0's hosted sign-up
-  (`screen_hint=signup`); the pricing page's `?plan=alpha|beta|gamma|delta`
+  Auth0 configured, `/signup` is the portal sign-up screen (same primitives as
+  sign-in; it shows the chosen plan, the same social buttons, and a work email
+  field). A social button opens Auth0's hosted sign-up on that connection, and
+  **Continue with email** opens it with `login_hint` (both
+  `screen_hint=signup`); nothing redirects until the person chooses. The pricing page's `?plan=alpha|beta|gamma|delta`
   (or a validated `?redirect`, else the marketing provider hand-off's
   `/settings/integrations?…`, else `/onboarding`, an alias of `/activation`) is kept in session storage
   across the round trip (`rememberPostAuthDestination` /

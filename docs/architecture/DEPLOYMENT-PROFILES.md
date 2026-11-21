@@ -24,7 +24,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:a06f7a35966acf7aa9447d19b0d3ca7d39ef45db3ab28922ba8f4c074ab7fa8b"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
-  "infra/aws/terraform/main.tf": "sha256:9c3b2da81aa622e042ca64d8a79f8533dd5dd84e5e0264b3ce91c09e145b54f6"
+  "infra/aws/terraform/main.tf": "sha256:3da1d595d699a574c0cde96ad026d9cf41bf0716543e77ad7ac3359087ab341e"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:7f64eac565a8b41efd7fa7cdb76cfe09fc5e19e08cba5b6d7aa1a177d9bd81ba"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
@@ -32,7 +32,7 @@ source_hashes:
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"
   "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
-  "infra/aws/terraform/variables.tf": "sha256:31ca49080dae2836f264e19fa6dc62597eecf4b115ca20fe58b21dee32f5f571"
+  "infra/aws/terraform/variables.tf": "sha256:527efae165b4514ca9d5cd922e89d40ec1d00f099a47b17cb553d189af0d7de5"
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
   "scripts/release/check_profile_config.py": "sha256:77bd45e6128fb26beb490906c88686c378a2d074dd7dfd18c88a1a7e4cbc1b73"
   "scripts/release/check_profile_parity.py": "sha256:da8bd779227c8f0945ea4b897559720f7600bcd6f9dccf8c1f659b5e6a7ede15"
@@ -225,8 +225,9 @@ Manager values, then create a fresh reviewed plan with the input true. The
 promotion workflow checks that both secrets have `AWSCURRENT` versions before
 planning or applying a task revision that mounts them; the check reads metadata
 only. Retain the previous value while persisted evidence needs it.
-Workforce enforcement, backend authorization, device trust, scope v2, and
-step-up are explicitly on;
+Workforce enforcement, backend authorization, scope v2, and step-up are
+explicitly on; device trust is explicitly off (identity-approved sign-in:
+Google Workspace with 2-Step Verification, devices recorded but not required);
 the legacy operator identity and bootstrap paths are explicitly off. The
 Google callback uses the staging API origin, while the Kyber application origin
 is reserved for WebAuthn relying-party validation.

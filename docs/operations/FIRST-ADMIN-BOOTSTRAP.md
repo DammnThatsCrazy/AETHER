@@ -34,9 +34,9 @@ reviewed_source_commits:
   - {'commit': 'd8f94809', 'reason': 'Pilot and remote CI staging plans now carry the declared MCP state; MCP docs updated to name every planner, other docs describe the workflows generally and are unchanged.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:92f140fd0db133d881197c15f370cb89f97f2eee9a42d2b8b9574fafc1c055fc"
-  ".github/workflows/staging-lifecycle.yml": "sha256:c0e9550d8465d09c1a82a81f68e43e6d7b5109685a81dbbc8777a03c630a9b24"
-  ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:e5ab231da8aac54b09d595f9068b49265f4bbe8fa27d26a44def030be2216d7a"
+  ".github/workflows/staging-lifecycle.yml": "sha256:7863ef2257e0675bb0841d3efa4b037a6fa44914ed180a7746fc480970e715d5"
+  ".github/workflows/terraform-promote.yml": "sha256:eed14e52df12f98aded0087d09c9d84e3ac0a795b3869d1255f4a6f787541618"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:867cc96ca6b3b0020680e4b9402ed3462a0e4191b61b2fc374d03d44a606fc08"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/api/repositories/repos.py": "sha256:fe2d94f66f7df1d52bc135c9021d1039fc39140378587b7ed2b24f123164a324"

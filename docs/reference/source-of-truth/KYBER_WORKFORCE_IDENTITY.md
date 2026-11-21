@@ -193,7 +193,23 @@ bootstrap fail even if the operator forgets to turn the environment gate back
 off, and even if the founder principal is later deleted — the environment gate
 is never the only thing standing between an attacker and a founder account.
 
-### Procedure
+### Founder on first sign-in
+
+The explicit route above needs an environment toggle, which deploy targets
+refuse. So the login callback offers the same bootstrap once, without the
+toggle: when a verified Google identity has no principal, the callback asks
+`FounderBootstrapService.first_sign_in_eligible(email)`, which is true only
+when `KYBER_BOOTSTRAP_FOUNDER_EMAIL` is configured and matches, no
+`bootstrap_completed` marker exists, and the workforce has zero principals.
+Then it calls `bootstrap(..., require_gate=False)`: every other check (subject
+pin, principal count, marker) still runs, the same marker is written and the
+same audit event is emitted. Any other uninvited sign-in is still denied as
+`principal_unknown`, and once anyone exists the path is closed for good.
+
+On staging this means the founder signs in with Google at the Kyber console and
+lands in it as `founder_operator`, then invites everyone else.
+
+### Procedure (explicit route)
 
 1. Create the Google Workspace OAuth client; set `KYBER_GOOGLE_CLIENT_ID`,
    `KYBER_GOOGLE_CLIENT_SECRET`, `KYBER_GOOGLE_REDIRECT_URI` and
@@ -311,6 +327,7 @@ A non-empty `unavailable` or `errors` sets `complete: false`, increments
 | POST | `/v1/kyber/workforce/principals/{operator_id}/roles` | `kyber.role.manage` |
 | DELETE | `/v1/kyber/workforce/roles/{binding_id}` | `kyber.role.manage` |
 | POST | `/v1/kyber/auth/bootstrap` | none (gated by §5) |
+| GET | `/v1/kyber/auth/step-up` | authenticated session (`kyber.workforce.self.read`); starts a Google re-authentication step-up (`KYBER_SESSIONS_AND_SCOPES.md` §2) |
 
 The three unauthenticated routes are unauthenticated by necessity, not by
 oversight: `login` and `callback` *are* the authentication, `accept` is
@@ -329,11 +346,11 @@ an open one.
 | `KYBER_GOOGLE_CLIENT_ID` | str | `""` | OAuth client id; also the accepted `aud` |
 | `KYBER_GOOGLE_CLIENT_SECRET` | str | `""` | OAuth client secret (backend only) |
 | `KYBER_GOOGLE_REDIRECT_URI` | str | `""` | Callback URI; derived from the request when unset |
-| `KYBER_GOOGLE_HOSTED_DOMAIN` | str | `""` | When set, the `hd` claim must equal it |
+| `KYBER_GOOGLE_HOSTED_DOMAIN` | str | `olympuslabsml.com` on deploy targets, `""` locally | When set, the `hd` claim must equal it |
 | `KYBER_GOOGLE_DISCOVERY_URL` | str | Google's well-known URL | Discovery document override |
 | `KYBER_OIDC_PROVIDER` | str | `google` | `mock` selects `MockOidcProvider` (non-production only) |
 | `KYBER_BOOTSTRAP_ENABLED` | bool | `false` | Master gate for the one-time founder bootstrap |
-| `KYBER_BOOTSTRAP_FOUNDER_EMAIL` | str | `""` | The only email permitted to bootstrap |
+| `KYBER_BOOTSTRAP_FOUNDER_EMAIL` | str | `""` | The only email permitted to bootstrap, by either path in §5; deployed from the `KYBER_BOOTSTRAP_FOUNDER_EMAIL` repository variable |
 | `KYBER_BOOTSTRAP_FOUNDER_GOOGLE_SUBJECT` | str | `""` | Optional subject pinning; email alone then insufficient |
 | `KYBER_DIRECTORY_SYNC_ENABLED` | bool | `false` | Enables Admin SDK reconciliation |
 | `KYBER_GOOGLE_ADMIN_ACCESS_TOKEN` | str | `""` | Admin SDK bearer token; required for §6 to do anything |
