@@ -154,6 +154,7 @@ _EXPERIENCE_LABELS: dict[ExperienceCategory, str] = {
     ExperienceCategory.SOCIAL_COMMUNITY: "Social & Community",
     ExperienceCategory.CUSTOMER_SUPPORT: "Customer Support",
     ExperienceCategory.WORK_OPERATIONS: "Work & Operations",
+    ExperienceCategory.MARKETS_TRADING: "Markets & Trading",
 }
 
 

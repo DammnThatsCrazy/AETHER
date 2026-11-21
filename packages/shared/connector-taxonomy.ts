@@ -13,8 +13,8 @@
  *   2. PROVIDER / CATEGORY MIRROR (generated) — a pure TypeScript mirror of the
  *      unified integration catalog derived from
  *        services/api/shared/integration_contracts/catalog.py
- *      (ALL_MANIFESTS four-group union: connectors / ad-platforms /
- *      payment-rails / deferred-credit-bureaus) and
+ *      (ALL_MANIFESTS five-group union: connectors / ad-platforms /
+ *      payment-rails / derivatives-venues / deferred-credit-bureaus) and
  *        services/api/shared/integration_contracts/experience.py
  *      (customer-facing experience categories). Keep it in step by running the
  *      generator — never by hand-editing this file.
@@ -208,17 +208,18 @@ export interface IntelligenceSourceCoverage {
 // ════════════════════════════════════════════════════════════════════
 // Provider / category mirror — GENERATED from the Python catalog
 // Source of truth: shared/integration_contracts/catalog.py (ALL_MANIFESTS
-// four-group union) + shared/integration_contracts/experience.py.
+// five-group union) + shared/integration_contracts/experience.py.
 // Regenerate: python scripts/generate_connector_taxonomy.py
 // ════════════════════════════════════════════════════════════════════
 
 export type CatalogGroupId =
-  | 'connectors' | 'ad_platforms' | 'payment_rails' | 'deferred_credit_bureaus';
+  | 'connectors' | 'ad_platforms' | 'payment_rails' | 'derivatives_venues' | 'deferred_credit_bureaus';
 
 export const CATALOG_GROUP_ORDER = [
   'connectors',
   'ad_platforms',
   'payment_rails',
+  'derivatives_venues',
   'deferred_credit_bureaus',
 ] as const;
 
@@ -279,6 +280,30 @@ export type PaymentRailFamily = (typeof PAYMENT_RAIL_FAMILIES)[number];
 
 export const PAYMENT_RAIL_FAMILIES_COUNT = 5 as const;
 
+// Families in the derivatives_venues group (catalog order, 16).
+export const DERIVATIVES_VENUE_FAMILIES = [
+  'hyperliquid' as const,
+  'hyperliquid' as const,
+  'polymarket' as const,
+  'polymarket' as const,
+  'dydx' as const,
+  'dydx' as const,
+  'gmx' as const,
+  'gmx' as const,
+  'drift' as const,
+  'drift' as const,
+  'kalshi' as const,
+  'kalshi' as const,
+  'bybit' as const,
+  'bybit' as const,
+  'coinbase_futures' as const,
+  'coinbase_futures' as const,
+] as const;
+
+export type DerivativesVenueFamily = (typeof DERIVATIVES_VENUE_FAMILIES)[number];
+
+export const DERIVATIVES_VENUE_FAMILIES_COUNT = 16 as const;
+
 // Families in the deferred_credit_bureaus group (catalog order, 3).
 export const DEFERRED_CREDIT_BUREAU_FAMILIES = [
   'experian' as const,
@@ -324,12 +349,28 @@ export const ALL_CATALOG_FAMILIES = [
   'coinbase' as const,
   'moonpay' as const,
   'bridge' as const,
+  'hyperliquid' as const,
+  'hyperliquid' as const,
+  'polymarket' as const,
+  'polymarket' as const,
+  'dydx' as const,
+  'dydx' as const,
+  'gmx' as const,
+  'gmx' as const,
+  'drift' as const,
+  'drift' as const,
+  'kalshi' as const,
+  'kalshi' as const,
+  'bybit' as const,
+  'bybit' as const,
+  'coinbase_futures' as const,
+  'coinbase_futures' as const,
   'experian' as const,
   'equifax' as const,
   'transunion' as const,
 ] as const;
 
-export const ALL_CATALOG_FAMILIES_COUNT = 36 as const;
+export const ALL_CATALOG_FAMILIES_COUNT = 52 as const;
 
 export const CATALOG_GROUPS = [
   {
@@ -360,6 +401,15 @@ export const CATALOG_GROUPS = [
     categories: ['payments'],
   },
   {
+    id: 'derivatives_venues',
+    product: 'account|markets',
+    capability: 'activity_read|fills_read|futures_read|market_data|perps_read|portfolio_read|positions_read',
+    familyConst: 'DERIVATIVES_VENUE_FAMILIES',
+    count: 16,
+    families: ['hyperliquid', 'hyperliquid', 'polymarket', 'polymarket', 'dydx', 'dydx', 'gmx', 'gmx', 'drift', 'drift', 'kalshi', 'kalshi', 'bybit', 'bybit', 'coinbase_futures', 'coinbase_futures'],
+    categories: ['derivatives'],
+  },
+  {
     id: 'deferred_credit_bureaus',
     product: 'credit',
     capability: 'report',
@@ -370,7 +420,7 @@ export const CATALOG_GROUPS = [
   },
 ] as const;
 
-export type CatalogProviderFamily = (typeof CONNECTOR_FAMILIES)[number] | (typeof AD_PLATFORM_FAMILIES)[number] | (typeof PAYMENT_RAIL_FAMILIES)[number] | (typeof DEFERRED_CREDIT_BUREAU_FAMILIES)[number];
+export type CatalogProviderFamily = (typeof CONNECTOR_FAMILIES)[number] | (typeof AD_PLATFORM_FAMILIES)[number] | (typeof PAYMENT_RAIL_FAMILIES)[number] | (typeof DERIVATIVES_VENUE_FAMILIES)[number] | (typeof DEFERRED_CREDIT_BUREAU_FAMILIES)[number];
 
 export const CATALOG_CATEGORIES = [
   'ad_platform',
@@ -378,6 +428,7 @@ export const CATALOG_CATEGORIES = [
   'commerce',
   'credit_bureau',
   'crm',
+  'derivatives',
   'marketing',
   'messaging',
   'payments',
@@ -392,6 +443,7 @@ export type CatalogCategory = (typeof CATALOG_CATEGORIES)[number];
 // CredentialReadiness ladder states actually present across ALL_MANIFESTS (honest mirror, never a parallel ladder).
 export const CATALOG_READINESS_STATES_PRESENT = [
   'credential_waiting' as const,
+  'replay_validated' as const,
   'scaffolded' as const,
 ] as const;
 
@@ -1024,6 +1076,310 @@ export const CATALOG_ENTRIES = [
     sync_initial_backfill: false,
   },
   {
+    key: 'hyperliquid.account.fills_read',
+    family: 'hyperliquid',
+    product: 'account',
+    capability: 'fills_read',
+    display_name: 'Hyperliquid account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'hyperliquid.markets.market_data',
+    family: 'hyperliquid',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'Hyperliquid market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'polymarket.account.activity_read',
+    family: 'polymarket',
+    product: 'account',
+    capability: 'activity_read',
+    display_name: 'Polymarket account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'polymarket.markets.market_data',
+    family: 'polymarket',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'Polymarket market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'dydx.account.fills_read',
+    family: 'dydx',
+    product: 'account',
+    capability: 'fills_read',
+    display_name: 'dYdX v4 account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'dydx.markets.market_data',
+    family: 'dydx',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'dYdX v4 market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'gmx.account.positions_read',
+    family: 'gmx',
+    product: 'account',
+    capability: 'positions_read',
+    display_name: 'GMX account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'gmx.markets.market_data',
+    family: 'gmx',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'GMX market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'drift.account.fills_read',
+    family: 'drift',
+    product: 'account',
+    capability: 'fills_read',
+    display_name: 'Drift account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'drift.markets.market_data',
+    family: 'drift',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'Drift market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'kalshi.account.portfolio_read',
+    family: 'kalshi',
+    product: 'account',
+    capability: 'portfolio_read',
+    display_name: 'Kalshi account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'api_key',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'kalshi.markets.market_data',
+    family: 'kalshi',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'Kalshi market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'bybit.account.perps_read',
+    family: 'bybit',
+    product: 'account',
+    capability: 'perps_read',
+    display_name: 'Bybit account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'api_key',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'bybit.markets.market_data',
+    family: 'bybit',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'Bybit market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
+    key: 'coinbase_futures.account.futures_read',
+    family: 'coinbase_futures',
+    product: 'account',
+    capability: 'futures_read',
+    display_name: 'Coinbase Financial Markets account activity',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: true,
+    environments: ['local', 'integration'],
+    authentication: 'api_key',
+    accounts_discovery: false,
+    accounts_selection_required: true,
+    webhooks_supported: false,
+    sync_incremental: true,
+    sync_initial_backfill: true,
+  },
+  {
+    key: 'coinbase_futures.markets.market_data',
+    family: 'coinbase_futures',
+    product: 'markets',
+    capability: 'market_data',
+    display_name: 'Coinbase Financial Markets market data',
+    category: 'derivatives',
+    experience_category: 'markets_trading',
+    readiness_state: 'replay_validated',
+    readiness_level: 3,
+    tenant_self_service: false,
+    environments: ['local', 'integration'],
+    authentication: 'none',
+    accounts_discovery: false,
+    accounts_selection_required: false,
+    webhooks_supported: false,
+    sync_incremental: false,
+    sync_initial_backfill: false,
+  },
+  {
     key: 'experian.credit.report',
     family: 'experian',
     product: 'credit',
@@ -1082,7 +1438,7 @@ export const CATALOG_ENTRIES = [
   },
 ] as const;
 
-export const CATALOG_ENTRIES_COUNT = 36 as const;
+export const CATALOG_ENTRIES_COUNT = 52 as const;
 
 // Customer-facing experience categories (ADR-0010), presentation order.
 export const EXPERIENCE_CATEGORY_ORDER = [
@@ -1094,6 +1450,7 @@ export const EXPERIENCE_CATEGORY_ORDER = [
   'social_community' as const,
   'customer_support' as const,
   'work_operations' as const,
+  'markets_trading' as const,
 ] as const;
 
 export type ExperienceCategory = (typeof EXPERIENCE_CATEGORY_ORDER)[number];
@@ -1106,6 +1463,7 @@ export const EXPERIENCE_CATEGORY_FAMILIES = {
   'communications_lifecycle': ['klaviyo', 'sendgrid', 'customerio', 'mailchimp', 'postmark', 'iterable', 'braze'],
   'crm_customer': ['hubspot', 'salesforce'],
   'customer_support': ['zendesk', 'intercom'],
+  'markets_trading': ['hyperliquid', 'hyperliquid', 'polymarket', 'polymarket', 'dydx', 'dydx', 'gmx', 'gmx', 'drift', 'drift', 'kalshi', 'kalshi', 'bybit', 'bybit', 'coinbase_futures', 'coinbase_futures'],
   'work_operations': ['slack', 'jira', 'linear'],
   null: ['experian', 'equifax', 'transunion'],
 } as const;

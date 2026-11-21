@@ -30,7 +30,11 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query, Request
 
 from shared.common.common import APIResponse
-from shared.integration_contracts.catalog import ALL_MANIFESTS, manifest_by_family
+from shared.integration_contracts.catalog import (
+    ALL_MANIFESTS,
+    manifest_by_family,
+    tenant_connectable,
+)
 from shared.integration_contracts.experience import EXPERIENCE_CATEGORIES
 
 from connectors.integrations.connectors.routes import _tenant_id
@@ -55,10 +59,8 @@ _STATE_VALUES = {s.value for s in TenantIntegrationState}
 
 
 def _visible_manifests() -> list:
-    """Connectable catalog manifests (enabled in at least one environment)."""
-    return [
-        m for m in ALL_MANIFESTS if m.availability.environments.any_enabled()
-    ]
+    """Tenant-connectable catalog manifests (see ``tenant_connectable``)."""
+    return [m for m in ALL_MANIFESTS if tenant_connectable(m)]
 
 
 def _experience_sort_key(item: dict[str, Any]) -> tuple[int, str]:

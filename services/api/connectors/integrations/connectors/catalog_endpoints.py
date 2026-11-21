@@ -26,7 +26,11 @@ from fastapi import APIRouter, Request
 
 from shared.certification.readiness import readiness_rank
 from shared.common.common import APIResponse, NotFoundError
-from shared.integration_contracts.catalog import ALL_MANIFESTS, manifest_by_family
+from shared.integration_contracts.catalog import (
+    ALL_MANIFESTS,
+    manifest_by_family,
+    tenant_connectable,
+)
 from shared.integration_contracts.experience import (
     EXPERIENCE_CATEGORIES,
     experience_category_for,
@@ -100,17 +104,19 @@ def _manifest_entry(manifest) -> dict[str, Any]:
 
 
 def _visible_catalog_entries() -> list[dict[str, Any]]:
-    """The tenant-connectable catalog: manifests enabled in some environment.
+    """The tenant-connectable catalog (``tenant_connectable``).
 
-    Deferred credit bureaus are scaffolded/enabled-nowhere and stay out, which
-    keeps the customer-facing catalog honest about what can actually be
-    connected today. Each manifest passes validate_manifest at import, so the
+    Only capabilities a tenant can connect itself appear: enabled in some
+    environment and offered for tenant self-service. Deferred credit bureaus
+    (enabled nowhere) and Olympus reference sources such as venue market data
+    (Kyber-managed under the reserved ``olympus`` scope) stay out, which keeps
+    the customer-facing catalog honest about what can actually be connected. Each manifest passes validate_manifest at import, so the
     readiness tokens below are already honest.
     """
     entries = [
         _manifest_entry(m)
         for m in ALL_MANIFESTS
-        if m.availability.environments.any_enabled()
+        if tenant_connectable(m)
     ]
     # Experience-grouping order the tenant UI uses (stable, never alphabetical).
     entries.sort(key=lambda e: _EXPERIENCE_SORT.get(e["experience_category"], 99))

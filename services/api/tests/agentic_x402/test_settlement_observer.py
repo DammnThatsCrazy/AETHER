@@ -215,3 +215,68 @@ def test_records_written_by_the_retired_control_plane_stay_server_observed():
         {"evidence_status": "server_observed", "source_topic": "aether.commerce.settlement.completed",
          "source_service": "public-sdk"}
     )
+
+
+@pytest.mark.asyncio
+async def test_settled_event_carries_the_verified_receipts_terms():
+    engine, producer = _Engine(verified=True, verdict="verified"), _Producer()
+    await settlement_observer.observe_settlement(TENANT, _capture(), engine=engine, producer=producer)
+    (event,) = producer.events
+    assert event.payload["amount"] == "1.25"
+    assert event.payload["payer"] == PAYER and event.payload["recipient"] == RECIPIENT
+
+
+@pytest.mark.asyncio
+async def test_conflicting_report_against_an_existing_verified_receipt_is_not_settled(monkeypatch):
+    """Real verifier: a hash verified for $1 cannot later settle a $1,000,000 report.
+
+    The verifier keeps the earlier verified receipt when the re-check fails, so
+    the observer must compare that receipt's terms with the new report.
+    """
+    from value.x402 import commerce_store, verification
+
+    commerce_store.reset_commerce_store()
+    verification._engine = None
+    engine = verification.VerificationEngine(event_producer=_Producer())
+    verdicts = iter([(True, None), (False, "amount_below_required: 1000000 < 1000000000000")])
+
+    async def chain_check(_authorization, _tx_hash):
+        return next(verdicts)
+
+    monkeypatch.setattr(engine, "_verify_locally", chain_check)
+    producer = _Producer()
+
+    small = _capture()
+    small.terms.amount = 1.0
+    first = await settlement_observer.observe_settlement(TENANT, small, engine=engine, producer=producer)
+    assert first["state"] == "settled"
+
+    large = _capture()
+    large.terms.amount = 1_000_000.0
+    second = await settlement_observer.observe_settlement(TENANT, large, engine=engine, producer=producer)
+    assert second["state"] == "conflicting"
+    assert second["verdict"] == "conflicting_report"
+
+    settled = [e for e in producer.events if e.topic == Topic.COMMERCE_SETTLEMENT_COMPLETED]
+    assert len(settled) == 1
+    assert settled[0].payload["amount"] == "1.0"
+    assert not [e for e in producer.events if e.topic == Topic.COMMERCE_SETTLEMENT_FAILED]
+
+
+@pytest.mark.asyncio
+async def test_solana_addresses_are_compared_case_sensitively():
+    class _Receipt:
+        amount_usd = 1.0
+        payer = "AbCdEf"
+        recipient = "XyZ"
+        asset_symbol = "USDC"
+        chain = "solana:mainnet"
+
+    observed = settlement_observer.PaymentAuthorization(
+        authorization_id="a", tenant_id=TENANT, challenge_id="a", approval_id="a",
+        payment_identifier="a", amount_usd=1.0, asset_symbol="USDC", chain="solana:mainnet",
+        recipient="XyZ", payer="abcdef", facilitator_id="a",
+    )
+    assert not settlement_observer._receipt_matches(_Receipt(), observed)
+    observed.payer = "AbCdEf"
+    assert settlement_observer._receipt_matches(_Receipt(), observed)

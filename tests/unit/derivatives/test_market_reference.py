@@ -141,3 +141,24 @@ async def test_grant_revoked_mid_fetch_denies_the_raw_write():
 
     assert await MarketRepo().find_one({"canonical_market_id": "hyperliquid:mainnet:BTC"}) is None
     assert source["grant_id"]
+
+
+def test_dated_futures_with_different_expiries_are_separate_instruments():
+    """Two expiries of one pair must not collapse into one registry instrument (Codex P2 on #896)."""
+    from value.derivatives.market_reference import MarketFact
+
+    def fact(market_id, instrument_type="dated_future", expiry=None):
+        return MarketFact(
+            venue="coinbase_futures", deployment="mainnet", venue_market_id=market_id,
+            instrument_type=instrument_type, underlying_asset_id="BTC", quote_asset_id="USD",
+            settlement_asset_id="USD", contract_type="dated", inverse_or_linear="linear",
+            price_precision=Decimal("0.01"), size_precision=Decimal("1"), status="active",
+            raw={}, contract_multiplier=Decimal("0.01"), expiry_at=expiry,
+        )
+
+    nov = fact("BIT-28NOV26-CDE", expiry="2026-11-28T16:00:00Z")
+    dec = fact("BIT-26DEC26-CDE", expiry="2026-12-26T16:00:00Z")
+    assert nov.canonical_instrument_id != dec.canonical_instrument_id
+    assert nov.canonical_instrument_id == "dated_future:coinbase_futures:BIT-28NOV26-CDE"
+    # Perpetuals keep their shared underlying/quote instrument.
+    assert fact("BTC-PERP", "perpetual_future").canonical_instrument_id == "perpetual_future:BTC:USD"

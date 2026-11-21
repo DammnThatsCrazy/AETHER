@@ -105,6 +105,7 @@ export const EXPERIENCE_LABELS: Readonly<Record<ExperienceToken, string>> = {
   social_community: "Social",
   customer_support: "Customer support",
   work_operations: "Work & operations",
+  markets_trading: "Markets & trading",
 };
 
 export interface ConnectorRecord {

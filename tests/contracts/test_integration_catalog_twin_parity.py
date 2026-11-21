@@ -34,6 +34,7 @@ from shared.integration_contracts.catalog import (  # noqa: E402
     ALL_MANIFESTS,
     CONNECTOR_MANIFESTS,
     DEFERRED_CREDIT_BUREAU_MANIFESTS,
+    DERIVATIVES_VENUE_MANIFESTS,
     PAYMENT_RAIL_MANIFESTS,
 )
 from shared.integration_contracts.experience import (  # noqa: E402
@@ -47,12 +48,14 @@ _GROUP_TO_PY_LIST = {
     "connectors": CONNECTOR_MANIFESTS,
     "ad_platforms": AD_MANIFESTS,
     "payment_rails": PAYMENT_RAIL_MANIFESTS,
+    "derivatives_venues": DERIVATIVES_VENUE_MANIFESTS,
     "deferred_credit_bureaus": DEFERRED_CREDIT_BUREAU_MANIFESTS,
 }
 _GROUP_TO_TS_CONST = {
     "connectors": "CONNECTOR_FAMILIES",
     "ad_platforms": "AD_PLATFORM_FAMILIES",
     "payment_rails": "PAYMENT_RAIL_FAMILIES",
+    "derivatives_venues": "DERIVATIVES_VENUE_FAMILIES",
     "deferred_credit_bureaus": "DEFERRED_CREDIT_BUREAU_FAMILIES",
 }
 
@@ -128,8 +131,8 @@ def test_generator_check_is_clean():
 
 
 def test_all_manifest_count_parity():
-    assert _ts_number_const("CATALOG_ENTRIES_COUNT") == len(ALL_MANIFESTS) == 36
-    assert _ts_number_const("ALL_CATALOG_FAMILIES_COUNT") == len(ALL_MANIFESTS) == 36
+    assert _ts_number_const("CATALOG_ENTRIES_COUNT") == len(ALL_MANIFESTS) == 52
+    assert _ts_number_const("ALL_CATALOG_FAMILIES_COUNT") == len(ALL_MANIFESTS) == 52
 
 
 def test_group_family_parity():
@@ -167,7 +170,7 @@ def test_experience_category_order_parity():
     assert ts_order == py_order, (
         f"experience category order drift: TS={ts_order} PY={py_order}"
     )
-    assert len(py_order) == 8
+    assert len(py_order) == 9
 
 
 def test_readiness_states_present_parity():
