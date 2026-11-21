@@ -45,10 +45,6 @@ allow_unreachable:
     modules: [calibration_evaluation, calibration_intake, source_precedence, split_service]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
-  - package: connectors.integrations
-    modules: [oauth, oauth.broker, oauth.pkce, oauth.provider_config, oauth.state]
-    ledger: product-backend-unmounted-code-pending
-    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: connectors.managed_integrations
     modules: [rollout, simulation, simulation_repository, source_authority, source_authority_repository]
     ledger: product-backend-unmounted-code-pending
