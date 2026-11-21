@@ -36,11 +36,11 @@ source_hashes:
   "services/api/actions/": "sha256:d1cf7b1487cb20463f07f8d2b7c029eb2e2d250da256b5a3391e0a22f768c28b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
-  "services/api/connectors/": "sha256:a279ca05a09f06d944d8fc498a5d394e2791bcf2ba55996e082a4692acd58098"
+  "services/api/connectors/": "sha256:a118c9bd771134a73062f7f271795836d7f952d5c57799070905bc6a9578d2a6"
   "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
   "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
   "services/api/identity/": "sha256:c54fe130e4198fd6b3fb99b0a288d3c5e2b61f6dadfd11737c4a4fdf8c266036"
-  "services/api/ingestion/": "sha256:0eb451deaf89a81798e8b91ff557a6e268cfdc7171ecd2ed341a53a13f1dc7e9"
+  "services/api/ingestion/": "sha256:43a6f333e9d31eb7f990ff857a44f255e2158c2e7eff23a14ad153be6fd4c5a2"
   "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -3869,6 +3869,8 @@ Operator command center for ML model registry, artifact management, feature cont
 ## Dune Feeder Admin — Scheduled Polling (v8.9.0)
 
 Manage automated Dune query polling schedules per tenant. All endpoints require `admin` permission.
+
+Every ingest (`POST /v1/admin/dune-feeder/ingest`, manual or scheduled) resolves rights for `dune:<source_tag>` in the scope that will own the rows: a tenant's own grant (tenant lake use) for a tenant scope, or an Olympus grant (Olympus baseline use) under the reserved `olympus` scope for a global ingest by a Kyber operator. First use without a grant answers 403 `dune_source_grant_required`; a source already fed in that scope continues as legacy (`unclassified`, tenant-lake-only). Rows carry `owner_scope`, `source_rights` and a matching `license_status`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

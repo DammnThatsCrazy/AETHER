@@ -8,7 +8,7 @@ status: experimental
 source_files: [services/api/shared/integration_contracts/source_relationship.py, services/api/connectors/provider_runtime/rights_admission.py, services/api/connectors/integrations/data_rights/service.py, services/api/tenancy/rights_authority/source_lineage.py]
 since_version: "0.1.0"
 source_hashes:
-  "services/api/connectors/integrations/data_rights/service.py": "sha256:fa97d67f33b89c7cd56f81b09b2c0ae99c096709ae111c693b5206a37f13439f"
+  "services/api/connectors/integrations/data_rights/service.py": "sha256:fdd684f3f0360e1cef2a92f0894ed9214f31862f7b57c2eeb3e20dbd0aa6e4fd"
   "services/api/connectors/provider_runtime/rights_admission.py": "sha256:2f73758b8ac901b65c5d63b311ab4f3017be6070fcd509bc127386023ca64cb5"
   "services/api/shared/integration_contracts/source_relationship.py": "sha256:9dce3c9e3424b976f4edea041ae39eedd82c9e8a7a25b57da20aa340c0d241f1"
   "services/api/tenancy/rights_authority/source_lineage.py": "sha256:4224f6a22e5d7b58925329370fcbfff1d4537e88fd71f6c1a9264fc0eba1a252"
@@ -110,7 +110,7 @@ Each invariant names the tests that pin it. Test names are relative to `services
 | 6 | BYOK does not imply data rights | `provider_runtime/test_rights_admission.py::test_byok_or_mismatched_source_grant_cannot_admit_tenant_raw_data` |
 | 7 | `olympus_source` does not provide an Olympus bypass | `unit/test_data_rights_grant_routes.py::test_tenant_cannot_claim_the_olympus_scope`; `unit/test_data_rights_source_relationship.py::test_invalid_pairings_are_rejected`; `provider_runtime/test_rights_admission_classes.py::test_denials_fail_closed`, `::test_olympus_class_grant_under_customer_tenant_has_no_retention_use`, `::test_retention_use_table`; `provider_runtime/test_bridge.py::test_olympus_scope_events_never_enter_the_tenant_pipeline`; `provider_runtime/test_replay.py::test_dry_run_does_not_count_olympus_scope_events_as_admitted` |
 | 8 | `partner_feed` does not imply cross-tenant reuse | `provider_runtime/test_rights_admission_classes.py::test_wrong_tenant_and_wrong_source_deny`; `ingestion/test_import_source_relationship.py::test_non_tenant_grant_cannot_admit_an_import` |
-| 9 | `public_reference` does not imply unrestricted commercial reuse | derivatives market reference: `tests/unit/derivatives/test_market_reference.py::test_olympus_source_is_a_public_reference_grant_without_tenant_rights`; other reference sources not pinned |
+| 9 | `public_reference` does not imply unrestricted commercial reuse | `tests/unit/derivatives/test_market_reference.py::test_olympus_source_is_a_public_reference_grant_without_tenant_rights`; `unit/test_native_capabilities.py::test_public_reference_grants_cannot_allow_reuse`, `::test_an_olympus_grant_must_carry_the_catalog_relationship` |
 | 10 | Revoked grants block subsequent provider raw writes | `provider_runtime/test_rights_admission.py::test_expired_or_revoked_grant_denies_admission`; `provider_runtime/test_rights_revocation_fence.py`; `tests/prod_equivalent/test_real_stack_rights_revocation_fence.py::test_a_write_after_a_committed_revocation_is_denied` |
 | 11 | One tenant's connection cannot bind another tenant's account | `provider_runtime/test_shop_account_binding.py::test_shop_held_by_another_tenant_is_rejected` |
 | 12 | Public reference data does not auto-merge with tenant-private identity | `unit/test_source_authority_invariants.py::test_olympus_scope_records_never_become_tenant_identity_evidence`; `provider_runtime/test_bridge.py::test_olympus_scope_events_never_enter_the_tenant_pipeline` |
@@ -151,6 +151,35 @@ Selecting an account on a tenant's own provider connection
 insights only) unless one is already active
 (`connectors/provider_runtime/organization_grants.py`). Shopify is the
 reference path. The reserved `olympus` scope never gets one.
+
+## Native capabilities
+
+The Olympus provider catalog (`connectors/provider_catalog/catalog.py`) declares
+the relationship an Olympus grant for each provider must carry, and whether a
+tenant can also connect it with its own credentials (`tenant_connectable`).
+`validate_grant_classification` enforces both: an Olympus-scope grant for a
+catalogued provider must use the declared relationship, and a
+`public_reference` grant can never allow commercial reuse, model training or
+cross-tenant aggregation.
+
+| Provider | Olympus relationship | Tenant use |
+|---|---|---|
+| Dune (`dune_api`, `dune_datashare`, `dune_sim`) | `olympus_source` | yes: the tenant's own `organization_system` grant in its scope |
+| CoinGecko, CoinMarketCap | `public_reference` | no |
+| Public exchange market data (Coinbase Exchange, Binance, Kraken, OKX, Bybit, CCXT) | `public_reference` | no |
+
+The Dune feeder applies this per ingest (`connectors/dune_feeder/service.py`):
+a global ingest lands under the `olympus` scope and needs an Olympus grant for
+`dune:<source_tag>` (Olympus baseline use); a tenant ingest needs that tenant's
+grant (tenant lake use). Each row records `owner_scope`, `source_rights` and a
+matching `license_status`. A source already fed in a scope stays legacy
+(`unclassified`, tenant-lake-only); first use without a grant is refused
+(`DUNE_SOURCE_GRANT_REQUIRED`, default on).
+
+Coinbase is three separate capabilities: the payment rail (`payment_rails/coinbase.py`,
+the tenant's own payments account), the Coinbase Financial Markets futures venue
+(`coinbase_futures`, a member's linked account) and Coinbase Exchange public
+market data (`coinbase_exchange`, Olympus `public_reference`).
 
 ## Source lifecycle
 

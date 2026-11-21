@@ -26,7 +26,7 @@ source_hashes:
   "scripts/bootstrap_aws_secrets.py": "sha256:ae5e53eee269aad3fa855ad2b2494d99738b32532fe6101cf9d2f86134f81d9c"
   "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:4b3f1c7c917710b145b834163c3136d0915279f57d58315cd4ba9fa201a0566b"
-  "services/api/config/settings.py": "sha256:20fd89e97be61973788b6b55b05819efd3e84981da5d84c1ff3116a123d74171"
+  "services/api/config/settings.py": "sha256:4dbf92aee80b79b23df58288eba721af626ef74dae5a8ad84c39699bb642699e"
 ---
 
 # Deployment Profile Matrix

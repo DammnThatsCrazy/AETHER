@@ -832,6 +832,9 @@ class IngressConsentConfig:
     # DataRightsGrant allowing the tenant lake. Sources a tenant already fed keep
     # working as unclassified, tenant-lake-only rows until converged.
     feed_source_grant_required: bool = _env_bool("FEED_SOURCE_GRANT_REQUIRED", True)
+    # Same rule for the Dune feeder (``dune:<source_tag>``), in the scope that will
+    # own the rows: a tenant's, or the reserved ``olympus`` scope for global ingests.
+    dune_source_grant_required: bool = _env_bool("DUNE_SOURCE_GRANT_REQUIRED", True)
     # C class — connector/communication durability seam (services/api/journeys/comms/ingest):
     # scrub + data-policy always run; the flag enables the per-subject (S)
     # server-receipt rejection (additionally gated by the authoritative flag AND
