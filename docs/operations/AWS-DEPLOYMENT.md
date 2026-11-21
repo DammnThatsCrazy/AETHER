@@ -61,6 +61,7 @@ reviewed_source_commits:
   - {'commit': '2cc82835', 'reason': 'The legacy staging Aurora cluster now pins its live 16.13 release and ignores engine_version, matching the managed cluster rule these docs already describe.'}
   - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
   - {'commit': '90159e69', 'reason': 'Remaining aether.network mailboxes, hosts and schema IDs moved to olympuslabsml.com; the doc text was updated in the same change where it named them.'}
+  - {'commit': '2676ca17', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -87,7 +88,7 @@ source_hashes:
   "infra/aws/README.md": "sha256:0da523ab56c398fcc42c98f4fdad5065fbd4737a5badd539fd68f738af39f3f8"
   "infra/aws/config/": "sha256:984a0d6c283c0394725f89ed882eb900e2d323345443e7e37036962184e4b5fe"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
-  "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
+  "infra/aws/main.py": "sha256:d1e1e4c25455ecd6638eb507b18f907193b736b8dfc4ae7f4b4f40fd1c362af1"
   "infra/aws/terraform/": "sha256:c19ecd3629136d99d41a88090defbdadca96a96bc8fc0e3f6881490cae96f43d"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
