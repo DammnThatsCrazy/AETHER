@@ -434,9 +434,19 @@ def _mfa_check_current(user: dict, code: str) -> dict:
     return {"mfa_recovery_hashes": remaining}
 
 
-def _redis():
-    from tenancy.auth.routes import _get_redis
-    return _get_redis()
+def _cache():
+    from tenancy.auth import mfa
+    return mfa.get_cache()
+
+
+async def _locked_user(user_id: str):
+    """Re-read the user inside the per-user two-step lock (see mfa.user_lock)."""
+    from repositories.repos import UserRepository
+    return await UserRepository().find_by_id(user_id) or {}
+
+
+def _lock_busy() -> ServiceUnavailableError:
+    return ServiceUnavailableError("Another two-step change for this account is in progress. Try again.")
 
 
 @router.get("/mfa")
@@ -461,7 +471,7 @@ async def start_my_mfa_enrolment(request: Request):
     if mfa.is_enabled(user):
         raise BadRequestError("Two-step verification is already on. Turn it off first to change authenticator.")
     secret = mfa.generate_secret()
-    await mfa.stash_pending_enrolment(_redis(), user_id, mfa.seal_secret(secret))
+    await mfa.stash_pending_enrolment(_cache(), user_id, mfa.seal_secret(secret))
     account = user.get("email") or user_id
     return APIResponse(data={
         "secret": secret,
@@ -476,23 +486,29 @@ async def confirm_my_mfa_enrolment(body: MfaCodeRequest, request: Request):
     from datetime import datetime, timezone
     from repositories.repos import UserRepository
     from tenancy.auth import mfa
-    user_id, user = await _mfa_user(request)
-    redis = _redis()
-    sealed = await mfa.take_pending_enrolment(redis, user_id)
-    if not sealed:
-        raise BadRequestError("Enrolment expired. Start again.")
-    counter = mfa.match_totp(mfa.unseal_secret(sealed), body.code)
-    if counter is None:
-        raise BadRequestError("That code does not match. Check the time on your device and try again.")
-    codes = mfa.generate_recovery_codes()
-    await UserRepository().update(user_id, {
-        "mfa_enabled": True,
-        "mfa_totp_secret": sealed,
-        "mfa_last_counter": counter,
-        "mfa_recovery_hashes": [mfa.hash_recovery_code(c) for c in codes],
-        "mfa_enrolled_at": datetime.now(timezone.utc).isoformat(),
-    })
-    await mfa.clear_pending_enrolment(redis, user_id)
+    user_id, _ = await _mfa_user(request)
+    cache = _cache()
+    try:
+        async with mfa.user_lock(cache, user_id):
+            if mfa.is_enabled(await _locked_user(user_id)):
+                raise BadRequestError("Two-step verification is already on.")
+            sealed = await mfa.take_pending_enrolment(cache, user_id)
+            if not sealed:
+                raise BadRequestError("Enrolment expired. Start again.")
+            counter = mfa.match_totp(mfa.unseal_secret(sealed), body.code)
+            if counter is None:
+                raise BadRequestError("That code does not match. Check the time on your device and try again.")
+            codes = mfa.generate_recovery_codes()
+            await UserRepository().update(user_id, {
+                "mfa_enabled": True,
+                "mfa_totp_secret": sealed,
+                "mfa_last_counter": counter,
+                "mfa_recovery_hashes": [mfa.hash_recovery_code(c) for c in codes],
+                "mfa_enrolled_at": datetime.now(timezone.utc).isoformat(),
+            })
+            await mfa.clear_pending_enrolment(cache, user_id)
+    except mfa.UserLockTimeout as exc:
+        raise _lock_busy() from exc
     metrics.increment("auth_mfa_enrolled")
     logger.info(f"Two-step verification enabled: user={user_id}")
     return APIResponse(data={"enabled": True, "recovery_codes": codes}).to_dict()
@@ -503,17 +519,22 @@ async def disable_my_mfa(body: MfaCodeRequest, request: Request):
     """Turn two-step verification off; requires a current code or a recovery code."""
     from repositories.repos import UserRepository
     from tenancy.auth import mfa
-    user_id, user = await _mfa_user(request)
-    if not mfa.is_enabled(user):
-        raise BadRequestError("Two-step verification is not on.")
-    _mfa_check_current(user, body.code)
-    await UserRepository().update(user_id, {
-        "mfa_enabled": False,
-        "mfa_totp_secret": None,
-        "mfa_last_counter": None,
-        "mfa_recovery_hashes": [],
-        "mfa_enrolled_at": None,
-    })
+    user_id, _ = await _mfa_user(request)
+    try:
+        async with mfa.user_lock(_cache(), user_id):
+            user = await _locked_user(user_id)
+            if not mfa.is_enabled(user):
+                raise BadRequestError("Two-step verification is not on.")
+            _mfa_check_current(user, body.code)
+            await UserRepository().update(user_id, {
+                "mfa_enabled": False,
+                "mfa_totp_secret": None,
+                "mfa_last_counter": None,
+                "mfa_recovery_hashes": [],
+                "mfa_enrolled_at": None,
+            })
+    except mfa.UserLockTimeout as exc:
+        raise _lock_busy() from exc
     metrics.increment("auth_mfa_disabled")
     logger.info(f"Two-step verification disabled: user={user_id}")
     return APIResponse(data={"enabled": False}).to_dict()
@@ -524,11 +545,16 @@ async def regenerate_my_recovery_codes(body: MfaCodeRequest, request: Request):
     """Replace every recovery code; requires a current code or a recovery code."""
     from repositories.repos import UserRepository
     from tenancy.auth import mfa
-    user_id, user = await _mfa_user(request)
-    if not mfa.is_enabled(user):
-        raise BadRequestError("Two-step verification is not on.")
-    update = _mfa_check_current(user, body.code)
-    codes = mfa.generate_recovery_codes()
-    update["mfa_recovery_hashes"] = [mfa.hash_recovery_code(c) for c in codes]
-    await UserRepository().update(user_id, update)
+    user_id, _ = await _mfa_user(request)
+    try:
+        async with mfa.user_lock(_cache(), user_id):
+            user = await _locked_user(user_id)
+            if not mfa.is_enabled(user):
+                raise BadRequestError("Two-step verification is not on.")
+            update = _mfa_check_current(user, body.code)
+            codes = mfa.generate_recovery_codes()
+            update["mfa_recovery_hashes"] = [mfa.hash_recovery_code(c) for c in codes]
+            await UserRepository().update(user_id, update)
+    except mfa.UserLockTimeout as exc:
+        raise _lock_busy() from exc
     return APIResponse(data={"recovery_codes": codes}).to_dict()

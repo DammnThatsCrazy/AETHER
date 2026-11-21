@@ -55,6 +55,7 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Fixed
 
+- Two-step verification: sign-in now refuses (`503`) instead of skipping the second factor when the user record cannot be read; challenges and pending enrolments use the shared cache instead of process memory, so any API process can finish them; and overlapping verifies are serialized per user, so a challenge, recovery code or authenticator time step can be used only once.
 - The pilot Terraform plan policy allows the Google and Apple Auth0 social connections and their Aether client associations, which are created when their credentials are provisioned. In the pilot the Google association holds only the Aether clients (`social_kyber_enabled=false`), and the policy refuses an association change that enables Kyber or drops an enabled client; deleting or replacing them is still rejected.
 - x402 settlement observer: a report whose terms differ from an already verified receipt for the same transaction is now `conflicting` and records nothing; settled events carry the verified receipt's terms, never the report's.
 - Propagation no longer uses stored venue fills whose data-rights grant has since been revoked (or replaced by re-linking); they are excluded with `revoked_grant_fills_excluded`, and an unreadable grant authority excludes them with `fill_grant_authority_unavailable`.

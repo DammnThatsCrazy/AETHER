@@ -43,6 +43,7 @@ from shared.common.common import (
     ForbiddenError,
     NotFoundError,
     RateLimitedError,
+    ServiceUnavailableError,
     UnauthorizedError,
     utc_now,
 )
@@ -369,11 +370,14 @@ async def _finish_sign_in(
             from repositories.repos import UserRepository
             user = await UserRepository().find_by_id(user_id)
         except Exception as e:
-            logger.debug(f"MFA user lookup failed: {e}")
-            user = None
+            # Fail closed: without the record we cannot tell whether a second
+            # factor is required, so no credential is issued.
+            logger.warning(f"MFA user lookup failed; refusing sign-in: {e}")
+            metrics.increment("auth_mfa_lookup_failures")
+            raise ServiceUnavailableError("Sign-in is temporarily unavailable. Try again shortly.") from e
     if user_id and mfa.is_enabled(user):
         challenge = await mfa.create_challenge(
-            _get_redis(), tenant_id=tenant_id, user_id=user_id, method=method,
+            mfa.get_cache(), tenant_id=tenant_id, user_id=user_id, method=method,
             plan_tier=plan_tier_value,
         )
         metrics.increment("auth_mfa_challenges", labels={"method": method})
@@ -1256,35 +1260,46 @@ async def verify_mfa(body: MfaVerifyRequest, response: Response = None, request:
 
     redis = _get_redis()
     await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
-    challenge = await mfa.load_challenge(redis, body.challenge)
+    cache = mfa.get_cache()
+    expired = "This sign-in has expired. Sign in again."
+    challenge = await mfa.load_challenge(cache, body.challenge)
     if not challenge:
-        raise BadRequestError("This sign-in has expired. Sign in again.")
+        raise BadRequestError(expired)
     user_id = challenge["user_id"]
     users = UserRepository()
-    user = await users.find_by_id(user_id) or {}
-    if not mfa.is_enabled(user):
-        await mfa.drop_challenge(redis, body.challenge)
-        raise BadRequestError("This sign-in has expired. Sign in again.")
+    try:
+        # One two-step write per user at a time; the record is re-read inside
+        # the lock so a recovery code or time step is consumed exactly once.
+        async with mfa.user_lock(cache, user_id):
+            user = await users.find_by_id(user_id) or {}
+            if not mfa.is_enabled(user):
+                await mfa.drop_challenge(cache, body.challenge)
+                raise BadRequestError(expired)
 
-    secret = mfa.unseal_secret(user["mfa_totp_secret"])
-    counter = mfa.match_totp(secret, body.code, last_counter=user.get("mfa_last_counter"))
-    update: dict = {}
-    if counter is not None:
-        update["mfa_last_counter"] = counter
-        used = "totp"
-    else:
-        remaining = mfa.consume_recovery_code(list(user.get("mfa_recovery_hashes") or []), body.code)
-        if remaining is None:
-            if not await mfa.record_failed_attempt(redis, body.challenge, challenge):
-                metrics.increment("auth_mfa_failures", labels={"outcome": "exhausted"})
-                raise BadRequestError("Too many incorrect codes. Sign in again.")
-            metrics.increment("auth_mfa_failures", labels={"outcome": "wrong_code"})
-            raise BadRequestError("Incorrect code.")
-        update["mfa_recovery_hashes"] = remaining
-        used = "recovery_code"
+            secret = mfa.unseal_secret(user["mfa_totp_secret"])
+            counter = mfa.match_totp(secret, body.code, last_counter=user.get("mfa_last_counter"))
+            update: dict = {}
+            if counter is not None:
+                update["mfa_last_counter"] = counter
+                used = "totp"
+            else:
+                remaining = mfa.consume_recovery_code(list(user.get("mfa_recovery_hashes") or []), body.code)
+                if remaining is None:
+                    if not await mfa.record_failed_attempt(cache, body.challenge, challenge):
+                        metrics.increment("auth_mfa_failures", labels={"outcome": "exhausted"})
+                        raise BadRequestError("Too many incorrect codes. Sign in again.")
+                    metrics.increment("auth_mfa_failures", labels={"outcome": "wrong_code"})
+                    raise BadRequestError("Incorrect code.")
+                update["mfa_recovery_hashes"] = remaining
+                used = "recovery_code"
 
-    await mfa.drop_challenge(redis, body.challenge)
-    await users.update(user_id, update)
+            # Only the request that wins the challenge may issue a session.
+            if not await mfa.consume_challenge(cache, body.challenge):
+                metrics.increment("auth_mfa_failures", labels={"outcome": "challenge_reused"})
+                raise BadRequestError(expired)
+            await users.update(user_id, update)
+    except mfa.UserLockTimeout as exc:
+        raise ServiceUnavailableError("Another sign-in for this account is in progress. Try again.") from exc
     metrics.increment("auth_mfa_verified", labels={"factor": used})
     tenant_id = challenge["tenant_id"]
     message = "Authenticated. A secure session has been created."
