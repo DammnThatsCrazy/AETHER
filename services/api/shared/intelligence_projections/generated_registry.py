@@ -319,7 +319,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "checkout", "commerce", "entity", "journey", "offer", "product", "sku"),
-        "canonicalAuthorities": ("campaign_facts", "commerce", "commerce_intent_authority", "commerce_product_offer_graph", "payments", "risk_outputs", "silver_commerce_flow_facts", "silver_exposure_facts", "source_provenance"),
+        "canonicalAuthorities": ("campaign_facts", "commerce", "commerce_intent_authority", "commerce_product_offer_graph", "payments", "risk_assessments", "risk_outputs", "risk_signals", "silver_commerce_flow_facts", "silver_exposure_facts", "source_provenance"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -559,7 +559,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/episode360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("actions", "agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
+        "canonicalAuthorities": ("actions", "agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_outputs", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
         "hardDependencies": ("contract_spine", "journey_continuity", "temporal_kernel"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
@@ -1817,7 +1817,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_and_limitations",
                 "requirement": "optional",
                 "description": "Evidence and coverage for account context.",
-                "canonicalAuthorityRefs": ("evidence",),
+                "canonicalAuthorityRefs": ("entity_registry", "evidence", "graph", "identity", "observations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -1831,7 +1831,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_trace",
                 "requirement": "required",
                 "description": "Evidence and limits for the account entity only, not a complete member aggregate.",
-                "canonicalAuthorityRefs": ("evidence",),
+                "canonicalAuthorityRefs": ("entity_registry", "evidence", "graph", "identity", "observations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -1904,7 +1904,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -1951,7 +1951,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("ai_execution_facts", "commerce", "communication_facts", "economic_facts", "entities", "entity_registry", "evidence", "graph", "identity", "journeys", "relationship_facts", "risk_outputs", "tenant_contract_profiles"),
+            "canonicalAuthorities": ("ai_execution_facts", "commerce", "communication_facts", "economic_facts", "entities", "entity_registry", "evidence", "graph", "identity", "journeys", "observations", "relationship_facts", "risk_outputs", "temporal", "tenant_contract_profiles"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -1998,7 +1998,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "optional"
             },
             {
-                "canonicalAuthorityRefs": ("agent_executions", "observations"),
+                "canonicalAuthorityRefs": ("agent_executions", "delegations", "observations"),
                 "description": "Optional Aether provider context retained for Agent 360: derived agent behavior (decisions, journey, influence, authority, value, risk, trust, market, observability) over source-reported Silver agent facts. Readable only with a server-derived agent_behavior read authorization (agent:manage).",
                 "id": "agent_behavior",
                 "implementationCrosswalk": ("agent_behavior",),
@@ -2193,7 +2193,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("agent_entities", "identity", "relationship_facts", "risk_outputs", "social_observations"),
+                "canonicalAuthorityRefs": ("agent_entities", "bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "identity", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_observations", "social_relationship_evidence_events", "transfers"),
                 "description": "Required Agent 360 blueprint slot: risk summary.",
                 "id": "risk_summary",
                 "implementationCrosswalk": ("risk_and_contagion",),
@@ -2247,7 +2247,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 900,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -2312,7 +2312,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_entity", "agent_executions", "ai_execution_facts", "commerce", "communication_facts", "delegations", "economic_facts", "entities", "evidence", "execution_facts", "graph", "identity", "observations", "outcome_facts", "payments", "relationship_facts", "resources", "risk_outputs", "social_observations", "source_provenance", "temporal", "tools"),
+            "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_entity", "agent_executions", "ai_execution_facts", "bronze_sdk_events", "commerce", "communication_facts", "computation", "delegations", "economic_facts", "entities", "entity_graph", "evidence", "execution_facts", "flow_trace_paths", "flow_traces", "graph", "identity", "observations", "outcome_facts", "payments", "relationship_facts", "resources", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_observations", "social_relationship_evidence_events", "source_provenance", "temporal", "tools", "transfers"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -2518,7 +2518,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -2723,7 +2723,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("risk_outputs",),
+                "canonicalAuthorityRefs": ("commerce_product_offer_graph", "risk_assessments", "risk_outputs", "risk_signals", "source_provenance"),
                 "description": "Required commerce360 slot: risk.",
                 "id": "risk",
                 "partialImplementationReason": "Current RiskSignal and RiskAssessment rows join only after exact tenant-scoped canonical product or offer resolution; historical coverage, freshness, policy, and causality remain unknown.",
@@ -2754,7 +2754,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -2783,7 +2783,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("campaign_facts", "commerce", "commerce_intent_authority", "commerce_product_offer_graph", "payments", "risk_outputs", "silver_commerce_flow_facts", "silver_exposure_facts", "source_provenance"),
+            "canonicalAuthorities": ("campaign_facts", "commerce", "commerce_intent_authority", "commerce_product_offer_graph", "payments", "risk_assessments", "risk_outputs", "risk_signals", "silver_commerce_flow_facts", "silver_exposure_facts", "source_provenance"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -2974,7 +2974,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 900,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -3092,7 +3092,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "entity_and_relationship_context",
                 "requirement": "optional",
                 "description": "Canonical identity for entity and episode subjects, campaign identity for campaign subjects, and graph relationships where the subject has a supported entity graph.",
-                "canonicalAuthorityRefs": ("campaign_facts", "episode_facts", "graph", "identity", "relationship_facts"),
+                "canonicalAuthorityRefs": ("campaign_facts", "entity_registry", "episode_facts", "graph", "identity", "observations", "relationship_facts", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -3163,7 +3163,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("episode_facts", "risk_signals"),
+                "canonicalAuthorityRefs": ("episode_facts", "risk_outputs", "risk_signals"),
                 "description": "Current canonical RiskSignals for an exact tenant episode primary subject; no episode-to-risk causality is inferred.",
                 "id": "risk_flags",
                 "partialImplementationReason": "Only current RiskSignals for the exact typed primary subject of one tenant-scoped EpisodeRecord are joined; risk history, complete signal coverage, policy, freshness, and causality remain unknown.",
@@ -3224,7 +3224,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -3277,7 +3277,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_facts", "campaign_touchpoints", "canonical_conversions", "communication_facts", "delegations", "episode_facts", "episode_journey_authority_records", "evidence", "graph", "identity", "outcome_facts", "relationship_facts", "risk_signals", "silver_semantic_observations", "temporal"),
+            "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_facts", "campaign_touchpoints", "canonical_conversions", "communication_facts", "delegations", "entity_registry", "episode_facts", "episode_journey_authority_records", "evidence", "graph", "identity", "observations", "outcome_facts", "relationship_facts", "risk_outputs", "risk_signals", "silver_semantic_observations", "temporal"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -3480,7 +3480,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 900,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -3682,7 +3682,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -3833,7 +3833,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "entity_context",
                 "requirement": "optional",
                 "description": "Resolved linked user-profile context for entity, journey, or episode subjects; parent identity is not substituted for the requested subject.",
-                "canonicalAuthorityRefs": ("episode_facts", "graph", "identity", "journeys"),
+                "canonicalAuthorityRefs": ("entity_registry", "episode_facts", "graph", "identity", "journeys", "observations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -3948,7 +3948,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -3989,7 +3989,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "identity", "journeys", "touchpoints"),
+            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "entity_registry", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "identity", "journeys", "observations", "temporal", "touchpoints"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -4015,7 +4015,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Location 360",
         "domainSlots": [
             {
-                "canonicalAuthorityRefs": ("geo_observations", "gold_temporal_heatmap"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "geo_temporal_timezone_assertions", "gold_temporal_heatmap", "locations"),
                 "description": "Tenant-scoped heatmap density bins only when an explicit location_id or source_observation_id names the exact canonical location fact.",
                 "id": "activity_density",
                 "partialImplementationReason": "Exact-linked heatmap bins carry both Gold and location-fact evidence. Aggregate-only bins remain unknown; location-specific coverage, freshness, and privacy policy evaluation remain unestablished.",
@@ -4030,7 +4030,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("campaign_facts", "locations"),
+                "canonicalAuthorityRefs": ("campaign_facts", "context_capsules", "geo_temporal_timezone_assertions", "locations"),
                 "description": "Exact campaigns linked to a canonical location fact.",
                 "id": "campaigns",
                 "partialImplementationReason": "Campaign touchpoints join only by exact location source observation ID; missing touchpoints, full campaign coverage, history, and freshness remain unknown.",
@@ -4048,7 +4048,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "entity_graph_context",
                 "requirement": "optional",
                 "description": "Entity graph context linked to locations.",
-                "canonicalAuthorityRefs": ("entity_graph", "graph"),
+                "canonicalAuthorityRefs": ("context_capsules", "entity_graph", "entity_registry", "graph", "identity", "locations"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4068,7 +4068,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_trace",
                 "requirement": "required",
                 "description": "Location fact and source observation references at allowed precision.",
-                "canonicalAuthorityRefs": ("context_capsules", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_temporal_timezone_assertions", "locations"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4082,7 +4082,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "geo_hierarchy",
                 "requirement": "required",
                 "description": "Recorded geographic labels at source supported precision.",
-                "canonicalAuthorityRefs": ("geo_observations", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "geo_temporal_timezone_assertions", "locations"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4096,7 +4096,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "geographic_observations",
                 "requirement": "optional",
                 "description": "Observed geographic facts and their temporal context.",
-                "canonicalAuthorityRefs": ("geo_observations", "temporal"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "locations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4107,7 +4107,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("journeys", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_temporal_timezone_assertions", "journeys", "locations"),
                 "description": "Exact journeys linked to a canonical location fact.",
                 "id": "journeys",
                 "partialImplementationReason": "Current exact entity journey versions are joined only when they cite the location source observation; historical versions, other subject kinds, and complete coverage remain unknown.",
@@ -4125,7 +4125,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "location_identity_and_state",
                 "requirement": "optional",
                 "description": "Location registry and geographic context.",
-                "canonicalAuthorityRefs": ("context_capsules", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_temporal_timezone_assertions", "locations"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4154,7 +4154,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "place_summary",
                 "requirement": "required",
                 "description": "Best supported place fact at policy capped precision.",
-                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "geo_temporal_timezone_assertions", "locations"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4179,7 +4179,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("identity", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_temporal_timezone_assertions", "identity", "locations"),
                 "description": "Profiles linked to place with profile policy applied.",
                 "id": "profiles",
                 "partialImplementationReason": "Only exact tenant entity profile records are joined; other location subject kinds, history, complete identity coverage, and freshness remain unknown.",
@@ -4194,7 +4194,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("locations", "risk_outputs", "risk_signals"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_temporal_timezone_assertions", "locations", "risk_outputs", "risk_signals"),
                 "description": "Risk outputs linked to place with evidence.",
                 "id": "risk",
                 "partialImplementationReason": "RiskSignals and canonical RiskAssessments join only when exact typed-subject evidence cites the location observation. Assessment output is separate from signal input; causal location risk, producer coverage, history, policy, and freshness remain unknown.",
@@ -4209,7 +4209,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("geo_temporal_timezone_assertions", "locations", "temporal"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_temporal_timezone_assertions", "locations", "temporal"),
                 "description": "Verified time zone and temporal conversion evidence.",
                 "id": "timezone",
                 "partialImplementationReason": "Timezone assertions join exact location facts with effective and recorded time; source assertion coverage, non-geographic projection subjects, and freshness SLA remain unknown.",
@@ -4224,7 +4224,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("economic_facts", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "economic_facts", "geo_temporal_timezone_assertions", "locations"),
                 "description": "Economic facts linked to place without subject inference.",
                 "id": "value",
                 "partialImplementationReason": "Economic facts join only by exact location source observation ID for entity subjects; causal location value, other subject kinds, history, and freshness remain unknown.",
@@ -4241,7 +4241,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -4282,7 +4282,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("campaign_facts", "cohort_membership", "context_capsules", "economic_facts", "entity_graph", "geo_observations", "geo_temporal_timezone_assertions", "gold_temporal_heatmap", "graph", "identity", "journeys", "locations", "population_definitions", "risk_outputs", "risk_signals", "temporal"),
+            "canonicalAuthorities": ("campaign_facts", "cohort_membership", "context_capsules", "economic_facts", "entity_graph", "entity_registry", "geo_observations", "geo_temporal_timezone_assertions", "gold_temporal_heatmap", "graph", "identity", "journeys", "locations", "population_definitions", "risk_outputs", "risk_signals", "temporal"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -4454,7 +4454,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -4576,7 +4576,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_and_limitations",
                 "requirement": "optional",
                 "description": "Evidence supporting the displayed profile claims.",
-                "canonicalAuthorityRefs": ("evidence",),
+                "canonicalAuthorityRefs": ("entity_registry", "evidence", "graph", "identity", "observations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -4590,7 +4590,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_trace",
                 "requirement": "required",
                 "description": "Source references and coverage limits for the exact tenant profile.",
-                "canonicalAuthorityRefs": ("evidence",),
+                "canonicalAuthorityRefs": ("entity_registry", "evidence", "graph", "identity", "observations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -4658,7 +4658,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("geo_observations", "temporal"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "locations", "temporal"),
                 "description": "Tenant-scoped observed location facts and their recorded temporal bounds for the exact entity subject.",
                 "id": "location_temporal",
                 "partialImplementationReason": "The source reports recorded entity location facts only; profile alias resolution, continuous trajectory reconstruction, cross-surface completeness, historical point-in-time reconstruction, and Profile-specific freshness remain unknown.",
@@ -4676,7 +4676,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "observed_state_and_activity",
                 "requirement": "optional",
                 "description": "Observed state and temporal activity with explicit provenance.",
-                "canonicalAuthorityRefs": ("graph", "observations", "temporal"),
+                "canonicalAuthorityRefs": ("communication_facts", "entity_registry", "graph", "identity", "observations", "temporal"),
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -4719,7 +4719,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "risk_context",
                 "requirement": "optional",
                 "description": "Governed risk and fraud context.",
-                "canonicalAuthorityRefs": ("model_governance", "risk_outputs"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -4730,7 +4730,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "risk_outputs"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Tenant-exact Risk360 assessment and evidence for the same canonical entity or Agent subject; no profile identity is inferred.",
                 "id": "risk_summary",
                 "partialImplementationReason": "Risk assessment and evidence reads bind by exact tenant, subject kind, and subject ID; a Profile-specific freshness threshold remains unknown.",
@@ -4798,7 +4798,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -4893,7 +4893,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_access", "agent_executions", "ai_execution_facts", "analytics_events", "cohort_membership", "communication_facts", "consent_policy_decisions", "economic_facts", "entity_registry", "evidence", "geo_observations", "graph", "identity", "identity_source_identities", "journeys", "model_artifact_registry", "model_governance", "observations", "outcome_facts", "population_definitions", "profile_prediction_outputs", "relationship_facts", "risk_outputs", "temporal"),
+            "canonicalAuthorities": ("agent_access", "agent_executions", "ai_execution_facts", "analytics_events", "bronze_sdk_events", "cohort_membership", "communication_facts", "computation", "consent_policy_decisions", "context_capsules", "economic_facts", "entity_graph", "entity_registry", "evidence", "flow_trace_paths", "flow_traces", "geo_observations", "graph", "identity", "identity_source_identities", "journeys", "locations", "model_artifact_registry", "model_governance", "observations", "outcome_facts", "population_definitions", "profile_prediction_outputs", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "temporal", "transfers"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -4922,7 +4922,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "agent_amplification",
                 "requirement": "required",
                 "description": "Persisted agentic delegation abuse signal only for exact agent subject.",
-                "canonicalAuthorityRefs": ("evidence", "risk_outputs"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -4933,7 +4933,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "observations", "risk_outputs", "risk_signals"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "observations", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Exact tenant and typed-subject Gold anomaly alerts, with optional bounded RiskSignal, event evidence, and Bronze SDK event-record metadata when explicit identifiers match.",
                 "id": "anomaly_events",
                 "partialImplementationReason": "Authenticated Gold alert materialization verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet. For explicit bronze_sdk_events references, Risk360 also checks one exact tenant Bronze V1/V2 record without exposing payload; missing, duplicate, tombstoned, or quarantined records remain unverified. Legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer; complete event coverage, detector coverage, cause, severity, and freshness remain unknown.",
@@ -4948,7 +4948,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("computation", "evidence", "risk_assessments", "risk_intervention_records"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Exact-subject assessment-run and intervention histories with bounded, verified direct predecessor links when the stored supersedes reference agrees on tenant, subject, definition, version, and context.",
                 "id": "audit_history",
                 "partialImplementationReason": "Assessment-run and append-only intervention histories are available for exact subjects; direct supersedes references are exposed only after exact predecessor verification. Cross-assessment late-data lineage, full restatement history, actor authority, producer completeness, independent outcome verification, and freshness remain unknown.",
@@ -4980,7 +4980,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_trace",
                 "requirement": "required",
                 "description": "Exact assessment, signal, and source ingress evidence references.",
-                "canonicalAuthorityRefs": ("evidence", "flow_trace_paths", "flow_traces", "risk_assessments", "risk_outputs", "risk_signals", "source_provenance", "transfers"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5005,7 +5005,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("consent_policy_decisions", "flow_trace_paths", "flow_traces", "risk_assessments", "risk_signals", "transfers"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "consent_policy_decisions", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Exact financial transfer path linked to risk evidence for each node after affirmative current analytics consent for every path entity; causal contagion, exposure, and loss remain unproven.",
                 "id": "financial_contagion",
                 "partialImplementationReason": "The bounded path is a correlated observation only. Causal contagion, exposure, loss, source coverage, current risk policy outcome, and freshness are unknown; missing or denied entity consent suppresses path details.",
@@ -5040,7 +5040,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("actions", "risk_intervention_records", "risk_outputs"),
+                "canonicalAuthorityRefs": ("actions", "bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Recorded risk interventions and results.",
                 "id": "interventions",
                 "partialImplementationReason": "Exact-subject intervention decisions join caller-associated dispatches and their persisted action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the exact tenant, intent, job, receipt, provider site, requested payload and subject chain. Other providers lack independent resource verification. Producer coverage, historical replay, independently verified intervention outcomes and freshness remain unknown.",
@@ -5055,7 +5055,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("risk_outputs", "source_provenance"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "transfers"),
                 "description": "Tenant-scoped detector evidence for exact subjects, with versioned lifecycle and evidence references; detector completeness and source reputation remain unknown.",
                 "id": "poisoning_evidence",
                 "partialImplementationReason": "Risk360 reads explicitly stored detector evidence for exact tenant and subject bindings, with temporal anchors, lifecycle, restatement lineage, and evidence references. Detector coverage, independent source verification, population-wide completeness, and a source freshness SLA remain unknown.",
@@ -5070,7 +5070,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("model_governance", "risk_outputs", "risk_signals"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Exact agent risk-signal policy-flag observations with evidence; evaluated flags require versioned model-governance decisions.",
                 "id": "policy_flags",
                 "partialImplementationReason": "Only exact tenant-scoped current agent risk-signal records are exposed as reported observations. Policy evaluation, model/version, non-agent subjects, historical replay, and complete coverage remain unknown.",
@@ -5085,7 +5085,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("consent_policy_decisions", "evidence", "graph", "relationship_facts"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "consent_policy_decisions", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Observed, consent-governed social graph paths used as risk investigation context; path evidence alone does not establish risk propagation.",
                 "id": "propagation_paths",
                 "implementationCrosswalk": ("risk_observed_social_graph_paths",),
@@ -5124,7 +5124,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "risk_assessment_state",
                 "requirement": "optional",
                 "description": "Risk outputs, model governance context, and assessment state.",
-                "canonicalAuthorityRefs": ("model_governance", "risk_outputs"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5138,7 +5138,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "risk_evidence_and_limitations",
                 "requirement": "optional",
                 "description": "Evidence and limitations supporting risk findings.",
-                "canonicalAuthorityRefs": ("evidence",),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5152,7 +5152,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "risk_summary",
                 "requirement": "required",
                 "description": "Exact scoped canonical assessment and dimension state with evidence and confidence.",
-                "canonicalAuthorityRefs": ("evidence", "risk_outputs"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5163,7 +5163,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("bronze_sdk_events", "consent_policy_decisions", "entity_graph", "relationship_facts", "risk_signals", "social_relationship_evidence_events"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "consent_policy_decisions", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "description": "Exact source-reported social path evidence joined to tenant-scoped risk, relationship, and event authorities; causality remains unverified.",
                 "id": "social_contagion",
                 "partialImplementationReason": "The bounded source-reported path is correlated only; causal contagion, complete source coverage, current policy outcome, and freshness are unproven. Consent denial suppresses content.",
@@ -5181,7 +5181,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "source_trust",
                 "requirement": "required",
                 "description": "Gateway stamped ingress classification for an exact source subject; reliability remains unknown.",
-                "canonicalAuthorityRefs": ("source_provenance",),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_signals", "social_relationship_evidence_events", "source_provenance", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5194,7 +5194,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -5411,7 +5411,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("source_facts", "source_provenance"),
+                "canonicalAuthorityRefs": ("observations", "source_facts", "source_provenance"),
                 "description": "Authenticated source metadata for an exact SDK event or observation, with an exact current tenant site registration fact when its server-stamped site namespace resolves; fleet inventory remains unknown.",
                 "id": "source_inventory",
                 "partialImplementationReason": "One exact SDK event or observation is described; authenticated site-scoped events may join the current canonical tenant site registry. Mobile and tenant-wide events, historical registration state, fleet inventory, and source reliability remain unknown.",
@@ -5428,7 +5428,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 900,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -5534,7 +5534,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "geographic_context",
                 "requirement": "optional",
                 "description": "Location context for social observations.",
-                "canonicalAuthorityRefs": ("geo_observations", "locations"),
+                "canonicalAuthorityRefs": ("context_capsules", "geo_observations", "locations"),
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -5708,7 +5708,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -5761,7 +5761,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("authenticated_tenant_permission", "cohort_membership", "computation", "entity_identity", "evidence", "geo_observations", "graph", "identity", "influence_propagation", "locations", "population_definitions", "relationship_facts", "relationship_fidelity", "relationship_predicate_registry", "risk_outputs", "risk_signals", "social_observations", "social_relationship_evidence_events", "source_coverage", "source_facts", "source_provenance"),
+            "canonicalAuthorities": ("authenticated_tenant_permission", "cohort_membership", "computation", "context_capsules", "entity_identity", "evidence", "geo_observations", "graph", "identity", "influence_propagation", "locations", "population_definitions", "relationship_facts", "relationship_fidelity", "relationship_predicate_registry", "risk_outputs", "risk_signals", "social_observations", "social_relationship_evidence_events", "source_coverage", "source_facts", "source_provenance"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -5850,7 +5850,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "entity_and_agent_context",
                 "requirement": "optional",
                 "description": "Identity and agent context associated with support activity.",
-                "canonicalAuthorityRefs": ("agent_entity", "identity"),
+                "canonicalAuthorityRefs": ("agent_entity", "entity_registry", "identity"),
                 "projectionBindings": [
                     {
                         "projectionId": "agent360",
@@ -5941,7 +5941,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "provider_connections", "risk_outputs", "risk_signals", "support_case_subjects", "support_cases"),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "provider_connections", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "support_case_subjects", "support_cases", "transfers"),
                 "description": "Exact canonical case RiskAssessment and RiskSignal observations, with ticket/conversation scope admitted only through authenticated persisted subject mappings and current verified provider/account connections.",
                 "id": "risk",
                 "implementationCrosswalk": ("risk_and_contagion",),
@@ -5960,7 +5960,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "risk_context",
                 "requirement": "optional",
                 "description": "Risk context from its governing projection, subject to policy.",
-                "canonicalAuthorityRefs": ("risk_outputs",),
+                "canonicalAuthorityRefs": ("bronze_sdk_events", "computation", "entity_graph", "flow_trace_paths", "flow_traces", "graph", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "transfers"),
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -6030,7 +6030,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -6095,7 +6095,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_entities", "agent_entity", "communication_facts", "episode_facts", "events", "evidence", "identity", "journeys", "measurement_contract", "outcome_facts", "provider_connections", "risk_outputs", "risk_signals", "source_coverage", "source_provenance", "support_callback_events", "support_callbacks", "support_case_agent_assignment_events", "support_case_context_events", "support_case_events", "support_case_subjects", "support_cases"),
+            "canonicalAuthorities": ("agent_entities", "agent_entity", "bronze_sdk_events", "communication_facts", "computation", "entity_graph", "entity_registry", "episode_facts", "events", "evidence", "flow_trace_paths", "flow_traces", "graph", "identity", "journeys", "measurement_contract", "outcome_facts", "provider_connections", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_coverage", "source_provenance", "support_callback_events", "support_callbacks", "support_case_agent_assignment_events", "support_case_context_events", "support_case_events", "support_case_subjects", "support_cases", "transfers"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -6364,7 +6364,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
@@ -6506,7 +6506,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "evidence_trace",
                 "requirement": "required",
                 "description": "Lineage of exact workflow run linked AI invocation facts.",
-                "canonicalAuthorityRefs": ("ai_execution_facts",),
+                "canonicalAuthorityRefs": ("agent_executions", "ai_execution_facts", "events"),
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",
@@ -6607,7 +6607,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         ],
         "freshnessPolicy": {
             "required": True,
-            "maxAgeSeconds": None,
+            "maxAgeSeconds": 86400,
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",

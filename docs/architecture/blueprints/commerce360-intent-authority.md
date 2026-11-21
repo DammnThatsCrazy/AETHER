@@ -13,7 +13,7 @@ source_files:
   - services/api/value/commerce/commerce360_provider.py
   - services/api/value/commerce/commerce_intents.py
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a724e282e98893b5c3781277fd43b6087a15ce9ed5d1aca3b746f59d5cf8e945"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/tests/unit/test_commerce_intent_authority.py": "sha256:2f80185b0b0ae04a08b2342152b81a311b017ce2cf87ded2ca8aa615b08fad87"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
@@ -94,8 +94,9 @@ The `intent` section reports:
 The provider carries actor, effective and observed times, source revision, and
 evidence references into the section. It emits observed claims only from
 validated records. The evidence trace includes intent evidence. It preserves
-source timestamps and reports freshness as `unknown` until a source-specific
-freshness threshold is configured. Existing frame policy remains responsible
+source timestamps. Commerce360 uses the catalog's default 24-hour threshold,
+and freshness stays `unknown` (`freshness_source_timestamp_missing`) until the
+intent source reports a timestamp the frame can judge. Existing frame policy remains responsible
 for any customer-facing redaction.
 
 ## Projection binding

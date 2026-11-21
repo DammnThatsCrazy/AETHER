@@ -648,7 +648,8 @@
         "risk_signals",
         "silver_semantic_observations",
         "temporal",
-        "touchpoints"
+        "touchpoints",
+        "risk_outputs"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -2759,7 +2760,9 @@
         "commerce_intent_authority",
         "silver_exposure_facts",
         "silver_commerce_flow_facts",
-        "risk_outputs"
+        "risk_outputs",
+        "risk_assessments",
+        "risk_signals"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -3248,7 +3251,18 @@
             "identity",
             "relationship_facts",
             "risk_outputs",
-            "social_observations"
+            "social_observations",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -3438,7 +3452,8 @@
           "description": "Optional Aether provider context retained for Agent 360: derived agent behavior (decisions, journey, influence, authority, value, risk, trust, market, observability) over source-reported Silver agent facts. Readable only with a server-derived agent_behavior read authorization (agent:manage).",
           "canonicalAuthorityRefs": [
             "agent_executions",
-            "observations"
+            "observations",
+            "delegations"
           ],
           "projectionBindings": [
             {
@@ -3537,7 +3552,17 @@
           "social_observations",
           "source_provenance",
           "temporal",
-          "tools"
+          "tools",
+          "bronze_sdk_events",
+          "computation",
+          "entity_graph",
+          "flow_trace_paths",
+          "flow_traces",
+          "risk_assessments",
+          "risk_intervention_records",
+          "risk_signals",
+          "social_relationship_evidence_events",
+          "transfers"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -3552,7 +3577,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 900,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -4051,7 +4076,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 900,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -4356,7 +4381,8 @@
           "description": "Current canonical RiskSignals for an exact tenant episode primary subject; no episode-to-risk causality is inferred.",
           "canonicalAuthorityRefs": [
             "episode_facts",
-            "risk_signals"
+            "risk_signals",
+            "risk_outputs"
           ],
           "projectionBindings": [
             {
@@ -4402,7 +4428,10 @@
             "episode_facts",
             "graph",
             "identity",
-            "relationship_facts"
+            "relationship_facts",
+            "entity_registry",
+            "observations",
+            "temporal"
           ],
           "projectionBindings": [
             {
@@ -4508,7 +4537,10 @@
           "relationship_facts",
           "risk_signals",
           "silver_semantic_observations",
-          "temporal"
+          "temporal",
+          "risk_outputs",
+          "entity_registry",
+          "observations"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -4523,7 +4555,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -4842,7 +4874,19 @@
           "description": "Tenant-exact Risk360 assessment and evidence for the same canonical entity or Agent subject; no profile identity is inferred.",
           "canonicalAuthorityRefs": [
             "evidence",
-            "risk_outputs"
+            "risk_outputs",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -4869,7 +4913,9 @@
           "partialImplementationReason": "The source reports recorded entity location facts only; profile alias resolution, continuous trajectory reconstruction, cross-surface completeness, historical point-in-time reconstruction, and Profile-specific freshness remain unknown.",
           "canonicalAuthorityRefs": [
             "geo_observations",
-            "temporal"
+            "temporal",
+            "context_capsules",
+            "locations"
           ],
           "projectionBindings": [
             {
@@ -4917,7 +4963,12 @@
           "requirement": "required",
           "description": "Source references and coverage limits for the exact tenant profile.",
           "canonicalAuthorityRefs": [
-            "evidence"
+            "evidence",
+            "entity_registry",
+            "graph",
+            "identity",
+            "observations",
+            "temporal"
           ],
           "projectionBindings": [
             {
@@ -4963,7 +5014,10 @@
           "canonicalAuthorityRefs": [
             "observations",
             "graph",
-            "temporal"
+            "temporal",
+            "communication_facts",
+            "entity_registry",
+            "identity"
           ],
           "projectionBindings": [
             {
@@ -4986,7 +5040,12 @@
           "requirement": "optional",
           "description": "Evidence supporting the displayed profile claims.",
           "canonicalAuthorityRefs": [
-            "evidence"
+            "evidence",
+            "entity_registry",
+            "graph",
+            "identity",
+            "observations",
+            "temporal"
           ],
           "projectionBindings": [
             {
@@ -5029,7 +5088,19 @@
           "description": "Governed risk and fraud context.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
-            "model_governance"
+            "model_governance",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -5140,7 +5211,19 @@
           "profile_prediction_outputs",
           "relationship_facts",
           "risk_outputs",
-          "temporal"
+          "temporal",
+          "bronze_sdk_events",
+          "computation",
+          "entity_graph",
+          "flow_trace_paths",
+          "flow_traces",
+          "risk_assessments",
+          "risk_intervention_records",
+          "risk_signals",
+          "social_relationship_evidence_events",
+          "transfers",
+          "context_capsules",
+          "locations"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -5155,7 +5238,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -5644,7 +5727,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -6020,7 +6103,10 @@
             "episode_facts",
             "graph",
             "identity",
-            "journeys"
+            "journeys",
+            "entity_registry",
+            "observations",
+            "temporal"
           ],
           "projectionBindings": [
             {
@@ -6075,7 +6161,10 @@
           "graph",
           "identity",
           "journeys",
-          "touchpoints"
+          "touchpoints",
+          "entity_registry",
+          "observations",
+          "temporal"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -6090,7 +6179,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -6555,7 +6644,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 900,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -6656,7 +6745,19 @@
           "description": "Exact scoped canonical assessment and dimension state with evidence and confidence.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
-            "evidence"
+            "evidence",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6686,7 +6787,18 @@
             "risk_outputs",
             "observations",
             "risk_signals",
-            "evidence"
+            "evidence",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6717,7 +6829,18 @@
           "canonicalAuthorityRefs": [
             "model_governance",
             "risk_outputs",
-            "risk_signals"
+            "risk_signals",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6739,7 +6862,19 @@
           "description": "Tenant-scoped detector evidence for exact subjects, with versioned lifecycle and evidence references; detector completeness and source reputation remain unknown.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
-            "source_provenance"
+            "source_provenance",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6766,7 +6901,19 @@
           "requirement": "required",
           "description": "Gateway stamped ingress classification for an exact source subject; reliability remains unknown.",
           "canonicalAuthorityRefs": [
-            "source_provenance"
+            "source_provenance",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6791,7 +6938,17 @@
             "graph",
             "relationship_facts",
             "consent_policy_decisions",
-            "evidence"
+            "evidence",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6820,7 +6977,14 @@
             "transfers",
             "risk_assessments",
             "risk_signals",
-            "consent_policy_decisions"
+            "consent_policy_decisions",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "graph",
+            "relationship_facts",
+            "risk_intervention_records",
+            "social_relationship_evidence_events"
           ],
           "projectionBindings": [
             {
@@ -6846,7 +7010,14 @@
             "entity_graph",
             "relationship_facts",
             "risk_signals",
-            "consent_policy_decisions"
+            "consent_policy_decisions",
+            "computation",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "risk_assessments",
+            "risk_intervention_records",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6868,7 +7039,19 @@
           "description": "Persisted agentic delegation abuse signal only for exact agent subject.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
-            "evidence"
+            "evidence",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6892,7 +7075,18 @@
           "canonicalAuthorityRefs": [
             "actions",
             "risk_intervention_records",
-            "risk_outputs"
+            "risk_outputs",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6923,7 +7117,16 @@
             "computation",
             "evidence",
             "risk_assessments",
-            "risk_intervention_records"
+            "risk_intervention_records",
+            "bronze_sdk_events",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -6957,7 +7160,14 @@
             "risk_outputs",
             "risk_signals",
             "source_provenance",
-            "transfers"
+            "transfers",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "graph",
+            "relationship_facts",
+            "risk_intervention_records",
+            "social_relationship_evidence_events"
           ],
           "projectionBindings": [
             {
@@ -6985,7 +7195,19 @@
           "description": "Risk outputs, model governance context, and assessment state.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
-            "model_governance"
+            "model_governance",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -7011,7 +7233,19 @@
           "requirement": "optional",
           "description": "Evidence and limitations supporting risk findings.",
           "canonicalAuthorityRefs": [
-            "evidence"
+            "evidence",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -7234,7 +7468,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -7887,7 +8121,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -8362,7 +8596,8 @@
           "description": "Location context for social observations.",
           "canonicalAuthorityRefs": [
             "geo_observations",
-            "locations"
+            "locations",
+            "context_capsules"
           ],
           "projectionBindings": [
             {
@@ -8436,7 +8671,8 @@
           "social_relationship_evidence_events",
           "source_coverage",
           "source_facts",
-          "source_provenance"
+          "source_provenance",
+          "context_capsules"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -8451,7 +8687,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -8911,7 +9147,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -9034,7 +9270,8 @@
           "description": "Authenticated source metadata for an exact SDK event or observation, with an exact current tenant site registration fact when its server-stamped site namespace resolves; fleet inventory remains unknown.",
           "canonicalAuthorityRefs": [
             "source_facts",
-            "source_provenance"
+            "source_provenance",
+            "observations"
           ],
           "projectionBindings": [
             {
@@ -9271,7 +9508,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 900,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -9507,7 +9744,12 @@
           "requirement": "required",
           "description": "Evidence and limits for the account entity only, not a complete member aggregate.",
           "canonicalAuthorityRefs": [
-            "evidence"
+            "evidence",
+            "entity_registry",
+            "graph",
+            "identity",
+            "observations",
+            "temporal"
           ],
           "projectionBindings": [
             {
@@ -9596,7 +9838,12 @@
           "requirement": "optional",
           "description": "Evidence and coverage for account context.",
           "canonicalAuthorityRefs": [
-            "evidence"
+            "evidence",
+            "entity_registry",
+            "graph",
+            "identity",
+            "observations",
+            "temporal"
           ],
           "projectionBindings": [
             {
@@ -9684,7 +9931,9 @@
           "journeys",
           "relationship_facts",
           "risk_outputs",
-          "tenant_contract_profiles"
+          "tenant_contract_profiles",
+          "observations",
+          "temporal"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -9699,7 +9948,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -9806,7 +10055,8 @@
           "canonicalAuthorityRefs": [
             "locations",
             "geo_observations",
-            "context_capsules"
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -9830,7 +10080,9 @@
           "description": "Recorded geographic labels at source supported precision.",
           "canonicalAuthorityRefs": [
             "locations",
-            "geo_observations"
+            "geo_observations",
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -9855,7 +10107,8 @@
           "canonicalAuthorityRefs": [
             "geo_temporal_timezone_assertions",
             "locations",
-            "temporal"
+            "temporal",
+            "context_capsules"
           ],
           "projectionBindings": [
             {
@@ -9880,7 +10133,10 @@
           "description": "Tenant-scoped heatmap density bins only when an explicit location_id or source_observation_id names the exact canonical location fact.",
           "canonicalAuthorityRefs": [
             "geo_observations",
-            "gold_temporal_heatmap"
+            "gold_temporal_heatmap",
+            "context_capsules",
+            "geo_temporal_timezone_assertions",
+            "locations"
           ],
           "projectionBindings": [
             {
@@ -9902,7 +10158,9 @@
           "description": "Exact journeys linked to a canonical location fact.",
           "canonicalAuthorityRefs": [
             "journeys",
-            "locations"
+            "locations",
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -9924,7 +10182,9 @@
           "description": "Exact campaigns linked to a canonical location fact.",
           "canonicalAuthorityRefs": [
             "campaign_facts",
-            "locations"
+            "locations",
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -9948,7 +10208,9 @@
           "description": "Profiles linked to place with profile policy applied.",
           "canonicalAuthorityRefs": [
             "identity",
-            "locations"
+            "locations",
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -9970,7 +10232,9 @@
           "description": "Economic facts linked to place without subject inference.",
           "canonicalAuthorityRefs": [
             "economic_facts",
-            "locations"
+            "locations",
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -9993,7 +10257,9 @@
           "canonicalAuthorityRefs": [
             "locations",
             "risk_outputs",
-            "risk_signals"
+            "risk_signals",
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -10040,7 +10306,8 @@
           "description": "Location fact and source observation references at allowed precision.",
           "canonicalAuthorityRefs": [
             "locations",
-            "context_capsules"
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -10064,7 +10331,8 @@
           "description": "Location registry and geographic context.",
           "canonicalAuthorityRefs": [
             "locations",
-            "context_capsules"
+            "context_capsules",
+            "geo_temporal_timezone_assertions"
           ],
           "projectionBindings": [
             {
@@ -10089,7 +10357,9 @@
           "description": "Observed geographic facts and their temporal context.",
           "canonicalAuthorityRefs": [
             "geo_observations",
-            "temporal"
+            "temporal",
+            "context_capsules",
+            "locations"
           ],
           "projectionBindings": [
             {
@@ -10113,7 +10383,11 @@
           "description": "Entity graph context linked to locations.",
           "canonicalAuthorityRefs": [
             "entity_graph",
-            "graph"
+            "graph",
+            "context_capsules",
+            "locations",
+            "entity_registry",
+            "identity"
           ],
           "projectionBindings": [
             {
@@ -10204,7 +10478,8 @@
           "population_definitions",
           "risk_outputs",
           "risk_signals",
-          "temporal"
+          "temporal",
+          "entity_registry"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -10219,7 +10494,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -10556,7 +10831,9 @@
           "requirement": "required",
           "description": "Lineage of exact workflow run linked AI invocation facts.",
           "canonicalAuthorityRefs": [
-            "ai_execution_facts"
+            "ai_execution_facts",
+            "agent_executions",
+            "events"
           ],
           "projectionBindings": [
             {
@@ -10613,7 +10890,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -10961,7 +11238,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -11264,7 +11541,11 @@
           "requirement": "required",
           "description": "Required commerce360 slot: risk.",
           "canonicalAuthorityRefs": [
-            "risk_outputs"
+            "risk_outputs",
+            "commerce_product_offer_graph",
+            "risk_assessments",
+            "risk_signals",
+            "source_provenance"
           ],
           "projectionBindings": [
             {
@@ -11330,7 +11611,9 @@
           "risk_outputs",
           "silver_commerce_flow_facts",
           "silver_exposure_facts",
-          "source_provenance"
+          "source_provenance",
+          "risk_assessments",
+          "risk_signals"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -11345,7 +11628,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
@@ -11642,7 +11925,18 @@
             "risk_outputs",
             "risk_signals",
             "support_case_subjects",
-            "support_cases"
+            "support_cases",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -11781,7 +12075,8 @@
           "description": "Identity and agent context associated with support activity.",
           "canonicalAuthorityRefs": [
             "identity",
-            "agent_entity"
+            "agent_entity",
+            "entity_registry"
           ],
           "projectionBindings": [
             {
@@ -11838,7 +12133,19 @@
           "requirement": "optional",
           "description": "Risk context from its governing projection, subject to policy.",
           "canonicalAuthorityRefs": [
-            "risk_outputs"
+            "risk_outputs",
+            "bronze_sdk_events",
+            "computation",
+            "entity_graph",
+            "flow_trace_paths",
+            "flow_traces",
+            "graph",
+            "relationship_facts",
+            "risk_assessments",
+            "risk_intervention_records",
+            "risk_signals",
+            "social_relationship_evidence_events",
+            "transfers"
           ],
           "projectionBindings": [
             {
@@ -11944,7 +12251,19 @@
           "support_case_context_events",
           "support_case_events",
           "support_case_subjects",
-          "support_cases"
+          "support_cases",
+          "bronze_sdk_events",
+          "computation",
+          "entity_graph",
+          "flow_trace_paths",
+          "flow_traces",
+          "graph",
+          "relationship_facts",
+          "risk_assessments",
+          "risk_intervention_records",
+          "social_relationship_evidence_events",
+          "transfers",
+          "entity_registry"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [
@@ -11959,7 +12278,7 @@
       },
       "freshnessPolicy": {
         "required": true,
-        "maxAgeSeconds": null,
+        "maxAgeSeconds": 86400,
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",

@@ -38,10 +38,10 @@ source_hashes:
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
   "services/api/connectors/": "sha256:b83212032d068eef35ad56769baf27cecb74e5437d5c68c23addd40785ff2ee7"
   "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
-  "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
+  "services/api/graph/": "sha256:604faceff1664eb2b4ac68ca5743594e8d6908edc6a8ac8f29309c7cc84e77e5"
   "services/api/identity/": "sha256:c54fe130e4198fd6b3fb99b0a288d3c5e2b61f6dadfd11737c4a4fdf8c266036"
   "services/api/ingestion/": "sha256:9cc7271d7d7dbc5acab34395065c3a83408b891b06de8cc473aa97d2b6f3685e"
-  "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
+  "services/api/intelligence/": "sha256:9f190544f622b8b6b0d4c3a0de8053a4e12ee53cda51833c86cb4095bdd3d348"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:fdd2c0ba8ab3a3f86cabb6736070cbdc3630dcd7ee1ec2a873ba42a3e43c17b6"
@@ -2180,8 +2180,8 @@ each member's Profile360 frame under that member's own policy; incomplete
 membership coverage remains degraded, and denied profile slots are omitted.
 Profile360's required `risk_summary` slot reuses Risk360 assessment and evidence
 only for exact tenant, subject-kind, and subject-ID matches on entity and Agent
-subjects. Its Profile-specific freshness threshold remains unknown, so the slot
-stays degraded while the other required Profile slots remain independently
+subjects. Its freshness stays unknown until the Risk360 source reports a
+timestamp, so the slot stays degraded while the other required Profile slots remain independently
 evaluated.
 Profile360's required `value_summary` slot reuses Economic360 summary and
 evidence only for exact tenant, subject-kind, and subject-ID matches on
@@ -2252,8 +2252,8 @@ and one assessed Risk360 economic, payment, or transaction dimension claim for
 the same tenant and exact subject. Generic RiskSignals do not satisfy the risk
 side. The join is current-read only; historical or explicitly ranged requests remain
 unknown because the latest risk assessment cannot prove a coordinated
-snapshot. Current results remain degraded while freshness thresholds and
-complete source coverage are unknown.
+snapshot. Current results remain degraded while source freshness timestamps
+and complete source coverage are unknown.
 The Value360 binding requests only Risk360's `financial_risk` section, which
 contains evidence-backed scored financial dimensions and their assessment
 lineage; general findings, poisoning evidence, policy flags, and social
@@ -2262,8 +2262,8 @@ Execution360's `approval_chain` joins x402 approval requests and decisions to
 admitted execution IDs and exact lifecycle approval references. Stored action or
 resource conflicts degrade the slot and suppress the affected request and linked
 decision evidence. The join covers x402 commerce only; effective authorization,
-other approval authorities, historical linkage, and freshness thresholds remain
-unknown.
+other approval authorities, historical linkage, and source freshness timestamps
+remain unknown.
 Execution360 also records the authenticated initiating principal separately
 from the acting agent. It resolves a principal to a canonical Human only through
 an exact tenant-scoped active `USER_ID` alias and active surviving identity
@@ -2277,14 +2277,14 @@ claim cites lifecycle evidence for that row. An exact persisted evaluation
 timestamp is exposed when present; legacy missing timestamps remain unknown.
 Conflicting persisted execution and policy delegation references suppress the
 decision and degrade the authority scope. Current or standing authority, other
-authority sources, and a freshness threshold remain unknown.
+authority sources, and a source freshness timestamp remain unknown.
 Execution360's required `latency_cost` slot now joins canonical AI invocation
 facts only when tenant, execution `action_id`, and canonical Agent match an
 admitted execution. Invocation latency and evidence are preserved; known
 selected costs are grouped by currency, and amounts with unknown or invalid
 cost basis are not exposed. The read is bounded and does not supply total
 execution, provider, or tool cost; temporal replay, other cost authorities, and
-a freshness threshold remain unavailable. Server lifecycle duration stays
+a source freshness timestamp remain unavailable. Server lifecycle duration stays
 separate from invocation latency.
 Risk360's `poisoning_evidence` reads versioned tenant-scoped detector records
 for the exact subject, including lifecycle and evidence references. It exposes
@@ -2614,7 +2614,7 @@ For canonical support-case subjects, Support360 exposes `resolutionState` as
 observed only when the applied resolved/closed event's occurrence time matches
 the authoritative case timestamp and both exact provider-event and connection
 evidence are present. The slot remains degraded because business outcome facts,
-complete case history, and a freshness threshold are unavailable.
+complete case history, and a source freshness timestamp are unavailable.
 For canonical cases, Support360 also reads communication metadata only through
 the exact tenant, provider connection, and source case key on the canonical
 case. It suppresses message bodies and unresolved participant IDs, preserves
