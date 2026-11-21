@@ -1714,6 +1714,16 @@ PILOT_AUTH0_MUTABLE_ADDRESSES = frozenset({
     "module.auth0.auth0_resource_server_scope.access_mcp_read[0]",
     "module.auth0.auth0_tenant.access_mcp_client_registration[0]",
     "module.auth0.auth0_client_grant.access_mcp_third_party_read[0]",
+    # Google and Apple social sign-in (owner-approved for the pilot): each
+    # connection and its Aether client association exist only when that
+    # provider's credentials are provisioned. The association resource sets
+    # the connection's whole client list, which for these dedicated social
+    # connections is only the Aether client. Deletion or replacement stays a
+    # destructive violation; Twitter, Microsoft and Slack stay out of scope.
+    "module.auth0.auth0_connection.google[0]",
+    "module.auth0.auth0_connection_clients.google_aether[0]",
+    "module.auth0.auth0_connection.apple[0]",
+    "module.auth0.auth0_connection_clients.apple_aether[0]",
 })
 # The shared DB connection may change in pilot only to flip its domain-level
 # flag for MCP client registration; any other attribute change is out of scope.

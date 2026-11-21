@@ -55,6 +55,7 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Fixed
 
+- The pilot Terraform plan policy allows the Google and Apple Auth0 social connections and their Aether client associations, which are created when their credentials are provisioned; deleting or replacing them is still rejected.
 - x402 settlement observer: a report whose terms differ from an already verified receipt for the same transaction is now `conflicting` and records nothing; settled events carry the verified receipt's terms, never the report's.
 - Propagation no longer uses stored venue fills whose data-rights grant has since been revoked (or replaced by re-linking); they are excluded with `revoked_grant_fills_excluded`, and an unreadable grant authority excludes them with `fill_grant_authority_unavailable`.
 - An unchanged propagation recompute leaves the saved run intact instead of overwriting it with a self-superseding record.

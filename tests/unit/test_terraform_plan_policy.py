@@ -1441,6 +1441,33 @@ def test_pilot_may_create_the_aether_cli_auth0_path_but_never_destroy_it():
     assert kyber.get("pilot.auth0_scope") == ["module.auth0.auth0_client.kyber"]
 
 
+def test_pilot_may_create_google_and_apple_social_sign_in_but_never_destroy_it():
+    """Provisioned Google/Apple credentials create a connection and its Aether
+    association; that is in pilot scope, deletion is not, and the other social
+    providers stay out (Codex P1 on #897)."""
+    def plan(*changes):
+        return {"resource_changes": [
+            {"address": address, "type": address.split(".")[2].split("[")[0], "change": {"actions": actions}}
+            for address, actions in changes
+        ]}
+
+    social = (
+        "module.auth0.auth0_connection.google[0]",
+        "module.auth0.auth0_connection_clients.google_aether[0]",
+        "module.auth0.auth0_connection.apple[0]",
+        "module.auth0.auth0_connection_clients.apple_aether[0]",
+    )
+    created = MODULE.pilot_plan_safety_violations(plan(*[(a, ["create"]) for a in social]))
+    assert not created.get("pilot.auth0_scope")
+    assert not created.get("pilot.auth0_destructive_change")
+    updated = MODULE.pilot_plan_safety_violations(plan((social[0], ["update"])))
+    assert not updated.get("pilot.auth0_scope")
+    replaced = MODULE.pilot_plan_safety_violations(plan((social[1], ["delete", "create"])))
+    assert replaced.get("pilot.auth0_destructive_change") == [social[1]]
+    twitter = "module.auth0.auth0_connection.twitter[0]"
+    assert MODULE.pilot_plan_safety_violations(plan((twitter, ["create"]))).get("pilot.auth0_scope") == [twitter]
+
+
 def test_pilot_allows_mcp_oauth_and_registration_auth0_resources_but_not_deletion():
     mcp = (
         "module.auth0.auth0_resource_server.access_mcp[0]",
