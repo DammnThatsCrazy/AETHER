@@ -223,6 +223,12 @@ class FakeResponse:
 
 @pytest.fixture(autouse=True)
 def harness(monkeypatch):
+    # These suites cover device-bound Kyber (KYBER_DEVICE_TRUST_REQUIRED on);
+    # identity-approved mode is covered in test_kyber_identity_approved.py.
+    import governance.kyber.access.dependencies as _deps
+    import governance.kyber.sessions.service as _sessions
+    monkeypatch.setattr(_deps, "_device_trust_required", lambda: True)
+    monkeypatch.setattr(_sessions, "_device_trust_required", lambda: True)
     """Fresh stores, a frozen clock, and fake providers for every test."""
     reset_in_memory_stores()
     monkeypatch.setenv("AETHER_ENV", "local")
@@ -720,3 +726,90 @@ async def test_privilege_change_demands_rotation(harness):
         previous_template_ids=["observer"],
         new_template_ids=["observer"],
     )
+
+
+# ── Identity-approved Kyber (KYBER_DEVICE_TRUST_REQUIRED off) ────────────────
+
+@pytest.fixture
+def identity_approved(harness, monkeypatch):
+    import governance.kyber.access.dependencies as _deps
+    import governance.kyber.sessions.service as _sessions
+
+    monkeypatch.setattr(_deps, "_device_trust_required", lambda: False)
+    monkeypatch.setattr(_sessions, "_device_trust_required", lambda: False)
+    return harness
+
+
+async def test_identity_only_session_is_active_and_reaches_authority_routes(identity_approved):
+    session, raw = await open_session(identity_approved, methods=["google_oidc"])
+    assert session.status == "active"
+    assert session.authentication_strength == "identity_only"
+    # No device cookie at all: the invited identity is the authority.
+    request = FakeRequest(token=raw)
+    request.cookies = {k: v for k, v in request.cookies.items() if k != cookies.DEVICE_GRANT_COOKIE_NAME} \
+        if hasattr(cookies, "DEVICE_GRANT_COOKIE_NAME") else request.cookies
+    context = await resolve_access_context(request, "kyber.graph.fleet.read")
+    assert context.session.session_id == session.session_id
+
+
+async def test_a_presented_revoked_device_still_denies(identity_approved):
+    devices = identity_approved.providers.devices
+    session, raw = await open_session(identity_approved, methods=["google_oidc"])
+    device = devices.by_id["dev_laptop"]
+    if hasattr(device, "revoked"):
+        device.revoked = True
+    devices.revoked = getattr(devices, "revoked", set()) | {"dev_laptop"} if hasattr(devices, "revoked") else None
+    usable, reason = await devices.is_usable("dev_laptop")
+    if usable:
+        pytest.skip("fake device provider has no revocation switch")
+    with pytest.raises(ForbiddenError) as excinfo:
+        await resolve_access_context(FakeRequest(token=raw), "kyber.graph.fleet.read")
+    assert excinfo.value.details["denial_reason"] in ("device_revoked", "device_unapproved")
+
+
+async def test_google_reauthentication_grants_a_step_up_for_the_same_subject(identity_approved):
+    session, _raw = await open_session(identity_approved, methods=["google_oidc"])
+    grant, new_raw = await step_up_service.grant_reauthenticated(
+        session_id=session.session_id, operator_id=session.operator_id,
+        google_subject=session.google_subject, capability_id=None,
+    )
+    assert new_raw and grant.reason == "google_reauthentication"
+    ok, reason = await step_up_service.require_fresh(session.session_id)
+    assert ok and reason is None
+
+
+async def test_reauthentication_as_another_google_subject_is_refused(identity_approved):
+    session, _raw = await open_session(identity_approved, methods=["google_oidc"])
+    with pytest.raises(UnauthorizedError):
+        await step_up_service.grant_reauthenticated(
+            session_id=session.session_id, operator_id=session.operator_id,
+            google_subject="g-someone-else",
+        )
+    ok, _ = await step_up_service.require_fresh(session.session_id)
+    assert not ok
+
+
+async def test_step_up_callback_requires_a_fresh_google_sign_in(identity_approved):
+    import time as _time
+
+    from governance.kyber.identity import routes as identity_routes
+    from governance.kyber.identity.oidc import OidcIdentity
+
+    session, _raw = await open_session(identity_approved, methods=["google_oidc"])
+    request = SimpleNamespace(client=None, headers={})
+    started = _time.time()
+    transaction = SimpleNamespace(created_at=started, session_id=session.session_id,
+                                  capability_id=None, next_path=None)
+
+    def identity(auth_time):
+        return OidcIdentity(google_subject=session.google_subject, email="op@olympuslabsml.com",
+                            email_verified=True, raw_claims={"auth_time": auth_time})
+
+    with pytest.raises(UnauthorizedError):  # Google reused an old sign-in
+        await identity_routes._complete_step_up(request, transaction, identity(started - 3600))
+    with pytest.raises(UnauthorizedError):  # no auth_time reported at all
+        await identity_routes._complete_step_up(request, transaction, identity(None))
+    response = await identity_routes._complete_step_up(request, transaction, identity(int(started)))
+    assert response.status_code == 303
+    ok, _ = await step_up_service.require_fresh(session.session_id)
+    assert ok

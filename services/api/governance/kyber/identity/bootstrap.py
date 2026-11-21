@@ -134,6 +134,21 @@ class FounderBootstrapService:
 
     # ── Execution ─────────────────────────────────────────────────────────────
 
+    async def first_sign_in_eligible(self, email: str) -> bool:
+        """Whether a Google sign-in by ``email`` may become the founder now.
+
+        A cheap pre-check for the callback so an ordinary uninvited sign-in is
+        denied as ``principal_unknown`` rather than recorded as a failed
+        bootstrap. ``bootstrap`` re-checks everything authoritatively.
+        """
+        configured = self.founder_email()
+        presented = normalize_email(email)
+        if not configured or not presented or not hmac.compare_digest(presented, configured):
+            return False
+        if await self.has_been_consumed():
+            return False
+        return await principal_service.count_principals() == 0
+
     async def bootstrap(
         self,
         *,
@@ -142,11 +157,18 @@ class FounderBootstrapService:
         display_name: Optional[str] = None,
         client_ip: Optional[str] = None,
         user_agent: Optional[str] = None,
+        require_gate: bool = True,
     ) -> WorkforcePrincipal:
-        """Create the founder principal. Refuses in every ambiguous case."""
+        """Create the founder principal. Refuses in every ambiguous case.
+
+        ``require_gate=False`` is the first-sign-in path (the Google callback):
+        every other condition still holds — empty workforce, a configured
+        founder email (and subject, when set) matching the verified Google
+        identity, and no durable ``bootstrap_completed`` marker.
+        """
         presented_email = normalize_email(email)
 
-        if not self.gate_enabled():
+        if require_gate and not self.gate_enabled():
             await self._deny(
                 "bootstrap_disabled", email=presented_email, google_subject=google_subject,
                 client_ip=client_ip, user_agent=user_agent,

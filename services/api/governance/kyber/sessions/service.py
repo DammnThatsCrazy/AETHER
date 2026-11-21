@@ -98,6 +98,15 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _device_trust_required() -> bool:
+    try:
+        from config.settings import settings
+
+        return bool(settings.kyber_workforce.device_trust_required)
+    except Exception:  # pragma: no cover - fail closed if settings cannot load
+        return True
+
+
 class KyberSessionRepository(BaseRepository):
     """JSONB store for ``kyber_workforce_sessions``."""
 
@@ -206,7 +215,11 @@ class KyberSessionService:
         if _AUTHORITY_METHODS <= presented and device_usable:
             return "device_bound", "active"
         if "google_oidc" in presented:
-            return "identity_only", "restricted"
+            # Identity-approved Kyber (device trust off): a verified Google
+            # sign-in of an invited, active principal is the authority, with
+            # Workspace 2-Step Verification enforced by Google. The strength
+            # stays honest ("identity_only"); only the gate changes.
+            return "identity_only", ("restricted" if _device_trust_required() else "active")
         return "none", "restricted"
 
     # ── Persistence helpers ──────────────────────────────────────────────────

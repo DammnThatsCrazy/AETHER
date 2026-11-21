@@ -246,7 +246,7 @@ session", which callers treat as **deny**.
 | Attribute | Env var | Default |
 |---|---|---|
 | `workforce_identity_enabled` | `KYBER_WORKFORCE_IDENTITY_ENABLED` | true (non-local) |
-| `device_trust_required` | `KYBER_DEVICE_TRUST_REQUIRED` | true (non-local) |
+| `device_trust_required` | `KYBER_DEVICE_TRUST_REQUIRED` | false (identity-approved sign-in; see `KYBER_SESSIONS_AND_SCOPES.md` §1.4) |
 | `backend_authz_enforced` | `KYBER_BACKEND_AUTHZ_ENFORCED` | true (non-local) |
 | `scope_v2_enabled` | `KYBER_SCOPE_V2_ENABLED` | true |
 | `step_up_required` | `KYBER_STEP_UP_REQUIRED` | true (non-local) |
@@ -280,10 +280,13 @@ session", which callers treat as **deny**.
 
 Mirroring the `ROUTE_POLICY_ENFORCEMENT_REQUIRED` precedent, `Settings()` raises
 `KYBER_WORKFORCE_ENFORCEMENT_REQUIRED:` on a deploy target when workforce
-identity is disabled, backend authz is in observe mode, device trust is off,
+identity is disabled, backend authz is in observe mode, step-up is off,
 legacy operator identity is still accepted alongside workforce identity, the
 founder bootstrap path is open, or the Google client id / redirect URI /
-WebAuthn RP id / origin are unset while workforce identity is on.
+WebAuthn RP id / origin are unset while workforce identity is on. Device trust
+is not a deploy-target requirement: an invited Google Workspace identity with
+Workspace 2-Step Verification is the sign-in bar, and fresh step-up (Google
+re-authentication) guards the high-impact action classes.
 
 ---
 

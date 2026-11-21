@@ -13,6 +13,8 @@ export const KYBER_AUTH_ENDPOINTS = {
   callback: '/v1/kyber/auth/callback',
   logout: '/v1/kyber/auth/logout',
   stepUpOptions: '/v1/kyber/auth/step-up/options',
+  /** Full-page navigation: re-authenticate with Google (identity-approved step-up). */
+  googleStepUp: '/v1/kyber/auth/step-up',
   stepUpVerify: '/v1/kyber/auth/step-up/verify',
 } as const;
 

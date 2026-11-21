@@ -15,7 +15,7 @@ output "kyber_client_id" {
 
 output "social_connections_enabled" {
   description = "Whether optional external social identity-provider connections are provisioned"
-  value       = var.enable_social_connections
+  value       = length(local.social_providers) > 0
 }
 
 # There is deliberately no `auth0_domain` output any more: it only echoed a
@@ -31,12 +31,12 @@ output "api_audience" {
 
 output "aether_social_connections" {
   description = "Auth0 connection name per social provider for the Aether SPA's sign-in buttons; empty when social connections are off"
-  value = var.enable_social_connections ? {
-    google    = auth0_connection.google[0].name
-    apple     = auth0_connection.apple[0].name
-    microsoft = auth0_connection.microsoft[0].name
-    slack     = auth0_connection.slack[0].name
-  } : {}
+  value = merge(
+    contains(local.social_providers, "google") ? { google = auth0_connection.google[0].name } : {},
+    contains(local.social_providers, "apple") ? { apple = auth0_connection.apple[0].name } : {},
+    contains(local.social_providers, "microsoft") ? { microsoft = auth0_connection.microsoft[0].name } : {},
+    contains(local.social_providers, "slack") ? { slack = auth0_connection.slack[0].name } : {},
+  )
 }
 
 output "access_mcp_resource_uri" {

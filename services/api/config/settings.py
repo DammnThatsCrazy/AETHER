@@ -629,8 +629,11 @@ class KyberWorkforceConfig:
     workforce_identity_enabled: bool = _env_bool(
         "KYBER_WORKFORCE_IDENTITY_ENABLED", _KYBER_DEFAULT_ON
     )
-    #: A Kyber session must be bound to an approved, non-revoked device.
-    device_trust_required: bool = _env_bool("KYBER_DEVICE_TRUST_REQUIRED", _KYBER_DEFAULT_ON)
+    #: A Kyber session must be bound to an approved, non-revoked device. Off by
+    #: default: Kyber is identity-approved (an invited Google Workspace identity
+    #: with Workspace 2-Step Verification signs in from any device; presented
+    #: devices are still recorded and revocable). Step-up stays required.
+    device_trust_required: bool = _env_bool("KYBER_DEVICE_TRUST_REQUIRED", False)
     #: Enforce declared route capabilities at the authorization boundary.
     #: False is an explicit observe mode (warn + metric, no denial).
     backend_authz_enforced: bool = _env_bool("KYBER_BACKEND_AUTHZ_ENFORCED", _KYBER_DEFAULT_ON)
@@ -653,7 +656,7 @@ class KyberWorkforceConfig:
     # reviewed value explicitly for staging and production.
     google_hosted_domain: str = _env(
         "KYBER_GOOGLE_HOSTED_DOMAIN",
-        "olympuslabs.ai" if _KYBER_DEFAULT_ON else "",
+        "olympuslabsml.com" if _KYBER_DEFAULT_ON else "",
     )
     google_discovery_url: str = _env(
         "KYBER_GOOGLE_DISCOVERY_URL",
@@ -2428,7 +2431,7 @@ class Settings:
         # ── Kyber workforce identity plane ────────────────────────────────────
         # Mirrors the route-policy precedent above: the workforce plane is a
         # runtime boundary, so a deploy target may never boot with it disabled,
-        # in observe mode, without device trust, with legacy operator identity
+        # in observe mode, without step-up, with legacy operator identity
         # still accepted alongside it, with the founder bootstrap path open, or
         # with its SSO / WebAuthn anchors unset. Dev/integration keep explicit
         # flag control.
@@ -2470,8 +2473,13 @@ class Settings:
                 _kyber_problems.append("KYBER_WORKFORCE_IDENTITY_ENABLED must be true")
             if not kw.backend_authz_enforced:
                 _kyber_problems.append("KYBER_BACKEND_AUTHZ_ENFORCED must be true")
-            if not kw.device_trust_required:
-                _kyber_problems.append("KYBER_DEVICE_TRUST_REQUIRED must be true")
+            # Device trust is optional (identity-approved Kyber: an invited
+            # Google Workspace identity with Workspace 2-Step Verification may
+            # sign in from any device). Step-up stays mandatory: without a
+            # device gate it is what stands before high-disclosure and
+            # high-impact actions, satisfied by a fresh Google re-authentication.
+            if not kw.step_up_required:
+                _kyber_problems.append("KYBER_STEP_UP_REQUIRED must be true")
             if kw.legacy_operator_identity_allowed and kw.workforce_identity_enabled:
                 _kyber_problems.append(
                     "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED must be false when "

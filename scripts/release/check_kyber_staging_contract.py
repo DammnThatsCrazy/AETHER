@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 
 
 CALLBACK_PATH = "/v1/kyber/auth/callback"
-DEFAULT_HOSTED_DOMAIN = "olympuslabs.ai"
+DEFAULT_HOSTED_DOMAIN = "olympuslabsml.com"
 _HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 _DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$")
 

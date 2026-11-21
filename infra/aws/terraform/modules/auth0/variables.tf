@@ -69,6 +69,17 @@ variable "enable_social_connections" {
   default     = false
 }
 
+variable "social_providers" {
+  type        = list(string)
+  description = "Which social connections to create when enable_social_connections is true (google, apple, twitter, microsoft, slack). The root module lists only providers whose credentials are provisioned."
+  default     = ["google", "apple", "twitter", "microsoft", "slack"]
+
+  validation {
+    condition     = alltrue([for p in var.social_providers : contains(["google", "apple", "twitter", "microsoft", "slack"], p)])
+    error_message = "social_providers may only contain google, apple, twitter, microsoft and slack."
+  }
+}
+
 # ── Social connection credentials ─────────────────────────────────────────
 # All social vars default to "" so the module can be applied without them;
 # the connections are created but remain unconfigured until credentials are

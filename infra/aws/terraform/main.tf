@@ -483,6 +483,7 @@ module "ecs" {
   kyber_app_url                    = var.kyber_app_url
   api_base_url                     = "https://${var.domain_name}"
   kyber_google_hosted_domain       = var.kyber_google_hosted_domain
+  kyber_bootstrap_founder_email    = var.kyber_bootstrap_founder_email
   deployment_profile               = var.deployment_profile
   auth0_domain                     = var.auth0_domain
   auth0_api_audience               = var.auth0_api_audience
@@ -791,7 +792,29 @@ module "auth0" {
   # social-provider credential. Do not let the module default turn those
   # optional connections back on with empty credentials; that would make a
   # lean staging plan depend on providers that are explicitly out of scope.
-  enable_social_connections = var.deployment_lane == "pilot" ? false : var.enable_social_connections
+  enable_social_connections = local.auth0_social_enabled
+  social_providers          = local.auth0_social_providers
+  google_client_id          = var.auth0_google_client_id
+  google_client_secret      = var.auth0_google_client_secret
+  apple_client_id           = var.auth0_apple_client_id
+  apple_client_secret       = var.auth0_apple_client_secret
+  apple_team_id             = var.auth0_apple_team_id
+  apple_key_id              = var.auth0_apple_key_id
+}
+
+locals {
+  # A social provider is created only when its credentials are provisioned.
+  # In the pilot lane that is the only way one turns on (no connection is
+  # ever created with empty credentials); the full lane keeps honoring
+  # enable_social_connections for every provider.
+  auth0_provisioned_social = compact([
+    var.auth0_google_client_id != "" && var.auth0_google_client_secret != "" ? "google" : "",
+    alltrue([for v in [var.auth0_apple_client_id, var.auth0_apple_client_secret, var.auth0_apple_team_id, var.auth0_apple_key_id] : v != ""]) ? "apple" : "",
+  ])
+  auth0_social_providers = var.deployment_lane == "pilot" ? local.auth0_provisioned_social : (
+    var.enable_social_connections ? ["google", "apple", "twitter", "microsoft", "slack"] : local.auth0_provisioned_social
+  )
+  auth0_social_enabled = length(local.auth0_social_providers) > 0
 }
 
 # Release the two legacy full-set Auth0 resources without deleting any remote

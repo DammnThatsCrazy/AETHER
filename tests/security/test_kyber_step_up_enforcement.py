@@ -190,6 +190,12 @@ class FakeRequest:
 
 @pytest.fixture(autouse=True)
 def harness(monkeypatch):
+    # These suites cover device-bound Kyber (KYBER_DEVICE_TRUST_REQUIRED on);
+    # identity-approved mode is covered in test_kyber_identity_approved.py.
+    import governance.kyber.access.dependencies as _deps
+    import governance.kyber.sessions.service as _sessions
+    monkeypatch.setattr(_deps, "_device_trust_required", lambda: True)
+    monkeypatch.setattr(_sessions, "_device_trust_required", lambda: True)
     reset_in_memory_stores()
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("KYBER_ALLOWED_ORIGINS", ORIGIN)

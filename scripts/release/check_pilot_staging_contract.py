@@ -368,9 +368,12 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
         errors.append("Terraform root has no deployment_lane variable; main integration must add it")
     elif not all(token in terraform_root for token in ('"full"', '"pilot"')):
         errors.append("Terraform deployment_lane validation must allow exactly full and pilot")
-    if 'enable_social_connections = var.deployment_lane == "pilot" ? false : var.enable_social_connections' not in terraform_root:
+    if (
+        'auth0_social_providers = var.deployment_lane == "pilot" ? local.auth0_provisioned_social' not in terraform_root
+        or "auth0_provisioned_social = compact(" not in terraform_root
+    ):
         errors.append(
-            "pilot lane must disable optional Auth0 social connections until external provider credentials are provisioned"
+            "pilot lane must create only Auth0 social connections whose provider credentials are provisioned"
         )
 
     for label, paths, tokens in REQUIRED_SURFACES:

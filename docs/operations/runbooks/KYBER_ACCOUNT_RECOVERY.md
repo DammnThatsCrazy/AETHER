@@ -12,7 +12,7 @@ toc_depth: 2
 source_files: [services/api/governance/kyber/identity/bootstrap.py, services/api/governance/kyber/identity/invitations.py, services/api/governance/kyber/devices/approvals.py]
 source_hashes:
   "services/api/governance/kyber/devices/approvals.py": "sha256:f2bebf7b5f670e2686762259ddd9b8d3bad998aeabfadbed526a6e95f80a26ba"
-  "services/api/governance/kyber/identity/bootstrap.py": "sha256:6cec412ea8f7864cf74d6e3905c769844550710b4d2f961015676562bd3a97a6"
+  "services/api/governance/kyber/identity/bootstrap.py": "sha256:e9468f88df5df016f91b028f2ba46aadb9e46fc9bbef9f99304999f4c0a3eb67"
   "services/api/governance/kyber/identity/invitations.py": "sha256:b7e435fad0ae104212f82ef23ceaab9e404bbf5913900e52d33798c48f18712d"
 ---
 
@@ -32,7 +32,7 @@ and is the fastest route to the right branch.
 | Google sign-in itself fails | Google account problem, not Kyber | Google Workspace admin |
 | `principal_unknown` | No invitation was ever accepted | §1 |
 | `principal_inactive` | Suspended or offboarded | §2 |
-| `device_unapproved` — session opens but is restricted | Device pending approval | §3 |
+| `device_unapproved` — session opens but is restricted | Device pending approval (device-bound mode only) | §3 |
 | `device_revoked` / `device_mismatch` | Device revoked, or new browser profile | §3, and `KYBER_DEVICE_LOSS.md` if hardware is gone |
 | `device_proof_invalid` | Browser storage cleared, or a different browser profile | §4 |
 | `step_up_required` on an action that used to work | Step-up grant expired | §5 |
@@ -56,6 +56,10 @@ way the operator must re-enroll a device, because offboarding revoked them.
 
 ## 3. Device pending or revoked
 
+In identity-approved mode (`KYBER_DEVICE_TRUST_REQUIRED=false`, the default) a
+pending device never restricts a session; only a revoked device that is
+presented denies. The rest of this section applies to device-bound mode.
+
 The operator authenticates fine but holds a `restricted` session: they can see
 Kyber and low-risk aggregates, and nothing else. This is working as designed.
 A founder or identity administrator approves the device at `/security/devices`.
@@ -77,8 +81,11 @@ profile is a new device.
 
 ## 5. Step-up expired
 
-Not a fault. Step-up grants last 5–15 minutes by role. The operator re-asserts
-with their platform authenticator. If a specific action demands step-up
+Not a fault. Step-up grants last 5–15 minutes by role. The operator re-verifies:
+in identity-approved mode the console's **Re-verify with Google** sends them
+through a fresh Google sign-in (`GET /v1/kyber/auth/step-up`); on a device-bound
+session they re-assert with their platform authenticator. A Google step-up is
+refused if Google reports no fresh sign-in or a different account. If a specific action demands step-up
 repeatedly within its window, capture the route and raise a defect — a grant
 should be reusable until it expires.
 
@@ -100,7 +107,14 @@ that converts a working control into a decorative one.
 
 ## 8. Nobody can get in
 
-The founder's device is lost and no other principal can approve a device.
+On a fresh environment with no principals, the founder's first Google sign-in
+creates the founder (`KYBER_WORKFORCE_IDENTITY.md` §5, founder on first
+sign-in). That path closes for good once anyone exists or the bootstrap marker
+is written, so it never helps recover an existing workforce.
+
+In identity-approved mode a lost device does not lock anyone out: the founder
+signs in with Google on another machine. What follows is for device-bound mode,
+where the founder's device is lost and no other principal can approve a device.
 
 1. **Prefer the emergency root identity.** It is a separate principal with
    separate recovery credentials, a 15-minute maximum session, mandatory

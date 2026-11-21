@@ -11,6 +11,13 @@ source_files: [services/api/governance/kyber/devices/webauthn.py, services/api/g
 
 # Kyber Device Trust
 
+> **Current policy: devices are recorded, not required.** Sign-in is
+> identity-approved (`KYBER_DEVICE_TRUST_REQUIRED=false`, the default): an
+> invited Google Workspace identity with 2-Step Verification works from any
+> device. Presented devices are still enrolled and listed, and revoking one
+> still denies it. This page describes the device-bound mode, which returns by
+> setting the flag to `true`; see `KYBER_SESSIONS_AND_SCOPES.md` §1.4.
+
 Kyber is the Olympus Labs internal operating plane, and it runs on personal
 machines. Nobody is issued a corporate laptop, there is no MDM agent, and there
 is no device inventory to check a serial number against. That is a deliberate
