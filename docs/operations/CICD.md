@@ -34,10 +34,8 @@ reviewed_source_commits:
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
   - {'commit': '1b75e2b8', 'reason': 'Merge of development (publish-sdk and repo-health workflow changes, reviewed upstream) with this PR''s pilot and remote staging plan changes; no further doc change.'}
   - {'commit': '2cc82835', 'reason': 'The legacy staging Aurora cluster now pins its live 16.13 release and ignores engine_version, matching the managed cluster rule these docs already describe.'}
-  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
-  - {'commit': '418c78d4', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  ".github/workflows/": "sha256:5232cb5df077f85f100cd50c42d37dad504df1dedf72fc536df93382a201eb96"
+  ".github/workflows/": "sha256:5773bfef4889653efe773edaa5e9b98031a5a312a3fd17933cab866fea643d55"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:7f64eac565a8b41efd7fa7cdb76cfe09fc5e19e08cba5b6d7aa1a177d9bd81ba"
@@ -509,7 +507,8 @@ material fix, and runs on pushes to `development` or `main` after landing.
 The separate `Publish Access Kit CLI and MCP` workflow runs a package check and
 preserves the exact npm tarball before publication. Public npm publishing is a
 manual main-branch action and fails closed unless `npm-production` has at least
-one required reviewer. The image publisher applies the same required-reviewer
+one required reviewer and the `ACCESS_KIT_PUBLIC_RELEASE_APPROVED` repository
+variable is `true` (set only after the staging proof passes). The image publisher applies the same required-reviewer
 check to the `production` environment before it can request AWS OIDC
 credentials. Neither environment is currently configured in the repository;
 the respective release paths remain blocked until release owners configure
@@ -887,7 +886,7 @@ than publishing a mislabelled install.
 | React Native (`packages/sdk/react-native`) | npm (`@olympuslabs/aether-react-native`); its podspec and Gradle module ship inside the npm package | `publish-npm` | `packages/sdk/react-native/package.json` |
 | iOS (`packages/sdk/ios`) | Swift Package Manager via the `DammnThatsCrazy/aether-ios` mirror (bare version tags), and CocoaPods (`AetherSDK`, sourced from the mirror) | `publish-ios-mirror`, then `publish-cocoapods` | `AetherSDK.podspec` |
 | Android (`packages/sdk/android`) | Maven Central (`com.olympuslabsml:aether-android`, signed) | `publish-android` | `gradle.properties` |
-| Web CDN (`packages/sdk/web`) | `cdn.olympuslabsml.com` | `publish-cdn` | `packages/sdk/web/package.json` |
+| Web CDN (`packages/sdk/web`) | `cdn.aether.network` | `publish-cdn` | `packages/sdk/web/package.json` |
 
 `publish-cdn` runs after `publish-npm`, because npm is the registry of record and
 the CDN is a delivery mirror of the same build. It derives the CDN layout and the

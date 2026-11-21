@@ -337,6 +337,18 @@ dimension. The API returns durable audit and usage IDs in
 `mcp_http`, and `access_sdk`; it does not grant permission or choose a tenant.
 The package's operation list describes adapter support, not a tenant grant.
 
+The API acts as the Access Kit kernel for calls carrying that label. Each
+capability has a class: `query` (reads), `observe` (`POST /v1/batch`),
+`write` (the caller's own continuations) and `auth` (the caller's own
+sessions). No `act` capability (changing something in the world, such as
+sending a message or pausing a campaign) is offered yet. A labelled call to a
+route that is not a named capability, or to one classed `act`, answers 403
+`ACCESS_KIT_CAPABILITY_UNAVAILABLE`. Each interaction record carries
+`protocol` (`cli`, `mcp`, `sdk`) and `interaction_class` beside the
+capability. Observations and the agent behavior reads are audited but kept out
+of the per-credential operation cap, which applies to every caller of a capped
+route; observations are metered by ingestion, not twice.
+
 `/v1/capability-declarations` records the tenant's asserted capability identity for
 comparison with the observed catalog. Tool declarations join by the exact tenant,
 provider, server and tool tuple. MCP resource declarations include the exact
