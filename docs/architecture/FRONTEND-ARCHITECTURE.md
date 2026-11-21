@@ -47,8 +47,9 @@ reviewed_source_commits:
   - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
   - {'commit': '2676ca17', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
   - {'commit': '418c78d4', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '0d252082', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/src/": "sha256:c99e185b2d7678f8e32ccbbcdee6705d875f9ca7b723ce41f28aafec56c82495"
+  "apps/aether-web/src/": "sha256:cca54e6fff1c47d653eb9fb526fc23f66a05b61238779f41c30ee79fcec2681d"
   "apps/kyber-web/src/": "sha256:5bcc84037e56c027dd6b529e4767005f87972e4d87a4ebfec8eab4c898c73660"
   "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
