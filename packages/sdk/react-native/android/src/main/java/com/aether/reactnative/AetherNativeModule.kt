@@ -32,7 +32,7 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
                 else -> AetherConfig.Environment.PRODUCTION
             },
             debug = if (config.hasKey("debug")) config.getBoolean("debug") else false,
-            endpoint = (config.getString("endpoint") ?: "https://api.aether.network").also { resolveEndpoint = it },
+            endpoint = (config.getString("endpoint") ?: "https://api.olympuslabsml.com").also { resolveEndpoint = it },
             modules = ModuleConfig(
                 activityTracking = modules?.getBoolean("screenTracking") ?: true,
                 deepLinkAttribution = modules?.getBoolean("deepLinkAttribution") ?: true,

@@ -514,7 +514,7 @@ Production routes are served under `/v1/identity/` by `services/api/identity/ide
 
 ```bash
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-  -X POST https://api.aether.network/v1/identity/resolve \
+  -X POST https://api.olympuslabsml.com/v1/identity/resolve \
   -d '{"entity_id": "user-123", "signals": {...}}'
 ```
 

@@ -145,7 +145,7 @@ describe('SDK fleet helpers', () => {
     const shown = snippetFor(ios, { key: 'pk_live_1', siteId: 'site_ios' }, null);
     expect(shown).toContain('AetherConfig(apiKey: "pk_live_1")');
     expect(shown).toContain('config.siteId = "site_ios"');
-    const tag = '<script async src="https://cdn.aether.network/v1.js" data-key="pk_x" data-site="site_1"></script>';
+    const tag = '<script async src="https://cdn.olympuslabsml.com/v1.js" data-key="pk_x" data-site="site_1"></script>';
     expect(snippetFor(web, { key: 'pk_x', siteId: 'site_1', snippet: tag }, null)).toBe(tag);
   });
 

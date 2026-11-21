@@ -180,7 +180,7 @@ sdk/{version}/aether-sdk.esm​.min.js
 The new canonical convention is:
 
 ```txt
-https://cdn.aether.network/v1.js
+https://cdn.olympuslabsml.com/v1.js
 ```
 
 This means the repo still has two SDK distribution stories.

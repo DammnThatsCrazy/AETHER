@@ -166,7 +166,7 @@ export function DevelopersPage() {
             the next line is already being captured, and there is no follow-up call to forget.
           </p>
           <pre className="mt-8 overflow-x-auto rounded-md border border-border-default bg-surface-base p-6 text-sm leading-relaxed text-text-primary">
-            <code>{`<script src="https://cdn.aether.network/v1.js"
+            <code>{`<script src="https://cdn.olympuslabsml.com/v1.js"
         data-key="pk_your_publishable_key"
         data-site="site_your_site_id"
         async></script>`}</code>

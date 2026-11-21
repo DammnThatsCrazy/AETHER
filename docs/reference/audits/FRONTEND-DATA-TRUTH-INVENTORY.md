@@ -17,8 +17,13 @@ reviewed_source_commits:
     reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction. It uses the API response type directly; tenant-owned webhook state, delivery history, and one-time secret behavior are unchanged."
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
+  - {'commit': '2676ca17', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '418c78d4', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '0d252082', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': 'f74f8919', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/": "sha256:58c37206a05f54ce4909f39e3ff0b023a78fab337968a91d5bd04d4a27b2e391"
+  "apps/aether-web/": "sha256:4782139d05616b4fb8fade1da1e3b0cc67984bba7dcc806780583a2b70ddbb83"
   "apps/demo/": "sha256:3ac6a6e98824000241d9e03ba38cfb251190a6e86a8c1abfddfd0b384b091902"
   "apps/kyber-web/": "sha256:4c7983c3a5a62b9231fa30835a1786d316c57581a4ac345b1908f57e6cd64825"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"

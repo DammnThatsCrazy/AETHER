@@ -102,8 +102,8 @@ if "name: 'Aether'" not in text(f'{WEB}/rollup.config.mjs'):
 
 # The loader banner must advertise the stable URL, not a stale major path.
 loader_banner = text(f'{WEB}/rollup.loader.mjs')
-if 'https://cdn.aether.network/v1.js' not in loader_banner:
-    fail(f'{WEB}/rollup.loader.mjs banner does not reference the stable https://cdn.aether.network/v1.js')
+if 'https://cdn.olympuslabsml.com/v1.js' not in loader_banner:
+    fail(f'{WEB}/rollup.loader.mjs banner does not reference the stable https://cdn.olympuslabsml.com/v1.js')
 
 # --- 4. package.json entry points must be covered by declared outputs -------
 def path_targets(node, trail):

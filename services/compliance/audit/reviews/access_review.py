@@ -116,7 +116,7 @@ class AccessReviewer:
             ),
             AccessReviewFinding(
                 FindingSeverity.INFO, "compliant_user",
-                "IAM user 'admin@aether.network' is compliant: MFA enabled, keys rotated",
+                "IAM user 'admin@olympuslabsml.com' is compliant: MFA enabled, keys rotated",
                 "arn:aws:iam::123456:user/admin",
                 "No action needed",
             ),

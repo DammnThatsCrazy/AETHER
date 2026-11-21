@@ -212,7 +212,7 @@ def test_loader_url_is_the_one_the_shipping_bundle_advertises():
     """Snippets are pasted into customer HTML and outlive the deploy that
     rendered them, so a URL that 404s is not a typo — it is every install."""
     bundle = (ROOT / "packages/sdk/web/rollup.loader.mjs").read_text(encoding="utf-8")
-    advertised = set(re.findall(r"https://cdn\.aether\.network/[A-Za-z0-9._/-]*\.js", bundle))
+    advertised = set(re.findall(r"https://cdn\.olympuslabsml\.com/[A-Za-z0-9._/-]*\.js", bundle))
     assert advertised, "the loader bundle advertises no CDN URL"
     assert LOADER_URL in advertised
 

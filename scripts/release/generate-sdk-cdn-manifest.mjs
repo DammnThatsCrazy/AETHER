@@ -37,7 +37,7 @@ const VERSION = pkg.version;
 const MAJOR = VERSION.split('.')[0];
 
 /** CDN base for the URLs recorded in the manifest. */
-const CDN_BASE = 'https://cdn.aether.network';
+const CDN_BASE = 'https://cdn.olympuslabsml.com';
 
 /**
  * Minimum supported SDK version, read from the ingestion compatibility bands so

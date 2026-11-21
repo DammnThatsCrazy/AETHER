@@ -15,7 +15,7 @@ Exit 0 on success, 1 with error detail on failure.
 
 Required env vars:
   ML_ARTIFACT_BUCKET   — S3 bucket name (e.g. aether-ml-artifacts-prod)
-  ML_SERVING_URL       — base URL of the ML serving API (e.g. https://ml.aether.network)
+  ML_SERVING_URL       — base URL of the ML serving API (e.g. https://ml.olympuslabsml.com)
 
 Optional:
   ML_ARTIFACT_DIR      — override the default artifact output directory

@@ -62,7 +62,7 @@ _MODULE_SOURCES: dict[str, dict[str, str]] = {
     },
 }
 
-DEFAULT_CDN_BASE = "https://cdn.aether.network"
+DEFAULT_CDN_BASE = "https://cdn.olympuslabsml.com"
 
 
 # --------------------------------------------------------------------------- #
@@ -312,7 +312,7 @@ def publish_data_modules(
         )
 
         # Step 3 -- Upload to S3
-        s3_base = f"s3://cdn.aether.network/sdk/data/{cdn_dir}"
+        s3_base = f"s3://cdn.olympuslabsml.com/sdk/data/{cdn_dir}"
         s3_versioned = f"{s3_base}/{version}.json"
         s3_latest = f"{s3_base}/latest.json"
 

@@ -28,7 +28,7 @@ source_hashes:
   "scripts/docs_drift.py": "sha256:f2196ddd6c9e04a61fbf9cbe277a235a012c36b32f1cb68c87a22d5df56c1e3c"
   "scripts/docs_extract/run_all.py": "sha256:1127f45ce93bca1068816d244992c8459107448d0eca4d1d640b23ec0d30cc49"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
-  "scripts/docs_schema.json": "sha256:4bca1171f04d0804189a63a818dfa0fb671cfa130a7d982b2bc55b624499b5a0"
+  "scripts/docs_schema.json": "sha256:66f1e4236336bb272f649f44edb89da7547ae09be21e678729c49bf548edf6f9"
   "scripts/sync_docs.py": "sha256:5926b4e418067063a721fd8a0a875a114ca0b7ba6d0112d6beab7ee850471e49"
   "scripts/validate_contracts.py": "sha256:00b5fcb85c2e9c749d647d488784dcd762de9b372f42b9e9f03355e46b5bc096"
   "scripts/validate_docs.py": "sha256:6402a54386b9610be8d5acaad9bde294cad4a293a19507309df3a3f05d54b5e9"
@@ -78,8 +78,8 @@ registry's `implementationBlueprint` convention points at
 
 | Tier | Meaning | Destination |
 |------|---------|-------------|
-| `P` | Public | `docs.aether.network` (anonymous) |
-| `C` | Customer | `portal.aether.network` (customer SSO) |
+| `P` | Public | `docs.olympuslabsml.com` (anonymous) |
+| `C` | Customer | `portal.olympuslabsml.com` (customer SSO) |
 | `I` | Internal | repo only — never deployed to a site |
 
 This page is `I`.
