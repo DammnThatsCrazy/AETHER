@@ -19,8 +19,9 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction. It uses the API response type directly; tenant-owned webhook state, delivery history, and one-time secret behavior are unchanged."
   - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
   - {'commit': '2676ca17', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '418c78d4', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/": "sha256:e39954ff280f140b87de162c1b94f7d6a19aca5b6e8678cc5d8310774327b8a2"
+  "apps/aether-web/": "sha256:a037e9676705d7d6d60e5d80d234bd71171bcbee8a0ddacdbf845efb0f8ee2ac"
   "apps/demo/": "sha256:3ac6a6e98824000241d9e03ba38cfb251190a6e86a8c1abfddfd0b384b091902"
   "apps/kyber-web/": "sha256:4ec4d1ee7e87578ed3571fc4751c1ba00089bcfbad0ff326e2a767182f7ae3d9"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"

@@ -46,8 +46,9 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
   - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
   - {'commit': '2676ca17', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
+  - {'commit': '418c78d4', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/src/": "sha256:c6006f755be7096faaf6403055cf4229561796f31e154bdb0c773d26bbe8fa59"
+  "apps/aether-web/src/": "sha256:795ff6167d0b5146f5304a13a28e2560c89823d7b1ac72046eb2c1b2e0bbae54"
   "apps/kyber-web/src/": "sha256:3a75efc5a3abc2fe63ede4835f0d06722cca632b813b69818e35475804e357c1"
   "packages/ui/core/src/": "sha256:4146ce910b5dfc015e11e3f0a886b1bf501e1d3c9314d94533b475269dda8ff5"
 ---
