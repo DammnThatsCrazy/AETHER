@@ -23,7 +23,7 @@ reviewed_source_commits:
     reason: "Reviewed the 360 PR main.py diff: it mounts Social360 evidence and Workflow definition routers. Universal Provider Runtime connection, credential, and webhook mounts are unchanged."
 source_hashes:
   "services/api/config/settings.py": "sha256:c736e4b21d24dd3221980002b0959ce7319f377d0166dd58e81a7ce7076fb2bc"
-  "services/api/connectors/provider_runtime/": "sha256:1591e575f996946a70bbc5abafb1d7a689f8cf634516064502637f365adf18a7"
+  "services/api/connectors/provider_runtime/": "sha256:f3f6063e945f011d8c68b42dd1835ed6e41aeebe8ecb18d029ef794244d6a41e"
   "services/api/connectors/providers/": "sha256:9f3b77f51f15de12bdcd9141260a8ffc8315bd8572a2beebad921a76356df608"
   "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
@@ -237,7 +237,8 @@ The pipeline honors three invariants:
   set the relationship or rights references. An event without its raw record is
   `unclassified` and cites no rights. Selecting an account on a tenant's own
   connection creates its `organization_system` grant
-  (`organization_grants.py`), and deleting a tenant revokes its grants and
+  (`organization_grants.py`, under a per-source claim in the shared cache so
+  overlapping selections create one grant), and deleting a tenant revokes its grants and
   closes its connections (`tenant_offboarding.py`).
 - **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
   from each `AetherEvent`'s `data`/`context` in place before the durable dump

@@ -83,6 +83,16 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Require the public release to be approved
+        # The CLI and MCP stay internal until the staging proof passes. Set the
+        # ACCESS_KIT_PUBLIC_RELEASE_APPROVED repository variable to "true" only then.
+        env:
+          APPROVED: ${{ vars.ACCESS_KIT_PUBLIC_RELEASE_APPROVED }}
+        run: |
+          if [ "${APPROVED}" != "true" ]; then
+            echo '::error::The Access Kit is internal until the staging proof passes. Set ACCESS_KIT_PUBLIC_RELEASE_APPROVED=true to publish.'
+            exit 1
+          fi
       - name: Require configured npm-production reviewers
         env:
           GH_TOKEN: ${{ github.token }}

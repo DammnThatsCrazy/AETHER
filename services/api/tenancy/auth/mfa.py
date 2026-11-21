@@ -12,6 +12,7 @@ Aether owns this rather than Auth0 because password sign-in is Aether's own
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -19,6 +20,7 @@ import json
 import secrets
 import struct
 import time
+from contextlib import asynccontextmanager
 from typing import Any, Optional
 from urllib.parse import quote
 
@@ -121,89 +123,148 @@ def unseal_secret(sealed: str) -> str:
     return _sealer().unseal(sealed)
 
 
-# ── Ephemeral state (Redis, in-memory fallback for local) ──────────────────
+# ── Ephemeral state (shared cache, in-memory fallback for local) ───────────
+#
+# Challenges, pending enrolments, single-use claims and per-user locks live in
+# the platform's shared ``CacheClient`` (Redis or DynamoDB in deployed
+# environments), so a follow-up request can land on any API process. The
+# process-local ``_MEM`` fallback is only for a missing cache (local tests).
 
-async def _put(redis: Any, key: str, value: dict, ttl: int) -> None:
-    payload = json.dumps(value)
-    if redis is not None:
-        try:
-            await redis.setex(key, ttl, payload)
-            return
-        except Exception as exc:
-            logger.debug(f"mfa redis put failed: {exc}")
-    _MEM[key] = (time.time() + ttl, payload)
+USER_LOCK_TTL_SECONDS = 10
+USER_LOCK_WAIT_SECONDS = 3.0
+_USER_LOCK_POLL_SECONDS = 0.05
 
 
-async def _get(redis: Any, key: str) -> Optional[dict]:
-    if redis is not None:
-        try:
-            raw = await redis.get(key)
-            return json.loads(raw) if raw else None
-        except Exception as exc:
-            logger.debug(f"mfa redis get failed: {exc}")
+def get_cache() -> Any:
+    """The shared cache client, or None when the platform registry is unavailable."""
+    try:
+        from dependencies.providers import get_registry
+        return getattr(get_registry(), "cache", None)
+    except Exception as exc:  # noqa: BLE001 - local tooling without a registry
+        logger.debug(f"mfa cache unavailable: {exc}")
+        return None
+
+
+def _mem_get(key: str) -> Optional[str]:
     entry = _MEM.get(key)
     if not entry or entry[0] < time.time():
         _MEM.pop(key, None)
         return None
-    return json.loads(entry[1])
+    return entry[1]
 
 
-async def _delete(redis: Any, key: str) -> None:
-    if redis is not None:
-        try:
-            await redis.delete(key)
-        except Exception:
-            pass
+async def _put(cache: Any, key: str, value: dict, ttl: int) -> None:
+    payload = json.dumps(value)
+    if cache is not None:
+        await cache.set(key, payload, ttl)
+        return
+    _MEM[key] = (time.time() + ttl, payload)
+
+
+async def _get(cache: Any, key: str) -> Optional[dict]:
+    raw = await cache.get(key) if cache is not None else _mem_get(key)
+    return json.loads(raw) if raw else None
+
+
+async def _delete(cache: Any, key: str) -> None:
+    if cache is not None:
+        await cache.delete(key)
+        return
     _MEM.pop(key, None)
+
+
+async def _claim(cache: Any, key: str, ttl: int) -> bool:
+    """Atomically set ``key`` only if absent; True for exactly one caller."""
+    if cache is not None:
+        return bool(await cache.set_nx(key, "1", ttl))
+    if _mem_get(key) is not None:
+        return False
+    _MEM[key] = (time.time() + ttl, "1")
+    return True
+
+
+class UserLockTimeout(Exception):
+    """Another two-step operation for this user did not finish in time."""
+
+
+@asynccontextmanager
+async def user_lock(cache: Any, user_id: str):
+    """Serialise every two-step write for one user across API processes.
+
+    Callers re-read the user record inside the lock, so a recovery code or an
+    authenticator time step is consumed exactly once even when requests overlap.
+    """
+    key = f"auth:mfa:lock:{user_id}"
+    deadline = time.monotonic() + USER_LOCK_WAIT_SECONDS
+    while not await _claim(cache, key, USER_LOCK_TTL_SECONDS):
+        if time.monotonic() >= deadline:
+            raise UserLockTimeout(user_id)
+        await asyncio.sleep(_USER_LOCK_POLL_SECONDS)
+    try:
+        yield
+    finally:
+        await _delete(cache, key)
 
 
 def _challenge_key(token: str) -> str:
     return f"auth:mfa:challenge:{hashlib.sha256(token.encode()).hexdigest()}"
 
 
-async def create_challenge(redis: Any, *, tenant_id: str, user_id: str, method: str,
+def _consumed_key(token: str) -> str:
+    return f"auth:mfa:consumed:{hashlib.sha256(token.encode()).hexdigest()}"
+
+
+async def create_challenge(cache: Any, *, tenant_id: str, user_id: str, method: str,
                            plan_tier: str = "") -> str:
     token = secrets.token_urlsafe(32)
-    await _put(redis, _challenge_key(token), {
+    await _put(cache, _challenge_key(token), {
         "tenant_id": tenant_id, "user_id": user_id, "method": method,
         "plan_tier": plan_tier, "attempts": 0,
     }, CHALLENGE_TTL_SECONDS)
     return token
 
 
-async def load_challenge(redis: Any, token: str) -> Optional[dict]:
-    return await _get(redis, _challenge_key(token))
+async def load_challenge(cache: Any, token: str) -> Optional[dict]:
+    return await _get(cache, _challenge_key(token))
 
 
-async def record_failed_attempt(redis: Any, token: str, challenge: dict) -> bool:
+async def record_failed_attempt(cache: Any, token: str, challenge: dict) -> bool:
     """Count a wrong code; return False once the challenge is exhausted (and drop it)."""
     challenge = {**challenge, "attempts": int(challenge.get("attempts", 0)) + 1}
     if challenge["attempts"] >= CHALLENGE_MAX_ATTEMPTS:
-        await _delete(redis, _challenge_key(token))
+        await _delete(cache, _challenge_key(token))
         return False
-    await _put(redis, _challenge_key(token), challenge, CHALLENGE_TTL_SECONDS)
+    await _put(cache, _challenge_key(token), challenge, CHALLENGE_TTL_SECONDS)
     return True
 
 
-async def drop_challenge(redis: Any, token: str) -> None:
-    await _delete(redis, _challenge_key(token))
+async def consume_challenge(cache: Any, token: str) -> bool:
+    """Spend a challenge; True only for the one request that wins it."""
+    if not await _claim(cache, _consumed_key(token), CHALLENGE_TTL_SECONDS):
+        return False
+    await _delete(cache, _challenge_key(token))
+    return True
+
+
+async def drop_challenge(cache: Any, token: str) -> None:
+    await _delete(cache, _challenge_key(token))
 
 
 def _pending_key(user_id: str) -> str:
     return f"auth:mfa:pending:{user_id}"
 
 
-async def stash_pending_enrolment(redis: Any, user_id: str, sealed_secret: str) -> None:
-    await _put(redis, _pending_key(user_id), {"secret": sealed_secret}, PENDING_ENROLMENT_TTL_SECONDS)
+async def stash_pending_enrolment(cache: Any, user_id: str, sealed_secret: str) -> None:
+    await _put(cache, _pending_key(user_id), {"secret": sealed_secret}, PENDING_ENROLMENT_TTL_SECONDS)
 
 
-async def take_pending_enrolment(redis: Any, user_id: str) -> Optional[str]:
-    value = await _get(redis, _pending_key(user_id))
+async def take_pending_enrolment(cache: Any, user_id: str) -> Optional[str]:
+    value = await _get(cache, _pending_key(user_id))
     return value.get("secret") if value else None
 
 
-async def clear_pending_enrolment(redis: Any, user_id: str) -> None:
-    await _delete(redis, _pending_key(user_id))
+async def clear_pending_enrolment(cache: Any, user_id: str) -> None:
+    await _delete(cache, _pending_key(user_id))
 
 
 def is_enabled(user: Optional[dict]) -> bool:

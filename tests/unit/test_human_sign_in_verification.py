@@ -215,3 +215,145 @@ class TestTwoStepVerification:
             common = importlib.import_module("shared.common.common")
             with pytest.raises(common.ForbiddenError):
                 _run(me.start_my_mfa_enrolment(_Req("t-k", None)))
+
+
+class _SharedCache:
+    """Stands in for the platform CacheClient shared by every API process."""
+
+    def __init__(self):
+        self.store: dict[str, str] = {}
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def set(self, key, value, ttl=0):
+        self.store[key] = value
+
+    async def delete(self, key):
+        self.store.pop(key, None)
+
+    async def set_nx(self, key, value, ttl=0):
+        if key in self.store:
+            return False
+        self.store[key] = value
+        return True
+
+
+def _slow_user_reads(monkeypatch, repos):
+    """Yield inside every user read so overlapping requests really interleave."""
+    import asyncio
+
+    original = repos.UserRepository.find_by_id
+
+    async def slow(self, user_id):
+        await asyncio.sleep(0.01)
+        return await original(self, user_id)
+
+    monkeypatch.setattr(repos.UserRepository, "find_by_id", slow)
+
+
+class TestTwoStepHardening:
+    """Codex findings on #899: fail closed, shared state, single-use factors."""
+
+    def test_sign_in_refuses_when_the_user_record_cannot_be_read(self, monkeypatch):
+        with trust_flags(**_ON):
+            from fastapi import Response
+            auth = importlib.import_module("tenancy.auth.routes")
+            repos = importlib.import_module("repositories.repos")
+            common = importlib.import_module("shared.common.common")
+
+            async def broken(self, user_id):
+                raise RuntimeError("database unavailable")
+
+            monkeypatch.setattr(repos.UserRepository, "find_by_id", broken)
+            with pytest.raises(common.ServiceUnavailableError):
+                _run(auth._finish_sign_in(
+                    Response(), tenant_id="t-f", user_id="user-t-f", plan_tier_value="alpha",
+                    method="sso", message="ok", legacy_label="Login session",
+                ))
+
+    def test_challenges_live_in_the_shared_cache(self, monkeypatch):
+        with trust_flags(**_ON):
+            from fastapi import Response
+            from tenancy.auth import mfa
+            auth = importlib.import_module("tenancy.auth.routes")
+            me = importlib.import_module("tenancy.me.routes")
+            repos = importlib.import_module("repositories.repos")
+            shared = _SharedCache()
+            monkeypatch.setattr(mfa, "get_cache", lambda: shared)
+            _run(_seed_password_user(repos, "t-sc", "sc@x.io", "pw12345678"))
+            secret, _, _ = _enrol(me, "t-sc", "user-t-sc")
+
+            challenge = _run(auth.login(auth.LoginRequest(email="sc@x.io", password="pw12345678"), Response()))["data"]["mfa_challenge"]
+            # Another process has an empty local memory; only the shared cache holds it.
+            mfa._MEM.clear()
+            assert any(k.startswith("auth:mfa:challenge:") for k in shared.store)
+            done = _run(auth.verify_mfa(
+                auth.MfaVerifyRequest(challenge=challenge, code=mfa.totp(secret, time.time() + mfa.PERIOD)),
+                Response(), FakeRequest()))["data"]
+            assert done["session"]["token"].startswith("sess_")
+            assert not any(k.startswith("auth:mfa:lock:") for k in shared.store)
+
+    def test_registry_cache_is_the_platform_cache_client(self):
+        from shared.cache.cache import CacheClient
+        from tenancy.auth import mfa
+        assert isinstance(mfa.get_cache(), CacheClient)
+
+    def test_overlapping_verifies_issue_one_session(self, monkeypatch):
+        import asyncio
+
+        with trust_flags(**_ON):
+            from fastapi import Response
+            from tenancy.auth import mfa
+            auth = importlib.import_module("tenancy.auth.routes")
+            me = importlib.import_module("tenancy.me.routes")
+            repos = importlib.import_module("repositories.repos")
+            common = importlib.import_module("shared.common.common")
+            shared = _SharedCache()
+            monkeypatch.setattr(mfa, "get_cache", lambda: shared)
+            _run(_seed_password_user(repos, "t-cc", "cc@x.io", "pw12345678"))
+            _, codes, _ = _enrol(me, "t-cc", "user-t-cc")
+            challenge = _run(auth.login(auth.LoginRequest(email="cc@x.io", password="pw12345678"), Response()))["data"]["mfa_challenge"]
+            _slow_user_reads(monkeypatch, repos)
+
+            async def race():
+                attempt = lambda: auth.verify_mfa(  # noqa: E731
+                    auth.MfaVerifyRequest(challenge=challenge, code=codes[0]), Response(), FakeRequest())
+                return await asyncio.gather(attempt(), attempt(), return_exceptions=True)
+
+            results = _run(race())
+            sessions = [r for r in results if isinstance(r, dict)]
+            assert len(sessions) == 1, results
+            assert all(isinstance(r, common.BadRequestError) for r in results if not isinstance(r, dict))
+
+    def test_overlapping_recovery_codes_are_both_spent(self, monkeypatch):
+        import asyncio
+
+        with trust_flags(**_ON):
+            from fastapi import Response
+            from tenancy.auth import mfa
+            auth = importlib.import_module("tenancy.auth.routes")
+            me = importlib.import_module("tenancy.me.routes")
+            repos = importlib.import_module("repositories.repos")
+            shared = _SharedCache()
+            monkeypatch.setattr(mfa, "get_cache", lambda: shared)
+            _run(_seed_password_user(repos, "t-rr", "rr@x.io", "pw12345678"))
+            _, codes, _ = _enrol(me, "t-rr", "user-t-rr")
+
+            def sign_in():
+                return _run(auth.login(auth.LoginRequest(email="rr@x.io", password="pw12345678"), Response()))["data"]["mfa_challenge"]
+
+            first, second = sign_in(), sign_in()
+            _slow_user_reads(monkeypatch, repos)
+
+            async def race():
+                return await asyncio.gather(
+                    auth.verify_mfa(auth.MfaVerifyRequest(challenge=first, code=codes[0]), Response(), FakeRequest()),
+                    auth.verify_mfa(auth.MfaVerifyRequest(challenge=second, code=codes[1]), Response(), FakeRequest()),
+                )
+
+            _run(race())
+            stored = _run(repos.UserRepository().find_by_id("user-t-rr"))
+            assert len(stored["mfa_recovery_hashes"]) == len(codes) - 2
+            assert mfa.hash_recovery_code(codes[0]) not in stored["mfa_recovery_hashes"]
+            assert mfa.hash_recovery_code(codes[1]) not in stored["mfa_recovery_hashes"]

@@ -10,10 +10,16 @@ hand-made grant. Shopify is the reference path.
 
 Never for the reserved Olympus scope (Olympus sources are operator-onboarded in
 Kyber) and never twice: an existing active or ambiguous grant is left alone.
+Lookup and creation run under a short per-source claim in the shared cache, so
+two overlapping account selections on different API processes cannot both
+create a grant (which would leave the source ambiguous and refuse its syncs).
 """
 
 from __future__ import annotations
 
+import asyncio
+import time
+from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
@@ -22,6 +28,40 @@ from shared.logger.logger import get_logger, metrics
 logger = get_logger("aether.provider_runtime.organization_grants")
 
 ORGANIZATION_RIGHTS_CLASS = "tenant_byod_data"
+
+
+GRANT_LOCK_TTL_SECONDS = 15
+GRANT_LOCK_WAIT_SECONDS = 5.0
+
+
+class GrantProvisioningBusy(Exception):
+    """Another request is provisioning this account's grant; retry shortly."""
+
+
+def _shared_cache() -> Any:
+    try:
+        from dependencies.providers import get_cache
+        return get_cache()
+    except Exception:  # noqa: BLE001 - no platform registry (local tooling)
+        return None
+
+
+@asynccontextmanager
+async def _source_claim(cache: Any, tenant_id: str, source_id: str):
+    """Serialise get-or-create for one tenant/source across API processes."""
+    if cache is None:
+        yield
+        return
+    key = f"provider:org-grant:{tenant_id}:{source_id}"
+    deadline = time.monotonic() + GRANT_LOCK_WAIT_SECONDS
+    while not await cache.set_nx(key, "1", GRANT_LOCK_TTL_SECONDS):
+        if time.monotonic() >= deadline:
+            raise GrantProvisioningBusy(source_id)
+        await asyncio.sleep(0.05)
+    try:
+        yield
+    finally:
+        await cache.delete(key)
 
 
 def _data_category(provider_identity: str) -> str:
@@ -35,13 +75,10 @@ async def ensure_organization_system_grant(
     *,
     actor: str,
     grant_service: Any = None,
+    cache: Any = None,
 ) -> Optional[str]:
     """Return the grant id governing this account, creating it when absent."""
-    from connectors.integrations.data_rights.models import (
-        DataRightsGrantCreate,
-        GrantStatus,
-        LegalBasis,
-    )
+    from connectors.integrations.data_rights.models import GrantStatus
     from connectors.provider_runtime.rights_admission import provider_account_source_id
 
     tenant_id = str(getattr(connection, "tenant_id", "") or "")
@@ -51,12 +88,18 @@ async def ensure_organization_system_grant(
         from connectors.integrations.data_rights.service import data_rights_service as grant_service
 
     source_id = provider_account_source_id(connection.connection_id, account_id)
-    existing = await grant_service._repository.list(  # noqa: SLF001 - same-domain read
-        tenant_id=tenant_id, source_id=source_id, status=GrantStatus.ACTIVE,
-    )
-    live = [g for g in existing if getattr(g, "revoked_at", None) is None]
-    if live:
-        return live[0].data_rights_grant_id if len(live) == 1 else None
+    async with _source_claim(cache if cache is not None else _shared_cache(), tenant_id, source_id):
+        existing = await grant_service._repository.list(  # noqa: SLF001 - same-domain read
+            tenant_id=tenant_id, source_id=source_id, status=GrantStatus.ACTIVE,
+        )
+        live = [g for g in existing if getattr(g, "revoked_at", None) is None]
+        if live:
+            return live[0].data_rights_grant_id if len(live) == 1 else None
+        return await _create(grant_service, connection, tenant_id, source_id, actor)
+
+
+async def _create(grant_service: Any, connection: Any, tenant_id: str, source_id: str, actor: str) -> str:
+    from connectors.integrations.data_rights.models import DataRightsGrantCreate, LegalBasis
 
     grant = await grant_service.create_grant(DataRightsGrantCreate(
         tenant_id=tenant_id,
@@ -79,4 +122,4 @@ async def ensure_organization_system_grant(
     return grant.data_rights_grant_id
 
 
-__all__ = ["ensure_organization_system_grant"]
+__all__ = ["GrantProvisioningBusy", "ensure_organization_system_grant"]

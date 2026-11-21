@@ -14,7 +14,7 @@ import pytest
 from repositories import repos
 from repositories.lake import BronzeRepository
 from connectors.integrations.data_rights import service as dr_service_mod
-from connectors.integrations.data_rights.models import DataRightsGrantCreate
+from connectors.integrations.data_rights.models import DataRightsGrantCreate, DataRightsGrantRevoke
 from ingestion.ingestion.feed_rights import feed_source_id, resolve_feed_rights
 
 
@@ -90,3 +90,58 @@ async def test_a_source_already_fed_stays_legacy_and_tenant_only():
 @pytest.mark.asyncio
 async def test_the_requirement_can_be_switched_off():
     assert (await resolve_feed_rights("t1", "dune", grant_required=False)).outcome == "legacy"
+
+
+async def _feed_row(tenant_id: str, record_id: str, rights_outcome=None):
+    payload = {"a": 1}
+    if rights_outcome is not None:
+        payload["source_rights"] = {"source_id": "feed:dune", "rights_outcome": rights_outcome}
+    await BronzeRepository("feeds").ingest(
+        source="dune", source_tag="feed:dune", provider_record_id=record_id, payload=payload,
+        schema_version="1.0", entity_id=record_id, entity_type="row", tenant_id=tenant_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_revoking_a_grant_stops_ingestion_after_granted_history(_memory):
+    """Granted history must not reopen the legacy fallback (Codex P1 on #899)."""
+    grant = await _grant(_memory, "t1", "dune")
+    assert (await resolve_feed_rights("t1", "dune")).outcome == "granted"
+    await _feed_row("t1", "g1", rights_outcome="granted")
+
+    await _memory.revoke_grant(grant.data_rights_grant_id, DataRightsGrantRevoke(revocation_reason="withdrawn", revoked_by_user_id="u1"), tenant_id="t1")
+    rights = await resolve_feed_rights("t1", "dune")
+    assert rights.outcome == "denied" and not rights.allowed
+
+
+@pytest.mark.asyncio
+async def test_a_lake_denying_grant_wins_over_history(_memory):
+    await _feed_row("t1", "old1")
+    await _grant(_memory, "t1", "dune", lake=False)
+    assert (await resolve_feed_rights("t1", "dune")).outcome == "denied"
+
+
+@pytest.mark.asyncio
+async def test_a_revoked_grant_wins_over_pre_governance_history(_memory):
+    await _feed_row("t1", "old1")
+    grant = await _grant(_memory, "t1", "dune")
+    await _memory.revoke_grant(grant.data_rights_grant_id, DataRightsGrantRevoke(revocation_reason="withdrawn", revoked_by_user_id="u1"), tenant_id="t1")
+    assert (await resolve_feed_rights("t1", "dune")).outcome == "denied"
+
+
+@pytest.mark.asyncio
+async def test_granted_rows_alone_never_qualify_for_legacy(_memory, monkeypatch):
+    """Even if the grant record is gone, rows admitted under a grant are not legacy history."""
+    await _feed_row("t1", "g1", rights_outcome="granted")
+    assert (await resolve_feed_rights("t1", "dune")).outcome == "denied"
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_rights_authority_denies_even_with_history(_memory, monkeypatch):
+    await _feed_row("t1", "old1")
+
+    async def broken(tenant_id, source_id):
+        raise RuntimeError("rights store down")
+
+    monkeypatch.setattr(_memory, "get_effective_grant", broken)
+    assert (await resolve_feed_rights("t1", "dune")).outcome == "denied"
