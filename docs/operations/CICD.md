@@ -35,8 +35,9 @@ reviewed_source_commits:
   - {'commit': '1b75e2b8', 'reason': 'Merge of development (publish-sdk and repo-health workflow changes, reviewed upstream) with this PR''s pilot and remote staging plan changes; no further doc change.'}
   - {'commit': '2cc82835', 'reason': 'The legacy staging Aurora cluster now pins its live 16.13 release and ignores engine_version, matching the managed cluster rule these docs already describe.'}
   - {'commit': '36e2cf2b', 'reason': 'Access Kit scorecard text now records the passing hosted ci / verdict; staging planners read MCP inputs at the release commit; the W3 runbook seeds its tenants explicitly. Docs that name these were updated in the same change; others describe them generally and are unchanged.'}
+  - {'commit': 'fb96b4e5', 'reason': 'Merge of development (owned domains and npm scope, reviewed upstream) with the Access Kit follow-ups; no further doc change.'}
 source_hashes:
-  ".github/workflows/": "sha256:5773bfef4889653efe773edaa5e9b98031a5a312a3fd17933cab866fea643d55"
+  ".github/workflows/": "sha256:d32d157df397a742e4d548f49898e64bcd9245f90078b554077a515998943de4"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:7f64eac565a8b41efd7fa7cdb76cfe09fc5e19e08cba5b6d7aa1a177d9bd81ba"
