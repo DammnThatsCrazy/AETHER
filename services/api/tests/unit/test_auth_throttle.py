@@ -434,3 +434,16 @@ def test_the_auth_routes_use_the_platform_cache_client():
 
     auth = importlib.import_module("tenancy.auth.routes")
     assert isinstance(auth._auth_cache(), CacheClient)
+
+
+def test_a_non_ascii_code_is_a_wrong_code_not_a_server_error():
+    """Fullwidth digits used to raise TypeError in hmac.compare_digest (Codex P2 on #902)."""
+    from shared.auth import verification as ver
+
+    cache = FakeCache()
+    _run(ver.store_otp("u@x.io", "123456", cache))
+    assert _run(ver.verify_otp("u@x.io", "１２３４５６", cache)) is False
+    assert _run(ver.verify_otp("u@x.io", "123456", cache)) is True
+    ver._MEM_STORE.clear()
+    _run(ver.store_otp("m@x.io", "123456"))
+    assert _run(ver.verify_otp("m@x.io", "１２３４５６")) is False

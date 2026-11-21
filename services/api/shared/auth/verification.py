@@ -24,6 +24,16 @@ def _redis_key(email: str) -> str:
     return f"auth:otp:{email.lower()}"
 
 
+def _same_code(stored: str, code: str) -> bool:
+    """Constant-time comparison that never raises on non-ASCII input.
+
+    ``hmac.compare_digest`` refuses non-ASCII ``str``, so a code such as
+    fullwidth digits would otherwise surface as a server error instead of a
+    wrong code. Comparing UTF-8 bytes keeps the timing guarantee.
+    """
+    return hmac.compare_digest(stored.encode("utf-8"), code.encode("utf-8"))
+
+
 def _consumed_key(key: str, otp: str) -> str:
     return f"{key}:consumed:{hashlib.sha256(otp.encode()).hexdigest()[:32]}"
 
@@ -48,7 +58,7 @@ async def verify_otp(email: str, code: str, cache: Optional[Any] = None) -> bool
     code = (code or "").strip()
     if cache is not None:
         stored = await cache.get(key)
-        if not stored or not hmac.compare_digest(str(stored), code):
+        if not stored or not _same_code(str(stored), code):
             return False
         if not await cache.set_nx(_consumed_key(key, str(stored)), "1", _OTP_TTL):
             return False
@@ -56,7 +66,7 @@ async def verify_otp(email: str, code: str, cache: Optional[Any] = None) -> bool
         return True
 
     entry = _MEM_STORE.get(key)
-    if entry and entry["expires"] > time.time() and hmac.compare_digest(entry["otp"], code):
+    if entry and entry["expires"] > time.time() and _same_code(entry["otp"], code):
         _MEM_STORE.pop(key, None)
         return True
     return False
