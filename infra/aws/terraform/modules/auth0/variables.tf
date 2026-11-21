@@ -69,6 +69,12 @@ variable "enable_social_connections" {
   default     = false
 }
 
+variable "social_kyber_enabled" {
+  type        = bool
+  description = "Also enable the Kyber client on the Google social connection. The pilot lane defers Kyber identity, so it passes false and the association holds only the Aether clients."
+  default     = true
+}
+
 variable "social_providers" {
   type        = list(string)
   description = "Which social connections to create when enable_social_connections is true (google, apple, twitter, microsoft, slack). The root module lists only providers whose credentials are provisioned."

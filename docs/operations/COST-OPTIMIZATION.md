@@ -20,7 +20,7 @@ source_hashes:
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
   "scripts/release/check_cost_policy.py": "sha256:1fd906153be98a14c66a4abcf176a8ecd7259b9af4945bd14e9af50305654916"
   "scripts/release/check_cost_policy_terraform.py": "sha256:d5dcbd7547d76dad5c46ea611d282c2652970a60aa9d420eb2b80641a0fa0469"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:11cf5076d0e6503393e16066b67c15c8fb7b756b0501953fbe488ee6dc7e129a"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:d3e278a9d28d1614e3f502c43a53a12ddb0554e5378e56f199f954fe7df88954"
 ---
 
 # Cost Optimization
@@ -47,8 +47,8 @@ mutations outside the preserved Aether path (the web client and, since the
 owner-approved CLI addition, the `aether_cli` client, credentials, grant and DB
 connection; since the owner-approved social sign-in addition, the Google and
 Apple connections and their Aether client associations, created only when that
-provider's credentials are provisioned; deleting or replacing any of them is
-still rejected) before an apply
+provider's credentials are provisioned, never enabling Kyber or dropping an
+enabled client; deleting or replacing any of them is still rejected) before an apply
 is dispatched. Boolean root variables are read from Terraform's raw plan form
 (`TF_VAR_*` values are recorded as the strings `"true"`/`"false"`).
 Staging desired counts and both autoscaling bounds must match exactly one
