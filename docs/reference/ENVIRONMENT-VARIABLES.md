@@ -51,10 +51,12 @@ production reject `AETHER_ROLE=all` and, in production, in-memory `CACHE_BACKEND
   `EVENT_BACKEND` (`sns_sqs`; a profile selector, the backend itself reads `EVENT_BROKER`), `GRAPH_BACKEND` (`postgres`),
   `ANALYTICS_BACKEND` (`postgres`), `OBJECT_BACKEND` (`s3`).
 
-## Ingestion V2 + event-outbox relay (PR 5–6 / FT-5–6, default off)
+## Ingestion V2 + event-outbox relay (PR 5–6 / FT-5–6)
 
-- `INGESTION_V2_ENABLED` / `INGESTION_V2_CANARY_TENANTS` — route `/v1/batch` to
-  the transactional typed-Bronze + outbox path (globally or per tenant).
+- `INGESTION_V2_ENABLED` / `INGESTION_V2_CANARY_TENANTS` — route SDK intake
+  (`/v1/batch` and the deprecated `/v1/ingest/events*` aliases) to the
+  transactional typed-Bronze + outbox path (globally or per tenant). Defaults
+  on when `AETHER_ENV` is `staging` or `production`, off elsewhere.
 - `OUTBOX_RELAY_ENABLED` — run the `event_outbox_relay` worker (under the
   `outbox-relay` role, or in-process under `all`) that drains `event_outbox`
   to the event bus.

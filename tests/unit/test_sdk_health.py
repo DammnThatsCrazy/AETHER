@@ -211,3 +211,13 @@ async def test_recent_sdk_not_flagged_silent(sdk_health_service):
 
     silent = await svc.detect_silent_sdks("tenant-recent")
     assert "sdk-recent" not in [s["sdk_id"] for s in silent]
+
+
+@pytest.mark.parametrize("manifest_status", ["forbidden", "expired", "signature_invalid", "unavailable"])
+def test_an_unreadable_manifest_never_reads_healthy(sdk_health_service, manifest_status):
+    """A manifest the install cannot read or trust means stale configuration: degraded, not healthy."""
+    svc, svc_mod = sdk_health_service
+    healthy = make_heartbeat(svc_mod)
+    assert svc._compute_score(healthy).status == "healthy"
+    score = svc._compute_score(make_heartbeat(svc_mod, manifest_status=manifest_status))
+    assert score.status == "degraded"

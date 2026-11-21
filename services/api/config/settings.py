@@ -971,7 +971,11 @@ class CredentialPlatformConfig:
 
 @dataclass(frozen=True)
 class IngestionV2Config:
-    enabled: bool = _env_bool("INGESTION_V2_ENABLED", False)
+    # One SDK durable authority: deploy targets default to the transactional
+    # typed Bronze + outbox path; an explicit env var still wins.
+    enabled: bool = _env_bool(
+        "INGESTION_V2_ENABLED", _env("AETHER_ENV", "local") in ("staging", "production")
+    )
     canary_tenants: list[str] = field(
         default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
     )

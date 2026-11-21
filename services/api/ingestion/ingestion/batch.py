@@ -409,35 +409,62 @@ async def ingest_batch(
     # credential's binding by the route policy; carried through so the install
     # projection can refuse a signal whose body names a different site.
     declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
+    response = await ingest_sdk_batch(
+        body,
+        tenant=tenant,
+        request_privacy=request_privacy,
+        server_context=server_context,
+        producer=producer,
+        declared_site=declared_site,
+        request_id=getattr(request.state, "request_id", None),
+    )
+    return await _record_batch_audit(tenant, response)
+
+
+def sdk_v2_selected(tenant_id: str) -> bool:
+    """Whether this tenant's SDK intake uses the transactional typed-Bronze + outbox path."""
     iv2 = settings.ingestion_v2
-    if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
-        response = await _ingest_batch_v2(
+    return bool(iv2.enabled or tenant_id in iv2.canary_tenants)
+
+
+async def ingest_sdk_batch(
+    body: "BatchRequest",
+    *,
+    tenant,
+    request_privacy: RequestPrivacySignals,
+    server_context: Optional[dict],
+    producer: EventProducer,
+    declared_site: Optional[str],
+    request_id: Optional[str] = None,
+) -> dict:
+    """The one SDK intake dispatch, shared by /v1/batch and the deprecated aliases.
+
+    Every caller reaches the same durable authority for its tenant: the
+    transactional typed Bronze + outbox path when V2 is selected (the deploy
+    default), else the legacy V1 spine. Returns the BatchResponse dict.
+    """
+    if sdk_v2_selected(tenant.tenant_id):
+        return await _ingest_batch_v2(
             body=body,
             tenant=tenant,
             request_privacy=request_privacy,
             server_context=server_context,
             declared_site=declared_site,
-            request_id=getattr(request.state, "request_id", None),
+            request_id=request_id,
         )
-    else:
-        response_model = await ingest_events(
-            events=body.batch,
-            tenant_id=tenant.tenant_id,
-            request_privacy=request_privacy,
-            server_context=server_context,
-            granted_consents=frozenset(body.consents or []),
-            sent_at=body.sentAt,
-            producer=producer,
-            declared_site=declared_site,
-            request_id=getattr(request.state, "request_id", None),
-            credential_platform=getattr(tenant, "credential_platform", None),
-        )
-        # The /v1/batch handler keeps returning the plain BatchResponse dict
-        # (ingest_events returns the model); ingest_events is the shared spine the
-        # deprecated aliases also converge onto.
-        response = response_model.model_dump()
-
-    return await _record_batch_audit(tenant, response)
+    response_model = await ingest_events(
+        events=body.batch,
+        tenant_id=tenant.tenant_id,
+        request_privacy=request_privacy,
+        server_context=server_context,
+        granted_consents=frozenset(body.consents or []),
+        sent_at=body.sentAt,
+        producer=producer,
+        declared_site=declared_site,
+        request_id=request_id,
+        credential_platform=getattr(tenant, "credential_platform", None),
+    )
+    return response_model.model_dump()
 
 
 async def _record_batch_audit(tenant: Any, response: dict) -> dict:
