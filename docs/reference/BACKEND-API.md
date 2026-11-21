@@ -37,7 +37,7 @@ source_hashes:
   "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
   "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
   "services/api/identity/": "sha256:c54fe130e4198fd6b3fb99b0a288d3c5e2b61f6dadfd11737c4a4fdf8c266036"
-  "services/api/ingestion/": "sha256:43a6f333e9d31eb7f990ff857a44f255e2158c2e7eff23a14ad153be6fd4c5a2"
+  "services/api/ingestion/": "sha256:3abedb9f44ecbfc96624fb462c645aadab6b92ff09ee30a3272b73cfe7cf0e5e"
   "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -704,7 +704,13 @@ The deprecated server-to-server aliases `POST /v1/ingest/events` and
 `POST /v1/ingest/events/batch` are converged (WS-B2) onto this same canonical
 spine — validation, consent, scrub, Bronze-durable write, idempotency, and
 publish semantics match `/v1/batch`, and the aliases now require the same
-`write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
+`write` permission. They take the same dispatch as `/v1/batch`
+(`ingest_sdk_batch`), so when the transactional path is selected for a tenant
+an alias also writes typed Bronze plus outbox and never publishes in-request.
+`INGESTION_V2_ENABLED` defaults on for `staging` and `production`. An SDK
+heartbeat whose `manifest_status` is not `healthy` (forbidden, expired,
+signature_invalid, unavailable) is never scored `healthy`; it is at most
+`degraded`. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
 retires them with HTTP 410 (routes stay mounted; their bodies return the
 retired error and direct callers to `/v1/batch`).
 

@@ -261,6 +261,11 @@ class SDKHealthService:
             status = "degraded"
         else:
             status = "unhealthy"
+        # A manifest the install cannot read or trust (forbidden, expired,
+        # signature_invalid, unavailable) means it runs on stale or default
+        # configuration: never report that install healthy.
+        if status == "healthy" and (hb.manifest_status or "healthy") != "healthy":
+            status = "degraded"
 
         return SDKHealthScore(
             sdk_id=hb.sdk_id,

@@ -77,7 +77,7 @@ async def ingest_single_event(
     Retained as a server-to-server alias with full validation and tenant scoping.
     SDKs MUST use /v1/batch. Converged (WS-B2) onto the canonical V1 spine: the
     legacy wire event is normalized to a canonical BaseEvent and routed through
-    ingestion.ingestion.batch.ingest_events, so validation / consent / scrub /
+    ingestion.ingestion.batch.ingest_sdk_batch, so validation / consent / scrub /
     Bronze-durable / idempotency / publish semantics match /v1/batch.
     """
     # Convergence closes the missing-auth gap: aliases now require WRITE like
@@ -99,8 +99,7 @@ async def ingest_single_event(
         )
 
     from pydantic import ValidationError
-    from ingestion.ingestion.batch import BaseEvent, EventContext, ingest_events
-    from ingestion.ingestion.validation import RequestPrivacySignals
+    from ingestion.ingestion.batch import BaseEvent, EventContext
 
     try:
         canonical = _alias_event_to_canonical(
@@ -114,20 +113,11 @@ async def ingest_single_event(
             },
         )
 
-    resp = await ingest_events(
+    resp = await _ingest_alias_events(
         [canonical],
-        tenant_id=tenant.tenant_id,
-        request_privacy=RequestPrivacySignals.from_headers(request.headers),
-        server_context=None,
-        granted_consents=frozenset(),
-        sent_at=None,
+        request=request,
+        tenant=tenant,
         producer=producer,
-        # These aliases are admitted for publishable keys (the route policy
-        # allows any /v1/ingest* path), so the same site confinement has to
-        # apply here — otherwise a key bound to one site could forge install
-        # signals for another by posting to the deprecated path instead.
-        declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
-        credential_platform=getattr(tenant, "credential_platform", None),
     )
     result = resp.events[0]
     return APIResponse(
@@ -145,7 +135,7 @@ async def ingest_batch_events(
 
     Retained as a server-to-server alias. SDKs MUST use /v1/batch. Converged
     (WS-B2): every event is normalized to a canonical BaseEvent and routed
-    through ingestion.ingestion.batch.ingest_events, matching /v1/batch
+    through ingestion.ingestion.batch.ingest_sdk_batch, matching /v1/batch
     semantics. Accepted events are Bronze-durable before the bus publish.
     """
     # Convergence closes the missing-auth gap: aliases now require WRITE like
@@ -167,8 +157,7 @@ async def ingest_batch_events(
         )
 
     from pydantic import ValidationError
-    from ingestion.ingestion.batch import BaseEvent, EventContext, ingest_events
-    from ingestion.ingestion.validation import RequestPrivacySignals
+    from ingestion.ingestion.batch import BaseEvent, EventContext
 
     try:
         canonical_events = [
@@ -185,25 +174,43 @@ async def ingest_batch_events(
             },
         )
 
-    resp = await ingest_events(
+    resp = await _ingest_alias_events(
         canonical_events,
-        tenant_id=tenant.tenant_id,
-        request_privacy=RequestPrivacySignals.from_headers(request.headers),
-        server_context=None,
-        granted_consents=frozenset(),
-        sent_at=None,
+        request=request,
+        tenant=tenant,
         producer=producer,
-        # These aliases are admitted for publishable keys (the route policy
-        # allows any /v1/ingest* path), so the same site confinement has to
-        # apply here — otherwise a key bound to one site could forge install
-        # signals for another by posting to the deprecated path instead.
-        declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
-        credential_platform=getattr(tenant, "credential_platform", None),
     )
     accepted_event_ids = [r.id for r in resp.events if r.status == "accepted"]
     return APIResponse(
         data={"accepted": len(accepted_event_ids), "event_ids": accepted_event_ids}
     ).to_dict()
+
+
+async def _ingest_alias_events(events, *, request: Request, tenant, producer: EventProducer):
+    """Deprecated aliases converge on the same SDK intake dispatch as /v1/batch.
+
+    Aliases carry no send time or batch consent; the server receive time is the
+    temporal baseline. Returns an object exposing ``.events`` (per-event results).
+    """
+    from types import SimpleNamespace
+    from ingestion.ingestion.batch import BatchRequest, EventResult, ingest_sdk_batch
+    from ingestion.ingestion.validation import RequestPrivacySignals
+    from shared.common.common import utc_now
+
+    response = await ingest_sdk_batch(
+        BatchRequest(batch=list(events), sentAt=utc_now().isoformat()),
+        tenant=tenant,
+        request_privacy=RequestPrivacySignals.from_headers(request.headers),
+        server_context=None,
+        producer=producer,
+        # These aliases are admitted for publishable keys (the route policy
+        # allows any /v1/ingest* path), so the same site confinement applies —
+        # otherwise a key bound to one site could forge install signals for
+        # another by posting to the deprecated path instead.
+        declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
+        request_id=getattr(request.state, "request_id", None),
+    )
+    return SimpleNamespace(events=[EventResult(**e) for e in response.get("events", [])])
 
 
 def _alias_event_to_canonical(

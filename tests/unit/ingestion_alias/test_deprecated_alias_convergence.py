@@ -424,6 +424,25 @@ def test_alias_routes_stamp_the_credential_platform_on_the_envelope(handler):
         assert source["source_provider"] == "react_native"
 
 
+@pytest.mark.parametrize("handler", ["ingest_single_event", "ingest_batch_events"])
+def test_aliases_follow_the_transactional_path_when_v2_is_selected(handler):
+    """One SDK durable authority: an alias never takes the in-request publish
+    path while /v1/batch writes typed Bronze + outbox for the same tenant."""
+    with _fresh() as env:
+        object.__setattr__(
+            env.settings, "ingestion_v2",
+            dataclasses.replace(env.settings.ingestion_v2, enabled=True),
+        )
+        producer = _FakeProducer()
+        event = env.routes.SDKEvent(**_legacy("track"))
+        body = event if handler == "ingest_single_event" else env.routes.BatchEventsRequest(events=[event])
+        _run(getattr(env.routes, handler)(body, _FakeRequest("t1"), producer=producer))
+        assert producer.published == []  # no request-local publish
+        outbox = list(env.repos._IN_MEMORY_STORES.get("event_outbox", {}).values())
+        assert len(outbox) == 1 and outbox[0]["tenant_id"] == "t1"
+        assert len(env.repos._IN_MEMORY_STORES.get("bronze_sdk_events", {})) == 1
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. Direct ingest_events() — accepted / rejected / duplicate counts preserved
 # ═══════════════════════════════════════════════════════════════════════════
