@@ -32,9 +32,10 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
   - {'commit': 'd8f94809', 'reason': 'Pilot and remote CI staging plans now carry the declared MCP state; MCP docs updated to name every planner, other docs describe the workflows generally and are unchanged.'}
+  - {'commit': '36e2cf2b', 'reason': 'Access Kit scorecard text now records the passing hosted ci / verdict; staging planners read MCP inputs at the release commit; the W3 runbook seeds its tenants explicitly. Docs that name these were updated in the same change; others describe them generally and are unchanged.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:92f140fd0db133d881197c15f370cb89f97f2eee9a42d2b8b9574fafc1c055fc"
-  ".github/workflows/staging-lifecycle.yml": "sha256:7863ef2257e0675bb0841d3efa4b037a6fa44914ed180a7746fc480970e715d5"
+  ".github/workflows/staging-lifecycle.yml": "sha256:3a07c77a56df785623f3909c27b79e5755e89df1d8e3f1009e13214f62050a88"
   ".github/workflows/terraform-promote.yml": "sha256:eed14e52df12f98aded0087d09c9d84e3ac0a795b3869d1255f4a6f787541618"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:867cc96ca6b3b0020680e4b9402ed3462a0e4191b61b2fc374d03d44a606fc08"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"

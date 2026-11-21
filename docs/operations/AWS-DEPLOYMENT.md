@@ -59,6 +59,7 @@ reviewed_source_commits:
   - {'commit': '61cd0dd6', 'reason': 'Reviewed 61cd0dd6: staging customer_services.access-mcp.repository is now true (the staging aether-access-mcp ECR repository is provisioned on the next reviewed apply; the service stays disabled), and staging plan tests pass the declared flag. Only the staging enablement status changes; cost impact is one ECR repository.'}
   - {'commit': '5797361b', 'reason': 'Two staging plan test runs now pass the declared MCP repository flag; no documented behavior changes.'}
   - {'commit': '2cc82835', 'reason': 'The legacy staging Aurora cluster now pins its live 16.13 release and ignores engine_version, matching the managed cluster rule these docs already describe.'}
+  - {'commit': '36e2cf2b', 'reason': 'Access Kit scorecard text now records the passing hosted ci / verdict; staging planners read MCP inputs at the release commit; the W3 runbook seeds its tenants explicitly. Docs that name these were updated in the same change; others describe them generally and are unchanged.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -66,7 +67,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:79de8fa1460c67f7cfff1ebc9a1d23e1f1afc341f7a71af64bd83cb606610bf4"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:7863ef2257e0675bb0841d3efa4b037a6fa44914ed180a7746fc480970e715d5"
+  ".github/workflows/staging-lifecycle.yml": "sha256:3a07c77a56df785623f3909c27b79e5755e89df1d8e3f1009e13214f62050a88"
   ".github/workflows/staging-state-reconcile.yml": "sha256:3da807f71996e7b397bc4a593fafd27d3818c3d4f0d7a2fa37b5619674209d48"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:eed14e52df12f98aded0087d09c9d84e3ac0a795b3869d1255f4a6f787541618"

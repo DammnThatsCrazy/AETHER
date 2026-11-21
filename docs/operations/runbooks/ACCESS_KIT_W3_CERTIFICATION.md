@@ -18,7 +18,7 @@ source_hashes:
   "packages/access-kit/src/profile360-tools.mjs": "sha256:98c417ee9ceb5987a41c1a79916e047b29dfdd422886460d1a64664a30235a3a"
   "packages/access-kit/src/profile360.mjs": "sha256:32c8c44211d7330c269a7ffa34832cf44e1dc796e94a10d9348275ab42cb9b05"
   "scripts/prune_auth0_mcp_clients.py": "sha256:eff4697c57eb53a965e0e1f7a6c125b674746c42a4d6990f0dbd39d51336584e"
-  "scripts/release/staging_customer_services.py": "sha256:8b1b76f8e1ed5685ebcb52f1cf923984e55bc89a0f91ba9321c32a4c79bd4169"
+  "scripts/release/staging_customer_services.py": "sha256:1d56dc588147f15b2244ba161c7c6ec126a8ae653be41b4434b51bc9896eed22"
 ---
 
 # Access Kit W3 certification (design partner)

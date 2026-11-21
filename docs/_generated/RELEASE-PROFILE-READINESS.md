@@ -101,7 +101,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `tenant-import-engine`: READY_TO_VALIDATE
 
 **Hard blockers:**
-- access-kit: productionization 75% (< 100% of in-scope productionization controls); remaining: hosted ci / verdict on the design-partner branch; npm prerelease publication and staging aether-access-mcp image publication
+- access-kit: productionization 75% (< 100% of in-scope productionization controls); remaining: npm prerelease publication and staging aether-access-mcp image publication
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
 - card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
