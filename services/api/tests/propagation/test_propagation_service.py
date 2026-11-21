@@ -93,7 +93,7 @@ class FakePool:
         return _Ctx()
 
 
-def sources(pool_rows=()):
+def sources(pool_rows=(), grants=None):
     pool = FakePool(list(pool_rows))
 
     async def pool_factory():
@@ -102,6 +102,7 @@ def sources(pool_rows=()):
     graph = FakeGraph()
     return RepositoryPropagationSources(
         link_service=FakeLinks(), fill_repo=FakeFills(), graph_client=graph, pool_factory=pool_factory,
+        grant_lookup=(grants or FakeGrants()).get_grant,
     ), graph, pool
 
 
@@ -138,6 +139,7 @@ async def test_unavailable_sources_degrade_with_reasons():
 
     src = RepositoryPropagationSources(
         link_service=FakeLinks(), fill_repo=FakeFills(), graph_client=BrokenGraph(), pool_factory=no_pool,
+        grant_lookup=FakeGrants().get_grant,
     )
     result = await PropagationService(src).run(query())
     assert "canonical_graph_authority_unavailable" in result.limitations
@@ -264,6 +266,10 @@ class FakeGrant:
     def __init__(self, status="active"):
         self.status = SimpleNamespace(value=status)
         self.revoked_at = None if status == "active" else "2026-11-20T00:00:00+00:00"
+        # Fields the current-permission rule reads (a tenant BYOD grant).
+        self.tenant_id = T
+        self.connector_class = "tenant_byod_data"
+        self.tenant_lake_allowed = True
 
 
 class FakeGrants:
@@ -290,7 +296,7 @@ def _store(links, grants):
     PropagationRunRepository()._store.clear()
 
     def factory():
-        src, _, _ = sources()
+        src, _, _ = sources(grants=grants)
         src._links = links
         return PropagationService(src)
 
@@ -321,9 +327,13 @@ async def test_recompute_saves_a_superseding_run():
     service = factory()
     run = await service.run(query())
     await store.save(run, service.last_inputs, include_live=False)
+    # A newly linked account changes the effective inputs, so the recompute is a
+    # different run that supersedes the saved one.
+    links.extra[("hyperliquid", "0x99")] = "u99"
     new = await store.recompute(T, run.run_id)
+    assert new["run_id"] != run.run_id
     assert new["supersedes"] == run.run_id
-    assert [r["run_id"] for r in await store.list(T)]
+    assert {r["run_id"] for r in await store.list(T)} == {run.run_id, new["run_id"]}
 
 
 async def test_erasure_deletes_runs_naming_the_subject():
@@ -341,3 +351,94 @@ async def test_erasure_deletes_runs_naming_the_subject():
     receipts = await erase_propagation_runs_plane(ErasureSubject(tenant_id=T, user_id="u2"))
     assert receipts[PROPAGATION_RUNS_COMPONENT].records_impacted == 1
     assert await store.get(T, run.run_id) is None
+
+
+async def test_fills_under_a_revoked_grant_leave_every_later_computation():
+    """Admission when stored is not ongoing permission (Codex P1 on #896)."""
+    grants = FakeGrants()
+    src, _, _ = sources(grants=grants)
+    before = await PropagationService(src).run(query())
+    assert before.episodes and before.episodes[0].adopters
+
+    grants.status["drg_1"] = "revoked"
+    src_after, _, _ = sources(grants=grants)
+    after = await PropagationService(src_after).run(query())
+    assert "revoked_grant_fills_excluded" in after.limitations
+    assert not any(ep.adopters for ep in after.episodes)
+
+
+async def test_unreadable_grant_authority_excludes_fills_with_a_reason():
+    async def broken(grant_id, tenant_id=None):
+        raise RuntimeError("rights store down")
+
+    src = RepositoryPropagationSources(
+        link_service=FakeLinks(), fill_repo=FakeFills(), graph_client=FakeGraph(),
+        pool_factory=lambda: None, grant_lookup=broken,
+    )
+    bundle = await src.load(query())
+    assert bundle.fill_events == []
+    assert "fill_grant_authority_unavailable" in bundle.reasons
+
+
+async def test_unchanged_recompute_keeps_the_saved_run_intact():
+    """An identical recompute must not overwrite or supersede itself (Codex P2 on #896)."""
+    links, grants = BoundedLinks(), FakeGrants()
+    store, factory = _store(links, grants)
+    service = factory()
+    run = await service.run(query())
+    saved = await store.save(run, service.last_inputs, include_live=False)
+
+    again = await store.recompute(T, run.run_id)
+    assert again["run_id"] == run.run_id
+    assert again.get("supersedes") is None
+    assert again["saved_at"] == saved["saved_at"]
+    assert again["stale"] is False
+
+
+async def test_unchanged_recompute_refreshes_moved_provenance():
+    """Another account for an existing subject leaves the result unchanged but
+    moves the population; recompute must clear the staleness (Codex P2 on #897)."""
+    links, grants = BoundedLinks(), FakeGrants()
+    store, factory = _store(links, grants)
+    service = factory()
+    run = await service.run(query())
+    saved = await store.save(run, service.last_inputs, include_live=False)
+    saved_at, old_digest = saved["saved_at"], saved["population_digest"]
+
+    links.extra[("hyperliquid", "0x77")] = "u1"
+    assert (await store.get(T, run.run_id))["stale_reasons"] == ["linked_population_changed"]
+
+    again = await store.recompute(T, run.run_id)
+    assert again["run_id"] == run.run_id
+    assert again.get("supersedes") is None
+    assert again["saved_at"] == saved_at
+    assert again["stale"] is False
+    assert again["population_digest"] != old_digest
+
+
+async def test_dydx_default_subaccount_fills_attribute_to_the_linked_address():
+    """dYdX keys fills ``acct_<addr>_0``; attribution must still find the link (Codex P2 on #896)."""
+    from intelligence.propagation.adoption import adoptions_from_fill_events
+
+    class DydxLinks:
+        async def subjects_by_account(self, tenant_id):
+            return {("dydx", "dydx1abc"): "u7"}
+
+    class DydxFills(FakeFills):
+        def __init__(self):
+            self.rows = [{
+                "tenant_id": T, "trading_account_id": "acct_dydx1abc_0",
+                "canonical_market_id": "dydx:mainnet:BTC-USD", "fill_id": "d1", "side": "buy",
+                "price": "50000", "quantity": "1", "executed_at": at(0),
+                "source_refs": ["direction=Open Long", *ADMITTED],
+            }]
+
+    src = RepositoryPropagationSources(
+        link_service=DydxLinks(), fill_repo=DydxFills(), graph_client=FakeGraph(),
+        pool_factory=lambda: None, grant_lookup=FakeGrants().get_grant,
+    )
+    bundle = await src.load(query())
+    assert [e["payload"]["linked_account_ref"] for e in bundle.fill_events] == ["dydx1abc"]
+    adoptions, reasons = adoptions_from_fill_events(T, bundle.fill_events, bundle.subjects_by_account)
+    assert "fill_account_not_linked" not in reasons
+    assert [a.subject_id for a in adoptions] == ["u7"]

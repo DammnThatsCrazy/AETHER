@@ -205,14 +205,20 @@ variable "api_base_url" {
   }
 }
 
+variable "kyber_bootstrap_founder_email" {
+  type        = string
+  description = "Kyber founder email for founder-on-first-sign-in (empty disables it)."
+  default     = ""
+}
+
 variable "kyber_google_hosted_domain" {
   type        = string
   description = "Google Workspace hosted domain enforced by the backend-owned Kyber OIDC flow"
-  default     = "olympuslabs.ai"
+  default     = "olympuslabsml.com"
 
   validation {
     condition     = can(regex("^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}$", lower(trimspace(var.kyber_google_hosted_domain))))
-    error_message = "kyber_google_hosted_domain must be a concrete DNS domain such as olympuslabs.ai."
+    error_message = "kyber_google_hosted_domain must be a concrete DNS domain such as olympuslabsml.com."
   }
 }
 

@@ -172,8 +172,11 @@ resource "aws_rds_cluster" "legacy_staging" {
 
   cluster_identifier = "aether-staging"
   engine             = "aurora-postgresql"
-  engine_version     = "16.10"
-  engine_mode        = "provisioned"
+  # The live minor release. AWS upgrades this cluster on its own (16.10 ->
+  # 16.13), so engine_version is ignored below, as on the managed cluster: a
+  # reviewed plan must never try to move it back to an older minor release.
+  engine_version = "16.13"
+  engine_mode    = "provisioned"
 
   database_name   = "aether"
   master_username = "aether_admin"
@@ -218,6 +221,7 @@ resource "aws_rds_cluster" "legacy_staging" {
       enable_global_write_forwarding,
       enable_local_write_forwarding,
       skip_final_snapshot,
+      engine_version,
     ]
   }
 

@@ -10,6 +10,9 @@ import {
   TabsTrigger,
   TabsContent,
   useToast,
+  AuthPortalCompactButton, AuthPortalCompactRow, AuthPortalDivider, AuthPortalError, AuthPortalHeaderLink,
+  AuthPortalInput, AuthPortalNote, AuthPortalPrimaryButton, AuthPortalProviderButton, AuthPortalShell,
+  AuthPortalTextButton, AUTH_PORTAL_LINK_COLOR, SocialProviderIcon, type SocialProvider,
 } from "@aether/ui";
 import { useAuth, resolveAuthGrant, describeAuthRateLimit, rateLimiter } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
@@ -72,17 +75,41 @@ export function SignupPage() {
   return auth0Configured ? <Auth0SignupRedirect /> : <EmailSignupPage />;
 }
 
+const SIGNUP_PRIMARY: Array<{ provider: SocialProvider; label: string }> = [
+  { provider: "google", label: "Continue with Google" },
+  { provider: "apple", label: "Continue with Apple" },
+];
+const SIGNUP_COMPACT: Array<{ provider: SocialProvider; label: string; short: string }> = [
+  { provider: "microsoft", label: "Continue with Microsoft", short: "Microsoft" },
+  { provider: "slack", label: "Continue with Slack", short: "Slack" },
+];
+
+function connectionPairs(raw: string | undefined): Map<string, string> {
+  const entries = (raw ?? "").split(",").map((pair) => pair.split("=").map((s) => s.trim()));
+  return new Map(entries.filter((p): p is [string, string] => p.length === 2 && Boolean(p[0] && p[1])));
+}
+
+const PLAN_LABELS: Record<string, string> = { alpha: "Alpha", beta: "Beta", gamma: "Gamma", delta: "Delta" };
+
+/**
+ * Sign-up in the website portal's design. Social providers open their Auth0
+ * connection in sign-up mode; a work email opens Auth0's hosted sign-up with
+ * the address prefilled (email and password, verified by Auth0's email). The
+ * destination after sign-up is remembered first: billing with the pricing
+ * page's plan, an explicit ?redirect=, the marketing provider hand-off, or
+ * onboarding. /callback then exchanges the Auth0 token for a session and
+ * provisions the workspace.
+ */
 function Auth0SignupRedirect() {
   const auth0 = useAuth0();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [failed, setFailed] = useState(false);
-  // Precedence: a pricing-page plan (billing and its checkout), then the same
-  // validated ?redirect and marketing provider hand-off the email form uses,
-  // then onboarding.
+  const [redirecting, setRedirecting] = useState(false);
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const plan = parseSelfServePlan(searchParams.get("plan"));
   const redirectParam = searchParams.get("redirect");
-  // A redirect is explicit when the resolver accepts it as given (/settings
-  // included); anything it rewrites was invalid.
   const explicitRedirect =
     redirectParam !== null && resolvePostAuthRedirect(redirectParam) === redirectParam ? redirectParam : null;
   const handoff = parseSettingsHandoff(searchParams);
@@ -95,34 +122,84 @@ function Auth0SignupRedirect() {
         ? buildSettingsRedirectFromHandoff(handoff)
         : "/onboarding";
 
-  const start = () => {
+  const connections = connectionPairs(env.VITE_AUTH0_SOCIAL_CONNECTIONS);
+  const primary = SIGNUP_PRIMARY.flatMap((p) => (connections.get(p.provider) ? [{ ...p, connection: connections.get(p.provider)! }] : []));
+  const compact = SIGNUP_COMPACT.flatMap((p) => (connections.get(p.provider) ? [{ ...p, connection: connections.get(p.provider)! }] : []));
+
+  const start = (options?: { connection?: string; loginHint?: string }) => {
     setFailed(false);
+    setRedirecting(true);
     rememberPostAuthDestination(destination);
-    void auth0
-      .loginWithRedirect({ authorizationParams: { screen_hint: "signup" } })
-      .catch(() => setFailed(true));
+    const authorizationParams: Record<string, string> = { screen_hint: "signup" };
+    if (options?.connection) authorizationParams.connection = options.connection;
+    if (options?.loginHint) authorizationParams.login_hint = options.loginHint;
+    void auth0.loginWithRedirect({ authorizationParams }).catch(() => {
+      setFailed(true);
+      setRedirecting(false);
+    });
   };
 
-  useEffect(() => {
-    start();
-    // Redirect once on arrival; the button retries.
-  }, []);
+  const continueWithEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    const address = email.trim();
+    if (!/.+@.+\..+/.test(address)) {
+      setEmailError("Enter a valid work email.");
+      return;
+    }
+    setEmailError(null);
+    start({ loginHint: address });
+  };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-surface-base px-4">
-      <div className="max-w-sm w-full text-center space-y-4">
-        <AetherLogo size={32} className="justify-center" />
-        <p className="text-text-secondary text-sm">
-          {failed ? "Could not reach the sign-up service." : "Opening account creation…"}
-        </p>
-        <Button variant="primary" size="sm" className="w-full" onClick={start}>
-          Create your account
-        </Button>
-        <a href={appHref("/login")} className="block text-xs text-text-muted">
-          Already have an account? Sign in
-        </a>
-      </div>
-    </div>
+    <AuthPortalShell
+      brand={<a href="/" aria-label="Aether home" style={{ display: "inline-flex", color: "inherit" }}><AetherLogo size={26} /></a>}
+      headerAction={<AuthPortalHeaderLink href="/pricing">See plans</AuthPortalHeaderLink>}
+      title="Every relationship and every perspective"
+      lead={
+        <>
+          One clear view of every customer, AI agent, and result.
+          {plan && <><br /><span style={{ fontSize: 14 }}>Plan: {PLAN_LABELS[plan] ?? plan}{annual && plan !== "alpha" ? " (annual)" : ""}</span></>}
+        </>
+      }
+      footer={
+        <span>
+          Already have a workspace?{" "}
+          <AuthPortalTextButton onClick={() => void navigate("/login")}>Sign in</AuthPortalTextButton>
+        </span>
+      }
+    >
+      {primary.map(({ provider, label, connection }) => (
+        <AuthPortalProviderButton key={provider} aria-label={label} disabled={redirecting}
+          icon={<SocialProviderIcon provider={provider} />} onClick={() => start({ connection })}>
+          {label}
+        </AuthPortalProviderButton>
+      ))}
+      {compact.length > 0 && (
+        <AuthPortalCompactRow>
+          {compact.map(({ provider, label, short, connection }) => (
+            <AuthPortalCompactButton key={provider} aria-label={label} title={label} disabled={redirecting}
+              icon={<SocialProviderIcon provider={provider} />} onClick={() => start({ connection })}>
+              {short}
+            </AuthPortalCompactButton>
+          ))}
+        </AuthPortalCompactRow>
+      )}
+      {(primary.length > 0 || compact.length > 0) && <AuthPortalDivider />}
+      <form onSubmit={continueWithEmail} style={{ display: "flex", flexDirection: "column", gap: 12 }} noValidate>
+        <AuthPortalInput label="Work email" type="email" autoComplete="email" placeholder="Enter your work email"
+          value={email} onChange={(e) => setEmail(e.target.value)} />
+        {emailError && <AuthPortalError>{emailError}</AuthPortalError>}
+        {failed && <AuthPortalError>Could not reach the sign-up service.</AuthPortalError>}
+        <AuthPortalPrimaryButton disabled={redirecting}>
+          {redirecting ? "Continuing…" : "Continue with email"}
+        </AuthPortalPrimaryButton>
+      </form>
+      <AuthPortalNote>
+        By continuing you agree to the{" "}
+        <a href="/legal/terms" style={{ color: AUTH_PORTAL_LINK_COLOR }}>Terms</a> and{" "}
+        <a href="/legal/privacy" style={{ color: AUTH_PORTAL_LINK_COLOR }}>Privacy Policy</a>.
+      </AuthPortalNote>
+    </AuthPortalShell>
   );
 }
 

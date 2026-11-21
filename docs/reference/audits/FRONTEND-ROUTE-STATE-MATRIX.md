@@ -49,6 +49,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/activation` | workspace onboarding: goals, connect plan + connect pop-over, CSV import, per-SDK keys (publishable site keys for browsers), readiness-driven graph build | yes | A | A | A | A | I | `onboarding-flow.test.tsx` (loading, unavailable status and plan, empty plan, populated steps) |
 | `/activation/guided` | detailed guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
 | `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by the workspace onboarding flow) | yes | I | A | A | A | I | `onboarding-flow.test.tsx` (target page) |
+| `/signin` | compatibility alias → `/login` (query-preserving redirect; the public website's Sign in link) | no | n/a | n/a | A | n/a | n/a | `login-page.test.tsx` (target page) |
 | `/home` | workspace Home: 24h analytics summary, readiness checks, tenant integrations, campaigns, activation attention items | yes | I | A | A | A | I | `home-page.test.tsx` (new workspace, unavailable reads, populated) |
 | `/identity/activation` | tenant-scoped identity activation status, SDK heartbeat, restatement and review counts | yes | A | A | A | A | A | `identity-activation-dashboard.test.tsx` (no historical data/heartbeat, failure, loading, capability gate, populated), `identity-continuity-routes.test.tsx` (mounted route) |
 | `/identity/reviews` | tenant-scoped conflict and late-binding review queue | yes | A | A | A | A | A | `identity-review-queue.test.tsx` (successful empty, failure, loading, capability gate, populated/recovery), `identity-continuity-routes.test.tsx` (mounted route) |
@@ -94,6 +95,8 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/stablecoins/:assetId` | asset deployment and observations | no | I | A | A | — | I | parameterized route-state family |
 | `/derivatives` | accounts, positions, reconciliation | no | I | A | A | — | I | parameterized route-state family |
 | `/derivatives/accounts/:accountId` | account orders, fills, positions | no | I | A | A | — | I | parameterized route-state family |
+| `/derivatives/propagation` | saved propagation runs, run, recompute | no | I | A | A | — | I | parameterized route-state family |
+| `/derivatives/oauth/return` | venue OAuth completion (single-use state) | no | I | n/a | I | I | I | redirect landing; not data-listing |
 | `/agent-access` | agent access grants and audit | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/interoperability` | messages, paths, providers | no | I | A | A | — | I | parameterized route-state family |
 | `/interoperability/messages/:messageId` | lifecycle and delivery attempts | no | I | A | A | — | I | parameterized route-state family |
@@ -196,15 +199,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 167 data-bearing route patterns above: 78 Aether and
+The denominator is the 170 data-bearing route patterns above: 81 Aether and
 89 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 37 / 167 (22.2%) | tracked for every route |
-| Empty-state assertions | 152 / 167 (91.0%) | at least 90% overall |
-| Error/unavailable assertions | 133 / 167 (79.6%) | 100% of critical routes |
-| Populated-state assertions | 67 / 167 (40.1%) | tracked for every route |
+| Explicit loading-state assertions | 37 / 170 (21.8%) | tracked for every route |
+| Empty-state assertions | 153 / 170 (90.0%) | at least 90% overall |
+| Error/unavailable assertions | 135 / 170 (79.4%) | 100% of critical routes |
+| Populated-state assertions | 67 / 170 (39.4%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

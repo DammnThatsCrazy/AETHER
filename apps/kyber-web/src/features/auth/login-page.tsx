@@ -1,14 +1,18 @@
 /**
  * Login surface.
  *
- * There is no form and no client-side crypto here. Signing in is a single
- * navigation to `GET /v1/kyber/auth/login`; the backend builds the OIDC
- * request (state, nonce, PKCE verifier all server-side), redirects to Google,
- * receives the callback, and sets the `__Host-kyber_session` cookie. The
- * browser never sees a code_verifier or a token.
+ * Same look as the public website's sign-in (shared auth portal primitives),
+ * but the flow is Kyber's own: there is no form and no client-side crypto.
+ * Signing in is a single navigation to `GET /v1/kyber/auth/login`; the backend
+ * builds the OIDC request (state, nonce, PKCE verifier all server-side),
+ * redirects to the workforce identity provider, receives the callback, and
+ * sets the `__Host-kyber_session` cookie. The browser never sees a
+ * code_verifier or a token.
  */
 
-import { Button } from '@aether/ui';
+import {
+  AuthPortalError, AuthPortalNote, AuthPortalPrimaryButton, AuthPortalProviderButton, AuthPortalShell,
+} from '@aether/ui';
 import { useAuth } from './auth-context';
 
 interface LoginPageProps {
@@ -20,41 +24,27 @@ export function LoginPage({ returnTo }: LoginPageProps = {}) {
   const { login, error, status, refresh } = useAuth();
 
   return (
-    <div className="flex h-screen items-center justify-center bg-surface-base">
-      <div className="w-full max-w-md space-y-6 p-8">
-        <div className="text-center">
-          <div className="font-mono text-3xl font-bold text-text-primary mb-1">KYBER</div>
-          <div className="text-text-secondary text-sm">Aether Command Surface</div>
+    <AuthPortalShell
+      brand={<span style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.4px' }}>Kyber</span>}
+      title="Operator sign-in"
+      lead="The Aether command surface. Sign in with your Olympus Labs workforce account."
+    >
+      {status === 'error' && error !== null && (
+        <div data-testid="login-error" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <AuthPortalError>Could not reach the Kyber control plane.</AuthPortalError>
+          <AuthPortalNote><span style={{ fontFamily: 'monospace' }}>{error}</span></AuthPortalNote>
+          <AuthPortalProviderButton onClick={() => void refresh()}>Retry</AuthPortalProviderButton>
         </div>
+      )}
 
-        {status === 'error' && error !== null && (
-          <div
-            role="alert"
-            className="kyber-card border-danger/50 text-danger text-sm space-y-2"
-            data-testid="login-error"
-          >
-            <p>Could not reach the Kyber control plane.</p>
-            <p className="font-mono text-xs opacity-80">{error}</p>
-            <Button variant="secondary" size="sm" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          </div>
-        )}
+      <AuthPortalPrimaryButton type="button" onClick={() => login(returnTo)} data-testid="login-button">
+        Sign in with SSO
+      </AuthPortalPrimaryButton>
 
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={() => login(returnTo)}
-          data-testid="login-button"
-        >
-          Sign in with SSO
-        </Button>
-
-        <p className="text-center text-[11px] leading-relaxed text-text-muted">
-          Your session is issued and held by the Kyber backend. This browser
-          stores no access token and derives no permissions on its own.
-        </p>
-      </div>
-    </div>
+      <AuthPortalNote>
+        Your session is issued and held by the Kyber backend. This browser stores no access token and derives
+        no permissions on its own.
+      </AuthPortalNote>
+    </AuthPortalShell>
   );
 }

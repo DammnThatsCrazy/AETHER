@@ -241,7 +241,16 @@ jobs:
       AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
-      TF_VAR_kyber_google_hosted_domain: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+      TF_VAR_kyber_google_hosted_domain: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabsml.com' }}
+      TF_VAR_kyber_bootstrap_founder_email: ${{ vars.KYBER_BOOTSTRAP_FOUNDER_EMAIL || '' }}
+      # Auth0 social sign-in for tenants and end users; a provider is created
+      # only when its credentials are set.
+      TF_VAR_auth0_google_client_id: ${{ secrets.TF_AUTH0_GOOGLE_CLIENT_ID }}
+      TF_VAR_auth0_google_client_secret: ${{ secrets.TF_AUTH0_GOOGLE_CLIENT_SECRET }}
+      TF_VAR_auth0_apple_client_id: ${{ secrets.TF_AUTH0_APPLE_CLIENT_ID }}
+      TF_VAR_auth0_apple_client_secret: ${{ secrets.TF_AUTH0_APPLE_CLIENT_SECRET }}
+      TF_VAR_auth0_apple_team_id: ${{ secrets.TF_AUTH0_APPLE_TEAM_ID }}
+      TF_VAR_auth0_apple_key_id: ${{ secrets.TF_AUTH0_APPLE_KEY_ID }}
       TF_VAR_enable_access_mcp_repository: ${{ inputs.enable_access_mcp_repository }}
       TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
       TF_VAR_enable_access_mcp_oauth: ${{ inputs.enable_access_mcp_oauth }}
@@ -375,7 +384,7 @@ jobs:
         env:
           TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabsml.com' }}
           KYBER_GOOGLE_CLIENT_ID: ${{ vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID }}
         run: |
           set -euo pipefail

@@ -13,6 +13,8 @@ interface ImportMetaEnv {
   readonly VITE_AUTH0_REDIRECT_URI: string;
   readonly VITE_AUTH0_LOGOUT_URI: string;
   readonly VITE_AUTH0_SOCIAL_CONNECTIONS: string;
+  readonly VITE_AUTH0_ENTERPRISE_CONNECTIONS: string;
+  readonly VITE_AUTH0_PASSWORDLESS_CONNECTION: string;
   readonly VITE_PAYMENT_CANONICAL_REPAIR_ENABLED: string;
   [key: string]: string | undefined;
 }

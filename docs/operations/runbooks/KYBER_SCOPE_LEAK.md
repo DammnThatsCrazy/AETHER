@@ -11,7 +11,7 @@ estimated_read_minutes: 7
 toc_depth: 2
 source_files: [services/api/governance/kyber/access/scopes.py, services/api/governance/kyber/access/dependencies.py, services/api/governance/security/policy_engine.py]
 source_hashes:
-  "services/api/governance/kyber/access/dependencies.py": "sha256:f986bb81414a354fa8d53b033fd4cb133fc1866c61a0665cfbf5790a08bbda9a"
+  "services/api/governance/kyber/access/dependencies.py": "sha256:b7aa22543bec920d8fb84a8b993f54af1c1020b9278e6728977650a6fcea51ed"
   "services/api/governance/kyber/access/scopes.py": "sha256:851875a8d4e61cc8fb770ce57edcad14df39f74dbf985f8bb31bb96de313c9f5"
   "services/api/governance/security/policy_engine.py": "sha256:7e99aaf425a75d1698e7c6e4824dffb797d1810c4ec55fb3cdb63ce5d0182d51"
 ---

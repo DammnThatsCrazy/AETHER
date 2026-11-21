@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/providers/tiktok/": "sha256:97db9e114887181397ef7e9e1cf1059fee2ed4f686108d12ee0a16db1cbece83"
   "services/api/connectors/providers/walmart/": "sha256:09426499055d250d2ceea2a5ed8053dac7d8b68b5445bcfae1b8b2837d3879ed"
   "services/api/connectors/providers/woocommerce/": "sha256:79331a89953129dc9ee4f54f5f6c2cc41f8f75788924831f26ac12930821fd6f"
-  "services/api/shared/integration_contracts/catalog.py": "sha256:66a6fcc0d34d1b41ecc13b91b98cc8a052e4e0512896c9ac13ec2fb8e0ce5ccd"
+  "services/api/shared/integration_contracts/catalog.py": "sha256:f07531dd715a96608d7d6f71949e8625f2554bb9e8e31417ab8e1a4787d7c904"
   "services/api/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---
 

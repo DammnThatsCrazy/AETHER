@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:281e0a05c4a8440d3bb2da84c0cf1ab836fb40b4bf94efc9ef108aeb4e3bb24f"
+  "CHANGELOG.md": "sha256:ef2e7d1f302be78e09473c74c6c01d5515324ee6f3e8f659d88e3f52615e305e"
 ---
 # Changelog
 
@@ -20,7 +20,8 @@ source_hashes:
 
 ### Added
 
-- x402 settlement observer: `POST /v1/x402/capture` now verifies a reported payment on-chain when the report carries a proof, and returns `settlement.state` (`settled` / `failed` / `pending` / `not_observable`). The observer is the only authoritative x402 producer; a pending verdict records nothing terminal and re-reporting re-checks the chain.
+- `markets_trading` ("Markets & Trading") customer experience group for tenant-connectable derivatives and prediction-market venue accounts. The integrations catalog and the tenant readiness view now list only tenant-connectable capabilities (`catalog.tenant_connectable`); Olympus reference sources such as venue market data no longer appear there.
+- x402 settlement observer: `POST /v1/x402/capture` now verifies a reported payment on-chain when the report carries a proof, and returns `settlement.state` (`settled` / `failed` / `pending` / `not_observable` / `conflicting`). The observer is the only authoritative x402 producer; a pending verdict records nothing terminal and re-reporting re-checks the chain.
 - Cross-device journey continuation: a redeemed journey handoff now makes one journey span both devices (bounded, tenant-scoped walk over redeemed handoffs; the root device owns it). Redemption queues the durable `journey.handoff_continuation` rebuild. No identity is merged.
 - `JOURNEY_ACTIVITY_REBUILD_ENABLED`: newly emitted canonical activity recompiles its journey (debounced per identity), so late events reach the journey. On in staging, off in production.
 - Apple Ads attribution: `POST /v1/attribution/apple-ads/resolve` (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`) verifies the AdServices token with Apple and records `ios_apple_ads_attribution` / `platform_verified` evidence server-side. The iOS SDK adds `resolveAppleAdsAttribution`, also exposed through the React Native bridge.
@@ -58,6 +59,18 @@ source_hashes:
 
 ### Fixed
 
+- x402 settlement observer: a report whose terms differ from an already verified receipt for the same transaction is now `conflicting` and records nothing; settled events carry the verified receipt's terms, never the report's.
+- Propagation no longer uses stored venue fills whose data-rights grant has since been revoked (or replaced by re-linking); they are excluded with `revoked_grant_fills_excluded`, and an unreadable grant authority excludes them with `fill_grant_authority_unavailable`.
+- An unchanged propagation recompute leaves the saved run intact instead of overwriting it with a self-superseding record.
+- dYdX default-subaccount fills attribute to their linked address in propagation.
+- Bybit HTTP-200 application errors (`retCode`) are failed reads (`auth_error`, `rate_limited`, `client_error`) instead of healthy empty pages, so a rejected key is never marked verified.
+- Dated futures with different expiries are separate registry instruments (`dated_future:<venue>:<market>`).
+- The generated TypeScript catalog mirror (`packages/shared/connector-taxonomy.ts`) now includes the derivatives venue group (`DERIVATIVES_VENUE_FAMILIES`) and the `markets_trading` experience bucket; it had skipped the 16 venue capabilities.
+- An unchanged propagation recompute now refreshes the saved run's provenance (`grant_refs`, `population_digest`) in place when it moved, so `linked_population_changed` clears without a self-superseding record.
+- Kyber Google step-up requests the `auth_time` claim explicitly (`claims` parameter, `max_age=0`) and no longer sends the undocumented `prompt=login`.
+- The propagation page's default window is formatted in the browser's local time, so the submitted window is no longer shifted by the UTC offset.
+- The propagation page keeps the server's `stale` / `stale_reasons` after a recompute instead of always showing the run as current.
+- Kalshi and Coinbase Financial Markets key links take the PEM private key in a multiline field, so pasted keys keep their line breaks.
 - SDK manifest signatures now work end to end. The backend signs each delivered manifest with ES256 (ECDSA P-256) over a canonical JSON form, derived from `SDK_CONFIG_SECRET` so clients only need a public key; web, iOS and Android verify it with `manifestPublicKey` (print it with `scripts/sdk_manifest_public_key.py`). Previously the backend signed one payload with a server secret while the web and native clients verified two different, incompatible payloads with a client-held HMAC key, so no client could verify a real manifest. Specification and shared test vectors: `docs/reference/sdks/manifest-signing.md`, `tests/fixtures/sdk/manifest-signing-vectors.json`.
 - The iOS and Android SDKs read the remote manifest from the top level of the response instead of the `data` envelope the backend returns, so they never applied one. They now unwrap the envelope.
 - The web SDK no longer skips manifest verification when WebCrypto is unavailable; with a public key configured it now fails closed.

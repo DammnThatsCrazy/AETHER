@@ -187,6 +187,96 @@ async def kyber_login(
     return RedirectResponse(url=url, status_code=307)
 
 
+#: A re-authentication counts only if Google reports a sign-in at most this
+#: many seconds before the step-up began (clock skew allowance).
+STEP_UP_AUTH_TIME_SKEW_SECONDS = 120
+
+
+@router.get("/auth/step-up")
+async def kyber_step_up(
+    request: Request,
+    capability: Optional[str] = Query(default=None),
+    next_path: Optional[str] = Query(default=None, alias="next"),
+    context: Any = Depends(_require(SELF_CAPABILITY)),
+) -> RedirectResponse:
+    """Elevate the current session by signing in with Google again.
+
+    Google is asked to re-prompt (``prompt=login``, ``max_age=0``), so the
+    operator re-enters the password and passes Workspace 2-Step Verification.
+    The callback grants a short step-up only if the re-authenticated Google
+    subject is this session's and the sign-in time is fresh. No device needed.
+    """
+    if next_path is not None and _safe_next_path(next_path) is None:
+        raise BadRequestError("next must be a same-origin path")
+    session = _ctx_get(context, "session")
+    session_id = getattr(session, "session_id", None)
+    if not session_id:
+        raise UnauthorizedError("a live Kyber session is required")
+    client = get_oidc_client()
+    redirect_uri = _callback_uri(request)
+    transaction = oidc_transaction_store.start(
+        redirect_uri=redirect_uri,
+        next_path=next_path,
+        client_ip=_client_ip(request),
+        purpose="step_up",
+        session_id=session_id,
+        capability_id=capability,
+    )
+    try:
+        url = client.build_authorization_url(
+            state=transaction.state,
+            nonce=transaction.nonce,
+            code_challenge=transaction.code_challenge,
+            redirect_uri=redirect_uri,
+            reauthenticate=True,
+        )
+    except OidcError as exc:
+        raise BadRequestError(f"Kyber step-up is not configured: {exc.reason}") from exc
+    metrics.increment("kyber_step_up_started_total")
+    return RedirectResponse(url=url, status_code=307)
+
+
+async def _complete_step_up(request: Request, transaction: Any, identity: Any) -> Response:
+    from governance.kyber.sessions.service import session_service
+    from governance.kyber.sessions.step_up import step_up_service
+
+    client_ip = _client_ip(request)
+    user_agent = _user_agent(request)
+    auth_time = identity.raw_claims.get("auth_time") if identity.raw_claims else None
+    try:
+        auth_epoch = float(auth_time)
+    except (TypeError, ValueError):
+        auth_epoch = None
+    if auth_epoch is None or auth_epoch < transaction.created_at - STEP_UP_AUTH_TIME_SKEW_SECONDS:
+        await _deny_login("step_up_not_fresh", client_ip=client_ip, user_agent=user_agent,
+                          google_subject=identity.google_subject, email=identity.email)
+        raise UnauthorizedError("Google did not report a fresh sign-in")
+    session = await session_service.get(transaction.session_id)
+    if session is None:
+        raise UnauthorizedError("the Kyber session ended before step-up completed")
+    grant, raw_token = await step_up_service.grant_reauthenticated(
+        session_id=session.session_id,
+        operator_id=session.operator_id,
+        google_subject=identity.google_subject,
+        capability_id=transaction.capability_id,
+    )
+    await record_authentication_event(
+        event_type="step_up_granted",
+        operator_id=session.operator_id,
+        google_subject=identity.google_subject,
+        email=identity.email,
+        client_ip=client_ip,
+        user_agent=user_agent,
+        metadata={"method": "google_reauth", "grant_id": grant.grant_id},
+    )
+    response = RedirectResponse(url=_callback_landing_url(transaction.next_path), status_code=303)
+    set_session_cookie(response, raw_token)
+    csrf_token = await session_service.issue_csrf_token(session.session_id)
+    if csrf_token:
+        set_csrf_cookie(response, csrf_token)
+    return response
+
+
 @router.get("/auth/callback")
 async def kyber_callback(request: Request, code: str, state: str) -> Response:
     """Complete login, set opaque cookies, and return to the Kyber console.
@@ -217,7 +307,22 @@ async def kyber_callback(request: Request, code: str, state: str) -> Response:
         await _deny_login(exc.reason, client_ip=client_ip, user_agent=user_agent)
         raise UnauthorizedError("Google authentication failed") from exc
 
+    if getattr(transaction, "purpose", "login") == "step_up":
+        return await _complete_step_up(request, transaction, identity)
+
     principal = await principal_service.get_by_google_subject(identity.google_subject)
+    if principal is None and await founder_bootstrap_service.first_sign_in_eligible(identity.email):
+        # Founder on first sign-in: the very first Google sign-in by the
+        # configured founder, into an empty workforce, creates the founder
+        # principal. The durable marker closes this path for good.
+        principal = await founder_bootstrap_service.bootstrap(
+            google_subject=identity.google_subject,
+            email=identity.email,
+            display_name=identity.display_name,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            require_gate=False,
+        )
     if principal is None:
         # An uninvited Workspace account is denied here, not admitted with an
         # empty role set: Kyber is invite-only in the strong sense.

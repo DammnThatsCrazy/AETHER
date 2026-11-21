@@ -15,6 +15,10 @@ chain and records what it found:
   is recorded; reporting the same payment again re-checks the chain.
 * ``not_observable`` — no proof in the report, or an asset/chain Aether cannot
   verify. No settlement claim is made either way.
+* ``conflicting`` — the transaction already has a verified receipt, but this
+  report's terms (payer, recipient, amount, asset, chain) differ from what was
+  verified. Nothing is recorded or emitted for the conflicting report; the
+  earlier verified settlement stands.
 
 The report itself is a source claim; only the chain decides settlement. Agent
 references in the report stay as reported (``agent_ref_source``) and are not
@@ -25,6 +29,7 @@ resolved here. The observation identity is deterministic per
 from __future__ import annotations
 
 import hashlib
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from shared.events.events import Event, EventProducer, Topic
@@ -47,6 +52,7 @@ SETTLED = "settled"
 FAILED = "failed"
 PENDING = "pending"
 NOT_OBSERVABLE = "not_observable"
+CONFLICTING = "conflicting"
 
 
 def observation_id_for(tenant_id: str, chain: str, tx_hash: str) -> str:
@@ -112,7 +118,15 @@ async def observe_settlement(
     receipt = await verifier.verify(tenant_id, observed, tx_hash, prefer_facilitator=False)
     verdict = receipt.verification_verdict or ("verified" if receipt.verified else "unknown")
 
-    if receipt.verified:
+    # Every report of one transaction shares an observation id, and the
+    # verifier keeps (and returns) an earlier verified receipt when a later
+    # re-check fails. A verified receipt therefore only settles this report if
+    # it verified exactly these terms; otherwise the report conflicts with what
+    # the chain already established and nothing is recorded for it.
+    if receipt.verified and not _receipt_matches(receipt, observed):
+        state = CONFLICTING
+        verdict = "conflicting_report"
+    elif receipt.verified:
         state = SETTLED
     elif is_terminal_verdict(verdict):
         state = FAILED
@@ -141,10 +155,12 @@ async def observe_settlement(
                 "verdict": verdict,
                 "tx_hash": tx_hash,
                 "chain": chain,
-                "asset_symbol": tx.terms.token,
-                "amount": str(tx.terms.amount),
-                "payer": proof.payer,
-                "recipient": tx.terms.recipient,
+                # Settled facts carry the verified receipt's terms, never the
+                # report's; a failed verdict describes the terms it rejected.
+                "asset_symbol": receipt.asset_symbol if state == SETTLED else tx.terms.token,
+                "amount": str(receipt.amount_usd if state == SETTLED else tx.terms.amount),
+                "payer": receipt.payer if state == SETTLED else proof.payer,
+                "recipient": receipt.recipient if state == SETTLED else tx.terms.recipient,
                 "verified_at": receipt.verified_at,
                 "agent_id": tx.payer_agent_id,
                 "agent_ref_source": "capture_reported",
@@ -153,6 +169,29 @@ async def observe_settlement(
             },
         )
     return result
+
+
+def _receipt_matches(receipt: Any, observed: PaymentAuthorization) -> bool:
+    """True when a verified receipt verified exactly the reported terms."""
+    def _norm(value: Any) -> str:
+        return str(value or "").strip().lower()
+
+    def _addr(value: Any) -> str:
+        # EVM hex addresses are case-insensitive; base58 (Solana) is not.
+        text = str(value or "").strip()
+        return text.lower() if text.lower().startswith("0x") else text
+
+    try:
+        same_amount = Decimal(str(receipt.amount_usd)) == Decimal(str(observed.amount_usd))
+    except (InvalidOperation, ValueError):
+        return False
+    return (
+        same_amount
+        and _addr(receipt.payer) == _addr(observed.payer)
+        and _addr(receipt.recipient) == _addr(observed.recipient)
+        and _norm(receipt.asset_symbol) == _norm(observed.asset_symbol)
+        and _norm(receipt.chain) == _norm(observed.chain)
+    )
 
 
 async def _emit(
@@ -167,6 +206,7 @@ async def _emit(
 
 
 __all__ = [
+    "CONFLICTING",
     "FAILED",
     "NOT_OBSERVABLE",
     "OBSERVER_SOURCE",

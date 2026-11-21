@@ -22,9 +22,20 @@ from urllib.parse import urlencode
 
 from connectors.integrations.connectors.base import ImplementationStatus
 from value.derivatives.adapters.venue_base import StreamPlan, VenueDerivativesAdapter
+from value.derivatives.connectors.transport import (
+    PROVIDER_HEALTH_AUTH_ERROR,
+    PROVIDER_HEALTH_BAD_RESPONSE,
+    PROVIDER_HEALTH_CLIENT_ERROR,
+    PROVIDER_HEALTH_RATE_LIMITED,
+    ProviderRequestError,
+)
 
 BYBIT_BASE_URL = "https://api.bybit.com"
 _PAGE_LIMIT = 100
+# Bybit v5 retCodes for a rejected credential (invalid/expired key, bad
+# signature, missing permission) and for rate limiting.
+_BYBIT_AUTH_CODES = frozenset({10003, 10004, 10005, 10007, 33004})
+_BYBIT_RATE_LIMIT_CODES = frozenset({10006, 10018})
 _RECV_WINDOW = "5000"
 
 
@@ -130,8 +141,23 @@ class BybitAdapter(VenueDerivativesAdapter):
 
     @staticmethod
     def _extract(payload: Any) -> tuple[list[dict], Optional[str]]:
-        if not isinstance(payload, dict) or int(payload.get("retCode", 0) or 0) != 0:
-            return [], None
+        # Bybit reports application errors (rejected key, missing permission,
+        # rate limit) inside an HTTP 200 body. They are failed reads, never an
+        # empty page: an empty page would mark a rejected credential healthy.
+        if not isinstance(payload, dict):
+            raise ProviderRequestError(PROVIDER_HEALTH_BAD_RESPONSE, "bybit: non-object response")
+        try:
+            code = int(payload.get("retCode", 0) or 0)
+        except (TypeError, ValueError):
+            raise ProviderRequestError(PROVIDER_HEALTH_BAD_RESPONSE, "bybit: unreadable retCode")
+        if code != 0:
+            if code in _BYBIT_AUTH_CODES:
+                classification = PROVIDER_HEALTH_AUTH_ERROR
+            elif code in _BYBIT_RATE_LIMIT_CODES:
+                classification = PROVIDER_HEALTH_RATE_LIMITED
+            else:
+                classification = PROVIDER_HEALTH_CLIENT_ERROR
+            raise ProviderRequestError(classification, f"bybit retCode {code}")
         result = payload.get("result") or {}
         cursor = result.get("nextPageCursor") or None
         return list(result.get("list") or []), (str(cursor) if cursor else None)

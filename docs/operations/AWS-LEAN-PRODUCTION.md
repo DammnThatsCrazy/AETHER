@@ -34,17 +34,17 @@ reviewed_source_commits:
   - {'commit': 'd8f94809', 'reason': 'Pilot and remote CI staging plans now carry the declared MCP state; MCP docs updated to name every planner, other docs describe the workflows generally and are unchanged.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:92f140fd0db133d881197c15f370cb89f97f2eee9a42d2b8b9574fafc1c055fc"
-  ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
+  ".github/workflows/terraform-promote.yml": "sha256:eed14e52df12f98aded0087d09c9d84e3ac0a795b3869d1255f4a6f787541618"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:a06f7a35966acf7aa9447d19b0d3ca7d39ef45db3ab28922ba8f4c074ab7fa8b"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:7d1aa3e9fd042bbb27d8173ea690f41747eee0ea91c5ddcab6c85a5edd688ea6"
-  "infra/aws/terraform/main.tf": "sha256:9c3b2da81aa622e042ca64d8a79f8533dd5dd84e5e0264b3ce91c09e145b54f6"
+  "infra/aws/terraform/main.tf": "sha256:3da1d595d699a574c0cde96ad026d9cf41bf0716543e77ad7ac3359087ab341e"
   "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
   "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
   "infra/aws/terraform/profiles/production.tfvars": "sha256:85f0417ff14534587c2210d4164adc3e9e775170f01495f62c2884c6f308c36c"
   "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:47ddbea6ac4d825684acba8a0bdc35ea038497be272bb0555f4308496657b0fe"
-  "infra/aws/terraform/variables.tf": "sha256:31ca49080dae2836f264e19fa6dc62597eecf4b115ca20fe58b21dee32f5f571"
+  "infra/aws/terraform/variables.tf": "sha256:527efae165b4514ca9d5cd922e89d40ec1d00f099a47b17cb553d189af0d7de5"
 ---
 
 # AWS Lean Production

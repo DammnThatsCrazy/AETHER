@@ -8,7 +8,8 @@ test.describe('KYBER Smoke Tests', () => {
 
   test('shows the unauthenticated sign-in surface', async ({ page }) => {
     await page.goto('/mission');
-    await expect(page.getByText('KYBER', { exact: true })).toBeVisible();
+    await expect(page.getByText('Kyber', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Operator sign-in' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Main navigation' })).not.toBeVisible();
   });

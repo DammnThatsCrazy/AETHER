@@ -215,7 +215,7 @@ jobs:
         env:
           TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabsml.com' }}
           KYBER_GOOGLE_CLIENT_ID: ${{ vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID }}
         run: |
           set -euo pipefail
@@ -371,7 +371,7 @@ jobs:
           AETHER_API_URL: ${{ vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabsml.com' }}
         run: |
           set -euo pipefail
           mkdir -p docs/reference/reports/release-readiness

@@ -58,17 +58,18 @@ reviewed_source_commits:
   - {'commit': 'ce7513cd', 'reason': 'Reviewed ce7513cd: the staging wake-plan job installs PyYAML before the Access Kit MCP helper, and Profile360 economic freshness advances at the computed-results processing boundary (including unchanged re-materializations). No behavior described here changes; this document needs no other change.'}
   - {'commit': '61cd0dd6', 'reason': 'Reviewed 61cd0dd6: staging customer_services.access-mcp.repository is now true (the staging aether-access-mcp ECR repository is provisioned on the next reviewed apply; the service stays disabled), and staging plan tests pass the declared flag. Only the staging enablement status changes; cost impact is one ECR repository.'}
   - {'commit': '5797361b', 'reason': 'Two staging plan test runs now pass the declared MCP repository flag; no documented behavior changes.'}
+  - {'commit': '2cc82835', 'reason': 'The legacy staging Aurora cluster now pins its live 16.13 release and ignores engine_version, matching the managed cluster rule these docs already describe.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
-  ".github/workflows/deploy.yml": "sha256:5438ebb42b66a0d798a3488b24c463e17725337b4c19e8ec2ca522c563217be7"
+  ".github/workflows/deploy.yml": "sha256:79de8fa1460c67f7cfff1ebc9a1d23e1f1afc341f7a71af64bd83cb606610bf4"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:c0e9550d8465d09c1a82a81f68e43e6d7b5109685a81dbbc8777a03c630a9b24"
+  ".github/workflows/staging-lifecycle.yml": "sha256:7863ef2257e0675bb0841d3efa4b037a6fa44914ed180a7746fc480970e715d5"
   ".github/workflows/staging-state-reconcile.yml": "sha256:3da807f71996e7b397bc4a593fafd27d3818c3d4f0d7a2fa37b5619674209d48"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
+  ".github/workflows/terraform-promote.yml": "sha256:eed14e52df12f98aded0087d09c9d84e3ac0a795b3869d1255f4a6f787541618"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -85,7 +86,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:cf59fcd3e186f1a48843004f4e3d7b9fd01e00d1645a3d41a8837ec6d2c20e4c"
+  "infra/aws/terraform/": "sha256:bbd3497fcb5acc899b25460ad39d51b4b4f10b11336ad2fbab4435a0b9947092"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -96,7 +97,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:4b3f1c7c917710b145b834163c3136d0915279f57d58315cd4ba9fa201a0566b"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
@@ -758,7 +759,9 @@ marketing app's URLs to their new pages. Its status page reads the backend's 90-
 logout and web-origin lists, the API's app URL and the Stripe checkout return
 URLs all use `https://aether.<domain>/app`, and the site build carries the
 product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings (`VITE_AUTH0_SOCIAL_CONNECTIONS`
-only when the Auth0 social connections are provisioned). Other environments keep the
+only when the Auth0 social connections are provisioned; `VITE_AUTH0_ENTERPRISE_CONNECTIONS`
+and `VITE_AUTH0_PASSWORDLESS_CONNECTION` only when company SSO connections or the
+passwordless email connection exist in the Auth0 tenant). Other environments keep the
 prerendered `apps/marketing-aether` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal
@@ -776,7 +779,9 @@ can never make a reviewed apply attempt a minor-version downgrade; the
 major-family parameter group remains `aurora-postgresql16`. Because the ignore
 covers every version change, a major upgrade must remove `engine_version` from
 `ignore_changes` for that reviewed apply (and move the parameter-group family),
-then restore it.
+then restore it. The imported legacy `aether-staging` cluster follows the same
+rule (pinned at its live 16.13, `engine_version` ignored), so a staging plan
+never proposes moving it back after an automatic minor upgrade.
 
 ### Production lead intake
 
@@ -888,6 +893,17 @@ the non-secret `aether_cli_auth0_client_id` root output. A CLI installation
 also needs the Auth0 domain and API audience. Auth0 provisioning alone does not
 enable customer login: the API must advertise and issue revocable human
 sessions, and the user must have an existing tenant membership or invitation.
+
+Social connections are created per provider (`social_providers`). The root
+module enables a provider when its credentials are provisioned: Google from the
+`TF_AUTH0_GOOGLE_CLIENT_ID` / `TF_AUTH0_GOOGLE_CLIENT_SECRET` repository secrets
+(a Google OAuth client whose redirect URI is `https://<auth0-domain>/login/callback`),
+Apple from `TF_AUTH0_APPLE_CLIENT_ID` / `_CLIENT_SECRET` / `_TEAM_ID` /
+`_KEY_ID` (a Services ID and its key). In the pilot lane only provisioned
+providers are created; with `enable_social_connections=true` every provider is.
+The module's `aether_social_connections` output feeds
+`VITE_AUTH0_SOCIAL_CONNECTIONS`, so the sign-in and sign-up screens show
+exactly the buttons that work.
 This CLI client is customer identity configuration; it is not the operator
 `tfmcp` service or its privileged runtime role.
 
@@ -1297,7 +1313,12 @@ accounts when their names would otherwise collide.
    `aether/kyber-google-client-secret`. The Google Web OAuth client must allow
    the backend callback `https://<api-domain>/v1/kyber/auth/callback`; the
    browser's Kyber origin is a separate `TF_KYBER_APP_URL` input used for
-   WebAuthn. Populate those values through the secure bootstrap, then let the
+   WebAuthn. Kyber accepts only the `olympuslabsml.com` Workspace (`hd`
+   claim; override with the `KYBER_GOOGLE_HOSTED_DOMAIN` variable), and
+   Workspace 2-Step Verification should be enforced in the Google admin
+   console, because sign-in is identity-approved (no device approval). Set the
+   `KYBER_BOOTSTRAP_FOUNDER_EMAIL` repository variable: that address's first
+   Google sign-in into an empty workforce becomes the founder operator. Populate those values through the secure bootstrap, then let the
    reviewed state-reconciliation workflow import only their metadata. Do not
    put any secret value in Terraform variables, state, plans, or logs.
    The same bootstrap creates `aether/identity-verification-token-key` and

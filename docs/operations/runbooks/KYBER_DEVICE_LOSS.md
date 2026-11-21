@@ -13,14 +13,21 @@ source_files: [services/api/governance/kyber/devices/approvals.py, services/api/
 source_hashes:
   "services/api/governance/kyber/devices/approvals.py": "sha256:f2bebf7b5f670e2686762259ddd9b8d3bad998aeabfadbed526a6e95f80a26ba"
   "services/api/governance/kyber/devices/device_proof.py": "sha256:d3c19cc8a91290aeb341bb27544c20327211ee93c631275bf7da7c1801231bb4"
-  "services/api/governance/kyber/sessions/service.py": "sha256:1cdfc824330b1b7dfab7f78e6b57ecc42d3969077006b5415f3b6dd01ca6c64f"
+  "services/api/governance/kyber/sessions/service.py": "sha256:3b605a3f925c2b15b5fcfacca5cf34a37471fc55a3b3ec3f434e88ea66a60b33"
 ---
 
 # Runbook — Kyber Device Loss
 
 An operator's enrolled personal machine is lost, stolen, sold, wiped, or simply
-replaced. Kyber access is bound to that specific device, so the device record —
-not the person — is what gets revoked.
+replaced. Revoke that device record.
+
+Sign-in is identity-approved by default (`KYBER_DEVICE_TRUST_REQUIRED=false`):
+the Google Workspace identity, protected by Workspace 2-Step Verification, is
+what grants access, not the machine. So for a stolen machine with a signed-in
+browser, revoking the device is necessary but not enough. Also revoke the
+operator's sessions, and have the operator change their Google password and
+re-check 2-Step Verification. With device trust required, the device record
+alone is the control, as described below.
 
 ## Severity
 
@@ -30,9 +37,9 @@ not the person — is what gets revoked.
 | Device lost, read-only operator | P1 | Revoke device |
 | Device replaced or wiped deliberately | P3 | Revoke device, enroll the replacement |
 
-## Why revoking the device is sufficient
+## Why revoking the device is sufficient (device-bound mode)
 
-Three independent factors gate a Kyber session: a WebAuthn platform credential,
+With `KYBER_DEVICE_TRUST_REQUIRED=true`, three independent factors gate a Kyber session: a WebAuthn platform credential,
 a **browser-profile-bound device-proof key**, and a server-side device grant.
 Revoking the device record destroys the grant, so neither a synced passkey on
 another machine nor a copied cookie can re-establish authority. The proof key
@@ -64,8 +71,10 @@ is the control.**
    reversible and costs the operator an hour; leaving authority live while an
    attacker holds an unlocked machine does not have a reversible failure mode.
 
-5. **Enroll the replacement.** The operator authenticates through Google on the
-   new machine, enrolls a WebAuthn credential and a fresh device-proof key, and
+5. **Enroll the replacement.** In identity-approved mode the operator simply
+   signs in with Google on the new machine; any device it presents is
+   recorded. In device-bound mode the operator authenticates through Google on
+   the new machine, enrolls a WebAuthn credential and a fresh device-proof key, and
    waits for founder approval. There is no shortcut — a second machine always
    requires its own approval, which is the property that made revocation
    sufficient in the first place.

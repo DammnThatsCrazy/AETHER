@@ -635,12 +635,56 @@ variable "platform_operator_tenant_ids" {
 variable "kyber_google_hosted_domain" {
   type        = string
   description = "Google Workspace domain accepted by the Kyber workforce OIDC flow"
-  default     = "olympuslabs.ai"
+  default     = "olympuslabsml.com"
 
   validation {
     condition     = can(regex("^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}$", lower(trimspace(var.kyber_google_hosted_domain))))
-    error_message = "kyber_google_hosted_domain must be a concrete DNS domain such as olympuslabs.ai."
+    error_message = "kyber_google_hosted_domain must be a concrete DNS domain such as olympuslabsml.com."
   }
+}
+
+variable "kyber_bootstrap_founder_email" {
+  type        = string
+  description = "Google Workspace email of the Kyber founder. Its first Google sign-in into an empty workforce creates the founder principal (once; a durable marker closes the path). Empty disables founder-on-first-sign-in."
+  default     = ""
+}
+
+# Auth0 social sign-in credentials for tenants and end users (Google, Apple).
+# Supplied from CI secrets; a provider is enabled only when its credentials
+# are present, in every lane.
+variable "auth0_google_client_id" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "auth0_google_client_secret" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "auth0_apple_client_id" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "auth0_apple_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Sign in with Apple private key (.p8 content)"
+}
+
+variable "auth0_apple_team_id" {
+  type    = string
+  default = ""
+}
+
+variable "auth0_apple_key_id" {
+  type    = string
+  default = ""
 }
 
 variable "api_cors_origins" {

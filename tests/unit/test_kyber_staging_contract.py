@@ -25,7 +25,7 @@ def _set_valid_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TF_DOMAIN_NAME", "api.staging.olympuslabsml.com")
     monkeypatch.setenv("TF_KYBER_APP_URL", "https://kyber.staging.olympuslabsml.com")
     monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "staging-client.apps.googleusercontent.com")
-    monkeypatch.setenv("TF_KYBER_GOOGLE_HOSTED_DOMAIN", "olympuslabs.ai")
+    monkeypatch.setenv("TF_KYBER_GOOGLE_HOSTED_DOMAIN", "olympuslabsml.com")
 
 
 def test_contract_binds_google_callback_to_api_and_browser_to_kyber(monkeypatch, contract_module):
@@ -39,7 +39,7 @@ def test_contract_binds_google_callback_to_api_and_browser_to_kyber(monkeypatch,
         "https://api.staging.olympuslabsml.com/v1/kyber/auth/callback"
     )
     assert evidence["allowed_origins"] == ["https://kyber.staging.olympuslabsml.com"]
-    assert evidence["google_hosted_domain"] == "olympuslabs.ai"
+    assert evidence["google_hosted_domain"] == "olympuslabsml.com"
     assert evidence["secret_values_read"] is False
 
 

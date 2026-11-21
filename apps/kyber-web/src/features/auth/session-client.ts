@@ -49,6 +49,14 @@ export function buildLoginUrl(returnTo?: string): string {
   return `${base}${path}?next=${encodeURIComponent(safeReturn)}`;
 }
 
+/** Step-up by signing in with Google again (no enrolled device needed). */
+export function buildGoogleStepUpUrl(returnTo?: string): string {
+  const base = resolveControlPlaneBase();
+  const safeReturn = sanitiseReturnTo(returnTo);
+  const path = KYBER_AUTH_ENDPOINTS.googleStepUp;
+  return safeReturn === null ? `${base}${path}` : `${base}${path}?next=${encodeURIComponent(safeReturn)}`;
+}
+
 export function sanitiseReturnTo(returnTo: string | undefined): string | null {
   if (!returnTo) return null;
   // Only same-origin absolute paths. Reject '//evil.com' and any scheme.

@@ -16,6 +16,7 @@ from shared.integration_contracts.catalog import (
     CONNECTOR_MANIFESTS,
     DEFERRED_CREDIT_BUREAU_MANIFESTS,
     PAYMENT_RAIL_MANIFESTS,
+    tenant_connectable,
 )
 from shared.integration_contracts.experience import (
     EXPERIENCE_CATEGORIES,
@@ -34,7 +35,9 @@ _EXPERIENCE_VALUES = {c.value for c in ExperienceCategory}
 
 
 def _visible(manifests) -> list:
-    return [m for m in manifests if m.availability.environments.any_enabled()]
+    # Tenant-connectable only: Olympus reference sources (venue market data)
+    # and enabled-nowhere bureaus never appear in the tenant catalog.
+    return [m for m in manifests if tenant_connectable(m)]
 
 
 def test_visible_catalog_covers_each_connectable_group_exactly() -> None:

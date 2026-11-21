@@ -532,20 +532,28 @@ async def _evaluate(request: Any, spec: _AccessSpec, trace: dict[str, Any]) -> K
                 f"Directory record is stale ({stale_reason or 'unknown'})",
             )
 
-        # 4 ── Device.
-        if providers.devices is None:
-            raise _Denied("device_unapproved", "Kyber device service is unavailable")
-        device = await _resolve_device(request, session, providers)
-        usable, device_reason = await providers.devices.is_usable(
-            getattr(device, "device_id", None)
-        )
-        if not usable:
-            denial: DenialReason = (
-                "device_revoked" if "revok" in (device_reason or "").lower() else "device_unapproved"
+        # 4 ── Device. With device trust required, an approved device bound to
+        # the session is a gate. With it off (identity-approved Kyber: an
+        # invited Google identity with Workspace 2-Step Verification may sign
+        # in from any device), a device that presents itself is still resolved
+        # and recorded so operators can see and revoke it, but its absence
+        # never denies; a revoked device that presents itself still does.
+        if _device_trust_required():
+            if providers.devices is None:
+                raise _Denied("device_unapproved", "Kyber device service is unavailable")
+            device = await _resolve_device(request, session, providers)
+            usable, device_reason = await providers.devices.is_usable(
+                getattr(device, "device_id", None)
             )
-            raise _Denied(denial, f"Device is not usable ({device_reason or 'unknown'})")
-        touch = getattr(providers.devices, "touch", None)
-        if touch is not None:
+            if not usable:
+                denial: DenialReason = (
+                    "device_revoked" if "revok" in (device_reason or "").lower() else "device_unapproved"
+                )
+                raise _Denied(denial, f"Device is not usable ({device_reason or 'unknown'})")
+        else:
+            device = await _observe_device(request, session, providers)
+        touch = getattr(providers.devices, "touch", None) if providers.devices is not None else None
+        if touch is not None and device is not None:
             try:
                 await touch(device.device_id)
             except Exception as exc:  # pragma: no cover - telemetry, not authority
@@ -643,6 +651,34 @@ async def _evaluate(request: Any, spec: _AccessSpec, trace: dict[str, Any]) -> K
         tenant_id=requested_tenant,
         stepped_up=stepped_up,
     )
+
+
+def _device_trust_required() -> bool:
+    try:
+        from config.settings import settings
+
+        return bool(settings.kyber_workforce.device_trust_required)
+    except Exception:  # pragma: no cover - fail closed if settings cannot load
+        return True
+
+
+async def _observe_device(request: Any, session: WorkforceSession, providers: AccessProviders) -> Any:
+    """Resolve a presented device without requiring one (device trust off).
+
+    Returns ``None`` when no device is presented. A presented device that is
+    revoked, or that does not match the session binding, still denies.
+    """
+    if providers.devices is None:
+        return None
+    cookies = getattr(request, "cookies", None) or {}
+    has_grant = bool(cookies.get(DEVICE_GRANT_COOKIE_NAME)) if hasattr(cookies, "get") else False
+    if not has_grant and not session.device_id:
+        return None
+    device = await _resolve_device(request, session, providers)
+    usable, device_reason = await providers.devices.is_usable(getattr(device, "device_id", None))
+    if not usable and "revok" in (device_reason or "").lower():
+        raise _Denied("device_revoked", f"Device is not usable ({device_reason or 'unknown'})")
+    return device
 
 
 async def _resolve_device(request: Any, session: WorkforceSession, providers: AccessProviders) -> Any:

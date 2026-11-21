@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import secrets
 import time
@@ -141,6 +142,10 @@ class OidcTransaction:
     expires_at: float
     next_path: Optional[str] = None
     client_ip: Optional[str] = None
+    #: ``login`` opens a session; ``step_up`` re-authenticates an existing one.
+    purpose: str = "login"
+    session_id: Optional[str] = None
+    capability_id: Optional[str] = None
 
 
 class OidcTransactionStore:
@@ -163,6 +168,9 @@ class OidcTransactionStore:
         redirect_uri: str,
         next_path: Optional[str] = None,
         client_ip: Optional[str] = None,
+        purpose: str = "login",
+        session_id: Optional[str] = None,
+        capability_id: Optional[str] = None,
     ) -> OidcTransaction:
         self.purge_expired()
         now = time.time()
@@ -177,6 +185,9 @@ class OidcTransactionStore:
             expires_at=now + self._ttl,
             next_path=next_path,
             client_ip=client_ip,
+            purpose=purpose,
+            session_id=session_id,
+            capability_id=capability_id,
         )
         self._transactions[transaction.state] = transaction
         return transaction
@@ -302,8 +313,17 @@ class GoogleOidcClient:
         nonce: str,
         code_challenge: str,
         redirect_uri: str,
+        reauthenticate: bool = False,
     ) -> str:
-        """Build the Google consent URL for this login attempt."""
+        """Build the Google consent URL for this login attempt.
+
+        ``reauthenticate`` asks Google for a fresh sign-in (``max_age=0``) and
+        explicitly requests the ``auth_time`` claim, which Google only returns
+        when the ``claims`` parameter asks for it, so the caller can check that
+        the sign-in just happened. Google documents only ``none``, ``consent``
+        and ``select_account`` as ``prompt`` values, so ``login`` is not used;
+        without fresh ``auth_time`` evidence the step-up fails closed.
+        """
         if not self.config.client_id:
             raise OidcError("client_not_configured", "KYBER_GOOGLE_CLIENT_ID is not set")
         if not redirect_uri:
@@ -323,6 +343,11 @@ class GoogleOidcClient:
             "access_type": "online",
             "prompt": "select_account",
         }
+        if reauthenticate:
+            params["max_age"] = "0"
+            params["claims"] = json.dumps(
+                {"id_token": {"auth_time": {"essential": True}}}, separators=(",", ":"),
+            )
         if self.config.hosted_domain:
             # A hint only. The `hd` claim is what is actually enforced.
             params["hd"] = self.config.hosted_domain
@@ -614,8 +639,10 @@ class MockOidcProvider:
         nonce: str,
         code_challenge: str,
         redirect_uri: str,
+        reauthenticate: bool = False,
     ) -> str:
         params = {
+            "reauth": "1" if reauthenticate else "0",
             "state": state,
             "nonce": nonce,
             "code_challenge": code_challenge,
@@ -640,7 +667,11 @@ class MockOidcProvider:
             raise OidcError("email_unverified")
         if self.config.hosted_domain and identity.hosted_domain != self.config.hosted_domain:
             raise OidcError("hosted_domain_mismatch")
-        return identity
+        # The mock consent is a fresh sign-in every time, as Google reports
+        # when max_age=0 and the claims parameter requests auth_time.
+        from dataclasses import replace
+
+        return replace(identity, raw_claims={**identity.raw_claims, "auth_time": int(time.time())})
 
 
 # ── Selection ─────────────────────────────────────────────────────────────────

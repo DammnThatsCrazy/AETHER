@@ -45,9 +45,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:c04e4256426c0d0781e433dd5759dbed91a310844e18872729fef4b12916b2be"
-  "apps/kyber-web/src/": "sha256:0b63786d40dfe1ba6a95c2082fe643c38ec498472131b541f27283db6c3893e4"
-  "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
+  "apps/aether-web/src/": "sha256:4ec9bc77bc244a0c80fcc9786b9867f70d4128f836e9164ebf7b1cf4e68669d1"
+  "apps/kyber-web/src/": "sha256:5bcc84037e56c027dd6b529e4767005f87972e4d87a4ebfec8eab4c898c73660"
+  "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -82,19 +82,34 @@ the root.
   off; signup skips the API-key reveal step when a session is issued. A `429` from
   login, register or verify-email (the backend throttles those public endpoints)
   is shown as a wait message built from `retry_after_seconds`
-  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. When the
-  build carries Auth0 settings, login offers **Continue with Olympus sign-in**
-  (Auth0 Universal Login) plus one button per social connection listed in
-  `VITE_AUTH0_SOCIAL_CONNECTIONS` (`google=aether-staging-google,…`), which
-  opens that Auth0 connection directly; Terraform lists none when social
-  connections are off (the pilot lane). Signing out also ends the Auth0
+  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. Login
+  mirrors the public website's portal (shared `AuthPortal*` primitives in
+  `@aether/ui`, also used by Kyber's operator login; Kyber's session banners, including **Step-up required** with **Re-verify with Google**, are mounted once in its app shell so they show on every console page) and is email-first; the
+  website's "Sign in" link `/app/signin` redirects to `/login`. Google and Apple
+  (full-width) and Microsoft and Slack (compact) appear for each social
+  connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`
+  (`google=aether-staging-google,…`) and open that Auth0 connection directly;
+  Terraform lists only the providers it created: every provider when social
+  connections are on, and in the pilot lane only those whose Auth0 credentials
+  are provisioned (`TF_AUTH0_GOOGLE_*`, `TF_AUTH0_APPLE_*`). After
+  the work email: a domain listed in `VITE_AUTH0_ENTERPRISE_CONNECTIONS`
+  (`acme.com=acme-okta,…`) goes straight to that company SSO connection;
+  every other address gets the same next step, so the screen never reveals
+  whether an account exists: a password field (`/v1/auth/login`), **Email me a
+  sign-in code** when `VITE_AUTH0_PASSWORDLESS_CONNECTION` names an Auth0
+  passwordless email connection, and **Use another sign-in method** (Auth0
+  Universal Login with `login_hint`), which is how invited teammates and the
+  staging operator, who have no password here, sign in. Signing out also ends the Auth0
   session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
   the next sign-in asks again instead of silently reusing it; if Auth0 cannot
   be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
-  Auth0 configured, `/signup` opens Auth0's hosted sign-up
-  (`screen_hint=signup`); the pricing page's `?plan=alpha|beta|gamma|delta`
+  Auth0 configured, `/signup` is the portal sign-up screen (same primitives as
+  sign-in; it shows the chosen plan, the same social buttons, and a work email
+  field). A social button opens Auth0's hosted sign-up on that connection, and
+  **Continue with email** opens it with `login_hint` (both
+  `screen_hint=signup`); nothing redirects until the person chooses. The pricing page's `?plan=alpha|beta|gamma|delta`
   (or a validated `?redirect`, else the marketing provider hand-off's
   `/settings/integrations?…`, else `/onboarding`, an alias of `/activation`) is kept in session storage
   across the round trip (`rememberPostAuthDestination` /
@@ -1397,11 +1412,14 @@ error. Every page states its no-execution boundary in the header copy.
 
 ### Aether (tenant) — `apps/aether-web/src/pages/{stablecoins,derivatives,interop}/`
 
+The Integrations & Connectors page groups sources by relationship (your applications, your members' accounts, your organization, imports); the group describes a source and never decides its use. `@aether/ui` `Input` and `Select` associate their visible label with the control (`htmlFor` + `useId`), so labels name their fields for assistive technology and tests.
+
 | Route | Page |
 |-------|------|
 | `/stablecoins` | Assets, peg valuations with depeg badges, flow aggregates |
 | `/stablecoins/:assetId` | Deployments + recent observations with finality status |
-| `/derivatives` | Linked accounts, positions, P&L snapshots, reconciliation variances |
+| `/derivatives` | Linked accounts, linked venue accounts (each backed by a connection and a data-rights grant), positions, P&L snapshots, reconciliation variances |
+| `/derivatives/propagation` | Propagation runs over the tenant's linked members (saved runs, staleness, recompute) |
 | `/derivatives/accounts/:accountId` | Orders, fills, positions for one read-only account |
 | `/interoperability` | Cross-chain messages, paths, providers with honest `ImplementationStatus` |
 | `/interoperability/messages/:messageId` | Lifecycle timeline, delivery attempts, asset legs |

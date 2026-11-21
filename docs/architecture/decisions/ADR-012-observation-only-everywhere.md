@@ -18,7 +18,7 @@ source_hashes:
   "services/api/actions/agent/user_agents.py": "sha256:6e8c6935786206280889003297253f1401cd67573ff490a78349840555b1af20"
   "services/api/journeys/comms/suppression_authority.py": "sha256:bed3da364d61525d840253f935c6584443771143ab8516f37e1bd70ea4ba34dc"
   "services/api/value/x402/provenance.py": "sha256:fe227df986d4c03f770d97d6236bc4c5c5ee4410db66415dd38b7a697779d556"
-  "services/api/value/x402/settlement_observer.py": "sha256:d7779f89245892329488cfc587ae4afa4988b012494e4b5acce736acec45874e"
+  "services/api/value/x402/settlement_observer.py": "sha256:46522979888495ad174b1dae683766579b6376561b456c0c2138fd43316f7a1d"
 ---
 
 # ADR-012: Observation-Only Everywhere

@@ -75,7 +75,7 @@ _EXPECTED_GROUPING = {
 }
 
 
-def test_experience_categories_are_eight_and_stable():
+def test_experience_categories_are_nine_and_stable():
     assert [c.value for c in EXPERIENCE_CATEGORIES] == [
         "advertising_campaigns",
         "commerce_revenue",
@@ -85,8 +85,9 @@ def test_experience_categories_are_eight_and_stable():
         "social_community",
         "customer_support",
         "work_operations",
+        "markets_trading",
     ]
-    assert len(set(EXPERIENCE_CATEGORIES)) == 8
+    assert len(set(EXPERIENCE_CATEGORIES)) == 9
 
 
 def test_every_connectable_manifest_maps_to_exactly_one_bucket():
@@ -161,6 +162,7 @@ def test_communications_membership_is_cohort_derived():
         "project": ExperienceCategory.WORK_OPERATIONS,
         "messaging": ExperienceCategory.WORK_OPERATIONS,
         "support": ExperienceCategory.CUSTOMER_SUPPORT,
+        "derivatives": ExperienceCategory.MARKETS_TRADING,
     }
     for manifest in ALL_MANIFESTS:
         has_comms_output = any(

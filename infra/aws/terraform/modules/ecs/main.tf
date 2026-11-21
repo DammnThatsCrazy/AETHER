@@ -338,7 +338,11 @@ locals {
     { name = "KYBER_OPERATOR_GATE_ENFORCED", value = "true" },
     ] : [
     { name = "KYBER_WORKFORCE_IDENTITY_ENABLED", value = "true" },
-    { name = "KYBER_DEVICE_TRUST_REQUIRED", value = "true" },
+    # Identity-approved Kyber: an invited Google Workspace identity (with
+    # Workspace-enforced 2-Step Verification) signs in from any device.
+    # Devices that present themselves are still recorded and revocable; step-up
+    # re-authenticates with Google (prompt=login, max_age=0).
+    { name = "KYBER_DEVICE_TRUST_REQUIRED", value = "false" },
     { name = "KYBER_BACKEND_AUTHZ_ENFORCED", value = "true" },
     { name = "KYBER_SCOPE_V2_ENABLED", value = "true" },
     { name = "KYBER_STEP_UP_REQUIRED", value = "true" },
@@ -353,6 +357,7 @@ locals {
     { name = "ROUTE_REGISTRY_ENFORCED", value = "true" },
     { name = "KYBER_OPERATOR_GATE_ENFORCED", value = "true" },
     { name = "KYBER_GOOGLE_HOSTED_DOMAIN", value = trimspace(var.kyber_google_hosted_domain) },
+    { name = "KYBER_BOOTSTRAP_FOUNDER_EMAIL", value = lower(trimspace(var.kyber_bootstrap_founder_email)) },
     # The callback is a backend route, so it must use the API origin rather
     # than the browser origin. WebAuthn remains bound to the Kyber SPA origin.
     { name = "KYBER_GOOGLE_REDIRECT_URI", value = "${local.api_base_origin}/v1/kyber/auth/callback" },
