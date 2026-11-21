@@ -76,7 +76,10 @@ export function PropagationPage() {
   async function recompute(runId: string) {
     setBusy(true);
     try {
-      setSelected({ ...asRecord(await api.propagation.recompute(runId)), stale: false, stale_reasons: [] });
+      // A new run comes back without staleness fields (it was just computed);
+      // an unchanged recompute returns the saved run with the server's
+      // current staleness, which must not be overridden.
+      setSelected({ stale: false, stale_reasons: [], ...asRecord(await api.propagation.recompute(runId)) });
       queryCache.invalidate(RUNS_KEY);
       void runs.refetch();
     } catch (error) {

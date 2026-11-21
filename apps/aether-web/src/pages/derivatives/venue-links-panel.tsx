@@ -12,6 +12,8 @@ type Method = 'wallet' | 'key' | 'oauth' | 'tenant_push';
 // How each venue's account data is reached. Wallet venues read public account
 // activity by address (no key); key venues need the member's read-only key;
 // Coinbase futures also accepts OAuth through the Aether-hosted app.
+const PEM_SECRET_VENUES: ReadonlySet<string> = new Set(['kalshi', 'coinbase_futures']);
+
 const VENUES: ReadonlyArray<{ value: string; label: string; methods: [Method, ...Method[]] }> = [
   { value: 'hyperliquid', label: 'Hyperliquid', methods: ['wallet', 'tenant_push'] },
   { value: 'polymarket', label: 'Polymarket', methods: ['wallet', 'tenant_push'] },
@@ -52,7 +54,10 @@ export function VenueLinksPanel() {
   const [method, setMethod] = useState<Method>(methods[0]);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [key]: e.target.value }));
+  const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [key]: e.target.value }));
+  // Kalshi and Coinbase CDP keys sign with a PEM private key. A password input
+  // strips the PEM's line breaks on paste, so those venues get a multiline field.
+  const pemSecret = PEM_SECRET_VENUES.has(venue);
 
   function refresh() {
     queryCache.invalidate(LINKS_KEY);
@@ -190,7 +195,22 @@ export function VenueLinksPanel() {
             {method === 'key' && (
               <>
                 <Input label="Read-only API key (or key id)" value={form.api_key ?? ''} onChange={set('api_key')} required autoComplete="off" />
-                <Input label="Secret or private key" type="password" value={form.api_secret ?? ''} onChange={set('api_secret')} autoComplete="off" />
+                {pemSecret ? (
+                  <div className="space-y-1">
+                    <label htmlFor="venue-api-secret" className="block text-xs font-medium text-text-secondary">Private key (PEM)</label>
+                    <textarea
+                      id="venue-api-secret"
+                      className="w-full h-28 rounded-md border border-border-default bg-surface-base px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent resize-y"
+                      value={form.api_secret ?? ''}
+                      onChange={set('api_secret')}
+                      placeholder="-----BEGIN PRIVATE KEY-----"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                ) : (
+                  <Input label="Secret or private key" type="password" value={form.api_secret ?? ''} onChange={set('api_secret')} autoComplete="off" />
+                )}
                 <Input label="Passphrase (if the venue uses one)" type="password" value={form.passphrase ?? ''} onChange={set('passphrase')} autoComplete="off" />
                 <p className="text-xs text-text-secondary md:col-span-2">
                   Use a key with read permission only. Keys that can trade, transfer or withdraw are refused, and the
