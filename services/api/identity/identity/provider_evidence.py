@@ -81,6 +81,12 @@ async def capture_durable_provider_customer_evidence(
     """
     if not lifecycle_id:
         return 0
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    if tenant_id == OLYMPUS_SOURCE_TENANT_ID:
+        # Olympus and public reference data is not tenant identity evidence:
+        # it must never seed or merge a tenant's private profiles.
+        return 0
     accepted: dict[tuple[str, str, str], str | None] = {}
     try:
         for item in outcomes or []:

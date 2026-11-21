@@ -22,8 +22,8 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR main.py diff: it mounts Social360 evidence and Workflow definition routers. Universal Provider Runtime connection, credential, and webhook mounts are unchanged."
 source_hashes:
-  "services/api/config/settings.py": "sha256:a70791807925c42cc1fea6409fee12f13dc91a57323ac916c2929305755fc64c"
-  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/config/settings.py": "sha256:20fd89e97be61973788b6b55b05819efd3e84981da5d84c1ff3116a123d74171"
+  "services/api/connectors/provider_runtime/": "sha256:1591e575f996946a70bbc5abafb1d7a689f8cf634516064502637f365adf18a7"
   "services/api/connectors/providers/": "sha256:9f3b77f51f15de12bdcd9141260a8ffc8315bd8572a2beebad921a76356df608"
   "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
@@ -202,6 +202,9 @@ Normalization engine (EventNormalizer.normalize)
         ▼
 Event bridge
   1. consent-admitted canonical AetherEvent → typed bronze_sdk_events
+     (+ Envelope-B `observation_envelope` when the adoption flag is on: source
+     type connector/webhook, relationship and instance from the grant that
+     admitted the raw record, its source/grant/`rdec_` refs, raw-record lineage)
   2. SDK_EVENTS_VALIDATED outbox row in the same database transaction
   3. supervised event-outbox relay → event bus when enabled
         ▼
@@ -227,6 +230,15 @@ The pipeline honors three invariants:
   randomness, or provider I/O. Dropped or invalid records remain a visible
   normalization outcome; provider-specific quarantine and repair are still
   required before a stream is promoted.
+- **Source provenance.** Callers pass the persisted raw records with the
+  events (`ingest_events(..., raw_records=...)`). `ProviderIngressAdapter`
+  builds each event's Envelope-B from the rights admission stored on its raw
+  record (`metadata.aether_rights_admission`); nothing in the event payload can
+  set the relationship or rights references. An event without its raw record is
+  `unclassified` and cites no rights. Selecting an account on a tenant's own
+  connection creates its `organization_system` grant
+  (`organization_grants.py`), and deleting a tenant revokes its grants and
+  closes its connections (`tenant_offboarding.py`).
 - **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
   from each `AetherEvent`'s `data`/`context` in place before the durable dump
   (mandatory and unconditional — Bronze and the publish carry only scrubbed

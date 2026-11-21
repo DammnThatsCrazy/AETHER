@@ -108,7 +108,7 @@ class FakeBridge:
     def __init__(self) -> None:
         self.events: list[Any] = []
 
-    async def ingest_events(self, tenant_id: str, events) -> int:
+    async def ingest_events(self, tenant_id: str, events, **_kwargs) -> int:
         self.events.extend(events)
         return len(events)
 
@@ -1204,7 +1204,7 @@ async def test_missing_rights_blocks_raw_persistence_normalization_bridge_and_cu
 @pytest.mark.asyncio
 async def test_event_persistence_failure_does_not_advance_cursor():
     class FailingBridge(FakeBridge):
-        async def ingest_events(self, tenant_id, events):
+        async def ingest_events(self, tenant_id, events, **_kwargs):
             raise RuntimeError("event lake unavailable")
 
     run_svc = FakeRunService()

@@ -93,6 +93,7 @@ const KyberIntelligenceOSPage = lazy(() => import('@kyber/pages/intelligence-os'
 // disabled state when enableProviderRuntime is off, so mounting the route is not
 // a grant — the backend still gates /v1/admin/kyber/provider-connections/*.
 const ProviderConnectionsPage = lazy(() => import('@kyber/pages/provider-connections').then(m => ({ default: m.ProviderConnectionsPage })));
+const SystemSourcesPage = lazy(() => import('@kyber/pages/system-sources').then(m => ({ default: m.SystemSourcesPage })));
 // Model-runtime control-plane admin surfaces (ADR-008 D8/D9). The routes below
 // mount only when the enableModelHarness frontend flag is on (default OFF,
 // matching the Aether tenant-facing harness surface); the backend
@@ -219,6 +220,7 @@ export function AppRouter() {
                 <Route path="/ai-efficiency" element={<PageSuspense><AiEfficiencyPage /></PageSuspense>} />
                 <Route path="/targeting" element={<PageSuspense><TargetingIntelligencePage /></PageSuspense>} />
                 <Route path="/provider-connections" element={<PageSuspense><ProviderConnectionsPage /></PageSuspense>} />
+                <Route path="/system-sources" element={<PageSuspense><SystemSourcesPage /></PageSuspense>} />
                 {/* Model-runtime control-plane admin surfaces — flag-gated (default OFF). */}
                 {isFeatureEnabled('enableModelHarness') && (
                   <>

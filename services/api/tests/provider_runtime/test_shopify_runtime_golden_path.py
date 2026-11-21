@@ -104,7 +104,7 @@ class _CapturingBridge:
     def __init__(self) -> None:
         self.events: list[object] = []
 
-    async def ingest_events(self, tenant_id, events) -> int:
+    async def ingest_events(self, tenant_id, events, **_kwargs) -> int:
         self.events.extend(events)
         return len(events)
 

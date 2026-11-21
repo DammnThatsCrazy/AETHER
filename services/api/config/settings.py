@@ -828,6 +828,10 @@ class IngressConsentConfig:
     feed_ingress_consent_enforcement_enabled: bool = _env_bool(
         "FEED_INGRESS_CONSENT_ENFORCEMENT_ENABLED", True
     )
+    # First use of a feed source (``feed:<source>``) needs an active
+    # DataRightsGrant allowing the tenant lake. Sources a tenant already fed keep
+    # working as unclassified, tenant-lake-only rows until converged.
+    feed_source_grant_required: bool = _env_bool("FEED_SOURCE_GRANT_REQUIRED", True)
     # C class — connector/communication durability seam (services/api/journeys/comms/ingest):
     # scrub + data-policy always run; the flag enables the per-subject (S)
     # server-receipt rejection (additionally gated by the authoritative flag AND

@@ -60,6 +60,8 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   // backend AETHER_PATTERN_DISCOVERY_ENABLED capability; the routes are the real grant.
   { path: '/intelligence/patterns', label: 'Pattern Discovery', destination: 'kyber-investigations', requirement: { flag: 'pattern_discovery_enabled' } },
   { path: '/measurement/traffic-intelligence', label: 'Traffic Intel', destination: 'kyber-traffic-intelligence' },
+  // Operator-gated by the backend; reuses the connectors icon taxonomy.
+  { path: '/system-sources', label: 'System Sources', destination: 'kyber-connectors' },
   { path: '/connectors', label: 'Connectors', destination: 'kyber-connectors', requirement: { flag: 'connectors_enabled' } },
   { path: '/agent-lineage', label: 'Agent Lineage', destination: 'kyber-agent-lineage', envFlag: 'enableExternalAgentTelemetry' },
   { path: '/agent-telemetry', label: 'Agent Telemetry', destination: 'kyber-agent-telemetry', envFlag: 'enableExternalAgentTelemetry' },

@@ -599,7 +599,9 @@ class PullScheduler:
                     ) from exc
                 if events:
                     try:
-                        accepted = await self._bridge().ingest_events(tenant_id, events)
+                        accepted = await self._bridge().ingest_events(
+                            tenant_id, events, raw_records=persisted_records
+                        )
                     except Exception as exc:
                         raise _pull_failed(
                             f"provider event persistence failed for {provider_identity}",

@@ -46,7 +46,7 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
   "apps/aether-web/src/": "sha256:af3fcd939145bf172a8d1299590b58b3dc48cd9e8878225bdd05eed7c5741c46"
-  "apps/kyber-web/src/": "sha256:5bcc84037e56c027dd6b529e4767005f87972e4d87a4ebfec8eab4c898c73660"
+  "apps/kyber-web/src/": "sha256:cbf923596a1fe7d94ce28c525cdfcbf4ceaed1759c78970428ce108cb58efda1"
   "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
 
@@ -84,7 +84,7 @@ the root.
   is shown as a wait message built from `retry_after_seconds`
   (`features/auth/rate-limit.ts`) rather than as a wrong password or code. Login
   mirrors the public website's portal (shared `AuthPortal*` primitives in
-  `@aether/ui`, also used by Kyber's operator login; Kyber's session banners, including **Step-up required** with **Re-verify with Google**, are mounted once in its app shell so they show on every console page) and is email-first; the
+  `@aether/ui`, also used by Kyber's operator login; Kyber's session banners, including **Step-up required** with **Re-verify with Google**, are mounted once in its app shell so they show on every console page; Kyber's **System Sources** page (`/system-sources`) lists Olympus-owned sources in full and tenant sources aggregated by provider, from `GET /v1/admin/kyber/provider-connections/system-sources`) and is email-first; the
   website's "Sign in" link `/app/signin` redirects to `/login`. Google and Apple
   (full-width) and Microsoft and Slack (compact) appear for each social
   connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`

@@ -93,7 +93,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
-  "services/api/config/settings.py": "sha256:a70791807925c42cc1fea6409fee12f13dc91a57323ac916c2929305755fc64c"
+  "services/api/config/settings.py": "sha256:20fd89e97be61973788b6b55b05819efd3e84981da5d84c1ff3116a123d74171"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"

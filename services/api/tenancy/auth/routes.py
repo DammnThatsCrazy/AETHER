@@ -601,6 +601,13 @@ async def _cascade_delete_tenant(tenant_id: str) -> dict:
         await public_ingest_service.revoke_all_for_tenant(tenant_id)
     )
 
+    # 1b. Close every data source the tenant owns: revoke its data-rights grants
+    # (the revocation fence denies any in-flight raw write) and delete provider
+    # credentials, closing each connection. Failures leave the tenant present.
+    from connectors.provider_runtime.tenant_offboarding import close_tenant_sources
+
+    counts["sources"] = await close_tenant_sources(tenant_id, actor="tenant_deletion")
+
     # 2. Erase every non-retained data surface written by the rehearsal before
     # removing the owning rows.  Any failure leaves the tenant present and the
     # API keys revoked, making retry safe and observable.

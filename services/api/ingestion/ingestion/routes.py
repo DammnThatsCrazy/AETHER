@@ -301,6 +301,19 @@ async def ingest_api_feed(
             f"ingress_consent_denied:{format_ingress_rejection(reason_code, decisions)}"
         )
 
+    from ingestion.ingestion.feed_rights import resolve_feed_rights
+
+    rights = await resolve_feed_rights(
+        tenant.tenant_id,
+        feed_event.source,
+        grant_required=settings.ingress_consent.feed_source_grant_required,
+    )
+    if not rights.allowed:
+        raise ForbiddenError(
+            f"feed_source_grant_required: no active data-rights grant for {rights.source_id}. "
+            "Grant this source before sending it."
+        )
+
     payload = {
         "source": feed_event.source,
         "entity_type": feed_event.entity_type,
@@ -309,6 +322,8 @@ async def ingest_api_feed(
         "tenant_id": tenant.tenant_id,
         "received_at": received_at,
         "schema_version": "1.0",
+        # Server-owned source provenance; nothing in the request can set it.
+        "source_rights": rights.stamp(),
     }
 
     # Durable Bronze write for idempotency and recovery

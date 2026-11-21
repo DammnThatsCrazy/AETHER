@@ -33,15 +33,15 @@ source_hashes:
   "services/api/actions/": "sha256:d1cf7b1487cb20463f07f8d2b7c029eb2e2d250da256b5a3391e0a22f768c28b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
-  "services/api/connectors/": "sha256:4fd7758e6766a029ae72e7d2b2ae19368c417b1e2f51b8ddd12536a4afe39264"
+  "services/api/connectors/": "sha256:a279ca05a09f06d944d8fc498a5d394e2791bcf2ba55996e082a4692acd58098"
   "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
   "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
-  "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:b6213f37eb693cbd8217b682b05b14d62c6a31a034d06bf026b5f093d420a14e"
+  "services/api/identity/": "sha256:c54fe130e4198fd6b3fb99b0a288d3c5e2b61f6dadfd11737c4a4fdf8c266036"
+  "services/api/ingestion/": "sha256:66b5c3095e34d3567df94d29f61e1ed6e1ae75cec2f4d2d2c41e1dcd0573a645"
   "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:75271307c2a900d6df194da78e2e83d73b54d12427e4b77ebe6024e20680b705"
+  "services/api/tenancy/": "sha256:03c7b4e615911ead747c377eff99837a96dfd4b0f6a3c1afe7785c90d6e5340c"
   "services/api/value/": "sha256:000220c291567fc2fc4dfabb735f69947d1dd6f4c030be874e1a903ccb8bf44a"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
@@ -4682,7 +4682,10 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   only after discovery recorded its live shop identity (the stored credential is
   used for discovery whenever one exists), and is rejected while another tenant
   holds the same shop selected on a connection that is not revoked, disabled,
-  or failed.
+  or failed. A successful selection also creates the account's
+  `organization_system` data-rights grant (`provider-account:<connection>:<account>`,
+  tenant lake, graph and insights only) unless one is already active, and
+  returns its id as `source_grant_id`; the reserved `olympus` scope never gets one.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
   (optional `since` for backfill and optional `stream_ids` to select at most 32
   unique, nonblank stream identifiers). An omitted or empty list runs all
@@ -4712,6 +4715,11 @@ fail-closed):
 
 - `GET /v1/admin/kyber/provider-connections/overview` — per-provider connection
   counts by lifecycle state (aggregate only).
+- `GET /v1/admin/kyber/provider-connections/system-sources` — System Sources:
+  every connection and active grant under the reserved `olympus` scope (state,
+  whether a credential is stored, account count, permitted uses), and tenant
+  sources aggregated per provider (connections by state, active grants by
+  relationship, tenant count). No tenant id, configuration or credential.
 - `GET /v1/admin/kyber/provider-connections/providers` — provider list
   (installed plugins + legacy connectors) at the admin surface, distinct from
   the tenant-scoped `/v1/provider-connections/providers`.

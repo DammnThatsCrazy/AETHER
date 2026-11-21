@@ -425,3 +425,110 @@ async def test_olympus_scope_events_never_enter_the_tenant_pipeline():
     increment.assert_called_once_with("provider_bridge_olympus_scope_skipped_total")
     assert _rows("bronze_sdk_events") == []
     assert _rows("event_outbox") == []
+
+
+# ── Envelope-B projection on provider rows (source block + rights refs) ─────
+
+def _admitted_raw(event: AetherEvent, *, mode: str = "poll", relationship: str = "organization_system"):
+    raw = make_raw_record(
+        provider_identity=event.provider_identity,
+        tenant_id=event.tenant_id,
+        connection_id="conn_1",
+        account_id="acct_9",
+        provider_record_type="order",
+        provider_record_id="gid://shopify/Order/1",
+        acquisition_mode=mode,
+        payload={"id": 1},
+    )
+    raw = raw.model_copy(update={
+        "record_id": event.source_record_id,
+        "metadata": {"aether_rights_admission": {
+            "tenant_id": event.tenant_id,
+            "source_id": "provider-account:conn_1:acct_9",
+            "source_grant_ref": "drg_123",
+            "rights_decision_ref": "rdec_456",
+            "decision_identity": "x",
+            "policy_version": "1",
+            "evaluated_at": "2026-11-21T00:00:00Z",
+            "source_relationship": relationship,
+        }},
+    })
+    return raw
+
+
+@pytest.fixture()
+def _envelopes_on(monkeypatch: pytest.MonkeyPatch):
+    import dataclasses
+    from config.settings import settings
+
+    monkeypatch.setattr(
+        settings, "observation_envelope", dataclasses.replace(settings.observation_envelope, enabled=True)
+    )
+
+
+async def _ingest(events, raw_records=()):
+    with mock.patch(
+        "ingestion.ingestion.validation.evaluate_ingress_decision", return_value=(True, None, [])
+    ):
+        return await EventBridge().ingest_events("tenant-1", events, raw_records=raw_records)
+
+
+@pytest.mark.asyncio
+async def test_provider_rows_name_their_source_instance_and_rights_decision(_envelopes_on):
+    event = _event()
+    assert await _ingest([event], [_admitted_raw(event)]) == 1
+    envelope = _rows("event_outbox")[0]["payload"]["observation_envelope"]
+    assert envelope["source"] == {
+        "source_type": "connector",
+        "source_relationship": "organization_system",
+        "source_provider": "shopify.orders.catalog",
+        "source_instance": "provider-account:conn_1:acct_9",
+        "source_native_id": "gid://shopify/Order/1",
+        "ingress_path": "provider_runtime:poll",
+    }
+    assert envelope["rights"] == {
+        "source_id": "provider-account:conn_1:acct_9",
+        "source_grant_refs": ["drg_123"],
+        "rights_decision_refs": ["rdec_456"],
+    }
+    assert envelope["lineage"]["raw_record_ref"] == event.source_record_id
+    assert envelope["provenance"]["credential_class"] == "MANAGED_CONNECTOR"
+    assert _rows("bronze_sdk_events")[0]["payload"]["observation_envelope"] == envelope
+
+
+@pytest.mark.asyncio
+async def test_webhook_deliveries_are_webhook_sourced(_envelopes_on):
+    event = _event()
+    await _ingest([event], [_admitted_raw(event, mode="webhook")])
+    envelope = _rows("event_outbox")[0]["payload"]["observation_envelope"]
+    assert envelope["source"]["source_type"] == "webhook"
+    assert envelope["provenance"]["credential_class"] == "VERIFIED_WEBHOOK"
+
+
+@pytest.mark.asyncio
+async def test_relationship_never_comes_from_the_event_payload(_envelopes_on):
+    event = _event(data={"source_relationship": "olympus_source"}, context={"source_relationship": "olympus_source"})
+    await _ingest([event], [_admitted_raw(event, relationship="personal_account")])
+    envelope = _rows("event_outbox")[0]["payload"]["observation_envelope"]
+    assert envelope["source"]["source_relationship"] == "personal_account"
+
+
+@pytest.mark.asyncio
+async def test_an_event_without_its_raw_record_is_unclassified_and_cites_no_rights(_envelopes_on):
+    await _ingest([_event()])
+    envelope = _rows("event_outbox")[0]["payload"]["observation_envelope"]
+    assert envelope["source"]["source_relationship"] == "unclassified"
+    assert "rights" not in envelope
+
+
+@pytest.mark.asyncio
+async def test_no_envelope_while_the_adoption_flag_is_off(monkeypatch: pytest.MonkeyPatch):
+    import dataclasses
+    from config.settings import settings
+
+    monkeypatch.setattr(
+        settings, "observation_envelope", dataclasses.replace(settings.observation_envelope, enabled=False)
+    )
+    event = _event()
+    await _ingest([event], [_admitted_raw(event)])
+    assert "observation_envelope" not in _rows("event_outbox")[0]["payload"]

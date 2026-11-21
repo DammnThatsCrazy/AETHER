@@ -438,6 +438,7 @@ class DataRightsService:
                 commercial_reuse_allowed=grant.commercial_reuse_allowed,
                 granted_at=grant.granted_at,
                 revoked_at=grant.revoked_at,
+                source_relationship=grant.source_relationship,
             ) for grant in grants]
 
         return results
