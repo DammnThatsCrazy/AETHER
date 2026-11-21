@@ -18,7 +18,7 @@ relationship.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from shared.integration_contracts.source_relationship import UNCLASSIFIED
 from shared.logger.logger import get_logger, metrics
@@ -66,28 +66,48 @@ async def _has_fed_before(tenant_id: str, source: str) -> bool:
     return bool(rows)
 
 
-async def resolve_feed_rights(tenant_id: str, source: str, *, grant_required: bool = True) -> FeedRights:
-    source_id = feed_source_id(source)
+async def resolve_source_rights(
+    tenant_id: str,
+    source_id: str,
+    *,
+    has_history: "Callable[[], Awaitable[bool]]",
+    grant_required: bool = True,
+    metric: str = "ingestion_feed_rights_total",
+) -> FeedRights:
+    """Granted, legacy or denied for one source in one scope (tenant or ``olympus``)."""
     try:
         from connectors.integrations.data_rights.service import data_rights_service
 
         grant = await data_rights_service.get_effective_grant(tenant_id, source_id)
     except Exception as exc:  # rights authority unreachable: fail closed below
-        logger.warning("feed rights lookup failed tenant=%s source=%s: %s", tenant_id, source_id, type(exc).__name__)
+        logger.warning("source rights lookup failed tenant=%s source=%s: %s", tenant_id, source_id, type(exc).__name__)
         grant = None
-    if grant is not None and getattr(grant, "tenant_lake_allowed", False):
-        metrics.increment("ingestion_feed_rights_total", labels={"outcome": "granted"})
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    # The use that must be granted depends on the scope that will own the rows.
+    needed = "olympus_baseline_allowed" if tenant_id == OLYMPUS_SOURCE_TENANT_ID else "tenant_lake_allowed"
+    if grant is not None and getattr(grant, needed, False):
+        metrics.increment(metric, labels={"outcome": "granted"})
         return FeedRights(
             outcome="granted",
             source_id=source_id,
             source_relationship=str(getattr(grant, "source_relationship", "") or UNCLASSIFIED),
             grant_id=str(getattr(grant, "data_rights_grant_id", "") or "") or None,
         )
-    if not grant_required or await _has_fed_before(tenant_id, source):
-        metrics.increment("ingestion_feed_rights_total", labels={"outcome": "legacy"})
+    if not grant_required or await has_history():
+        metrics.increment(metric, labels={"outcome": "legacy"})
         return FeedRights(outcome="legacy", source_id=source_id)
-    metrics.increment("ingestion_feed_rights_total", labels={"outcome": "denied"})
+    metrics.increment(metric, labels={"outcome": "denied"})
     return FeedRights(outcome="denied", source_id=source_id)
 
 
-__all__ = ["FeedRights", "feed_source_id", "resolve_feed_rights"]
+async def resolve_feed_rights(tenant_id: str, source: str, *, grant_required: bool = True) -> FeedRights:
+    return await resolve_source_rights(
+        tenant_id,
+        feed_source_id(source),
+        has_history=lambda: _has_fed_before(tenant_id, source),
+        grant_required=grant_required,
+    )
+
+
+__all__ = ["FeedRights", "feed_source_id", "resolve_feed_rights", "resolve_source_rights"]

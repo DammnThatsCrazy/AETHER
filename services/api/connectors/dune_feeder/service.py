@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from shared.common.common import BadRequestError, NotFoundError, parse_iso
+from shared.common.common import BadRequestError, ForbiddenError, NotFoundError, parse_iso
 from shared.logger.logger import get_logger, metrics
 
 from connectors.dune_feeder.models import (
@@ -37,6 +37,16 @@ logger = get_logger("aether.service.dune_feeder")
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def dune_source_id(source_tag: str) -> str:
+    return f"dune:{(source_tag or '').strip().lower()}"
+
+
+def _license_status(payload: FeederIngestRequest, rights) -> str:
+    if payload.tenant_scope is None:
+        return "olympus_provider_contract" if rights.outcome == "granted" else "olympus_legacy"
+    return "tenant_rights_granted" if rights.outcome == "granted" else "tenant_legacy"
 
 
 def _hash_row(row: dict) -> str:
@@ -211,6 +221,7 @@ class DuneFeederService:
         Graph state is NEVER touched here.
         """
         qr = payload.query_result
+        rights = await self._source_rights(payload)
 
         freshness = self.check_freshness(qr.pulled_at, payload.max_age_seconds)
         if not freshness.passed:
@@ -316,15 +327,18 @@ class DuneFeederService:
             if existing is not None:
                 rows_accepted += 1
                 continue
-            # Dune is an Olympus-owned provider with public API access.
-            # Rows that pass freshness + quality gates get valid provenance so the
-            # lake Silver promotion gate (SilverRepository.check_promotion_eligibility)
-            # can approve them.
+            # The same Dune capability serves the Olympus baseline (global
+            # ingests, Olympus credentials) and tenants (their own credentials).
+            # Rows record which source owns them and the grant that admitted
+            # them; rows that pass the gates get valid provenance for the
+            # Silver promotion gate (SilverRepository.check_promotion_eligibility).
             stored = {
                 **bronze_record.model_dump(),
                 "provenance_status": "valid",
                 "quarantine_status": "not_quarantined",
-                "license_status": "public_api",
+                "license_status": _license_status(payload, rights),
+                "owner_scope": "olympus_system" if payload.tenant_scope is None else "tenant",
+                "source_rights": rights.stamp(),
             }
             await self._bronze.insert(record_id, stored)
             rows_accepted += 1
@@ -373,6 +387,34 @@ class DuneFeederService:
         )
 
     # ── Silver promotion ──────────────────────────────────────────────────────
+
+    async def _source_rights(self, payload: FeederIngestRequest):
+        """Rights for ``dune:<source_tag>`` in the scope that will own the rows."""
+        from config.settings import settings
+        from ingestion.ingestion.feed_rights import resolve_source_rights
+        from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+        scope = payload.tenant_scope or OLYMPUS_SOURCE_TENANT_ID
+
+        async def has_history() -> bool:
+            rows = await self._bronze.find_by_source_tag(
+                payload.source_tag, tenant_scope=payload.tenant_scope, limit=50,
+            )
+            return any(row.get("tenant_scope") == payload.tenant_scope for row in rows)
+
+        rights = await resolve_source_rights(
+            scope,
+            dune_source_id(payload.source_tag),
+            has_history=has_history,
+            grant_required=settings.ingress_consent.dune_source_grant_required,
+            metric="dune_feeder_source_rights_total",
+        )
+        if not rights.allowed:
+            raise ForbiddenError(
+                f"dune_source_grant_required: no active data-rights grant for {rights.source_id} "
+                f"in the {'olympus' if payload.tenant_scope is None else 'tenant'} scope."
+            )
+        return rights
 
     async def promote_to_silver(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
         """
