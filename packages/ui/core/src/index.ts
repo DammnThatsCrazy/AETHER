@@ -116,6 +116,11 @@ export { EnvironmentBadge } from './components/environment-badge';
 export { ErrorState } from './components/error-state';
 export { GlyphIcon } from './components/glyph-icon';
 export { Input } from './components/input';
+export {
+  AuthPortalShell, AuthPortalHeaderLink, AuthPortalProviderButton, AuthPortalCompactButton,
+  AuthPortalCompactRow, AuthPortalDivider, AuthPortalInput, AuthPortalPrimaryButton,
+  AuthPortalTextButton, AuthPortalError, AuthPortalNote, AUTH_PORTAL_LINK_COLOR,
+} from './components/auth-portal';
 export { LoadingState } from './components/loading-state';
 export { Modal, ModalHeader, ModalBody, ModalFooter } from './components/modal';
 export { ScrollArea } from './components/scroll-area';

@@ -16,6 +16,10 @@ const baseEnvSchema = z.object({
   VITE_AUTH0_LOGOUT_URI: z.string().url().optional(),
   // provider=connection pairs, e.g. "google=aether-staging-google,slack=aether-staging-slack".
   VITE_AUTH0_SOCIAL_CONNECTIONS: z.string().optional(),
+  // "acme.com=acme-okta,...": email domain -> Auth0 enterprise connection.
+  VITE_AUTH0_ENTERPRISE_CONNECTIONS: z.string().optional(),
+  // Auth0 passwordless email connection ("email") for sign-in codes.
+  VITE_AUTH0_PASSWORDLESS_CONNECTION: z.string().optional(),
   VITE_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   VITE_ENTERPRISE_EMAIL_VERIFIED: z.string().default('false'),
   VITE_ENTERPRISE_EMAIL: z.string().default('sales@olympuslabsml.com'),

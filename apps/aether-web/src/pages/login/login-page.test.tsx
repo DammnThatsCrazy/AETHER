@@ -57,7 +57,7 @@ describe("LoginPage public-handoff prefill", () => {
   it("prefills the email field from the ?email= query parameter", () => {
     renderLogin("/login?email=person%40example.com");
 
-    expect(screen.getByLabelText("Email address")).toHaveValue(
+    expect(screen.getByLabelText("Work email")).toHaveValue(
       "person@example.com",
     );
   });
@@ -65,7 +65,7 @@ describe("LoginPage public-handoff prefill", () => {
   it("leaves the email field empty when no ?email= is present", () => {
     renderLogin("/login");
 
-    expect(screen.getByLabelText("Email address")).toHaveValue("");
+    expect(screen.getByLabelText("Work email")).toHaveValue("");
   });
 });
 
@@ -80,7 +80,7 @@ describe("LoginPage marketing→signup redirect continuity", () => {
       "/login?redirect=%2Fsettings%2Fintegrations%3Ffamily%3Dgoogle_ads%26experience%3Dadvertising_campaigns%26intent%3Dconnect",
     );
 
-    await user.click(screen.getByRole("button", { name: "Create one" }));
+    await user.click(screen.getByRole("button", { name: "Create a workspace" }));
 
     const probe = await screen.findByTestId("signup-probe");
     expect(probe.textContent).toBe(
@@ -92,7 +92,7 @@ describe("LoginPage marketing→signup redirect continuity", () => {
     const user = userEvent.setup();
     renderLogin("/login?email=person%40example.com");
 
-    await user.click(screen.getByRole("button", { name: "Create one" }));
+    await user.click(screen.getByRole("button", { name: "Create a workspace" }));
 
     const probe = await screen.findByTestId("signup-probe");
     expect(probe.textContent).toBe("/signup");
@@ -101,8 +101,9 @@ describe("LoginPage marketing→signup redirect continuity", () => {
 
 describe("LoginPage failed sign-in messages", () => {
   async function submit(user: ReturnType<typeof userEvent.setup>) {
-    await user.type(screen.getByLabelText("Email address"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "not-the-password");
+    await user.type(screen.getByLabelText("Work email"), "person@example.com");
+    await user.click(screen.getByRole("button", { name: "Sign in with email" }));
+    await user.type(await screen.findByLabelText("Password"), "not-the-password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
   }
 
@@ -137,6 +138,31 @@ describe("LoginPage failed sign-in messages", () => {
       await screen.findByText("Too many attempts. Try again in about 10 minutes."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Incorrect email or password")).not.toBeInTheDocument();
+  });
+});
+
+describe("LoginPage email-first step", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.mocked(api.auth.login).mockReset();
+  });
+
+  it("asks for a valid work email before anything else", async () => {
+    const user = userEvent.setup();
+    renderLogin("/login");
+    await user.type(screen.getByLabelText("Work email"), "not-an-email");
+    await user.click(screen.getByRole("button", { name: "Sign in with email" }));
+    expect(await screen.findByText("Enter a valid work email.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("lets the person change the email from the password step", async () => {
+    const user = userEvent.setup();
+    renderLogin("/login?email=person%40example.com");
+    await user.click(screen.getByRole("button", { name: "Sign in with email" }));
+    expect(await screen.findByText("person@example.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByLabelText("Work email")).toHaveValue("person@example.com");
   });
 });
 

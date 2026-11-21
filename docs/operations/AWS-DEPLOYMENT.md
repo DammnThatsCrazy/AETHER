@@ -759,7 +759,9 @@ marketing app's URLs to their new pages. Its status page reads the backend's 90-
 logout and web-origin lists, the API's app URL and the Stripe checkout return
 URLs all use `https://aether.<domain>/app`, and the site build carries the
 product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings (`VITE_AUTH0_SOCIAL_CONNECTIONS`
-only when the Auth0 social connections are provisioned). Other environments keep the
+only when the Auth0 social connections are provisioned; `VITE_AUTH0_ENTERPRISE_CONNECTIONS`
+and `VITE_AUTH0_PASSWORDLESS_CONNECTION` only when company SSO connections or the
+passwordless email connection exist in the Auth0 tenant). Other environments keep the
 prerendered `apps/marketing-aether` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal
