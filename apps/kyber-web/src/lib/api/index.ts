@@ -3,3 +3,4 @@ export { graphqlQuery, GraphQLClientError } from './graphql/client';
 export { WebSocketClient } from './websocket/client';
 export type { WebSocketStatus } from './websocket/client';
 export { api } from './endpoints';
+export type { SystemSourcesView } from './endpoints';

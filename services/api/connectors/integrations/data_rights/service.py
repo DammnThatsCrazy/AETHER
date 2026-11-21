@@ -250,6 +250,19 @@ class GrantClassificationError(ValueError):
         self.reason = reason
 
 
+def _catalog_relationship(connector_id: str) -> Optional[str]:
+    """The Olympus provider catalog's declared relationship for a provider id, if catalogued."""
+    try:
+        from connectors.provider_catalog.catalog import PROVIDER_CATALOG
+    except Exception:  # catalog unavailable: no catalog constraint
+        return None
+    entries = PROVIDER_CATALOG.values() if isinstance(PROVIDER_CATALOG, dict) else PROVIDER_CATALOG
+    for entry in entries:
+        if getattr(entry, "provider_id", None) == connector_id:
+            return getattr(entry, "source_relationship", None)
+    return None
+
+
 def validate_grant_classification(body: DataRightsGrantCreate) -> None:
     """Reject grants whose relationship does not match owner, class, scope and basis."""
     rel = body.source_relationship
@@ -278,6 +291,17 @@ def validate_grant_classification(body: DataRightsGrantCreate) -> None:
         raise GrantClassificationError("subject_ref_requires_personal_account")
     if rel == "partner_feed" and not (body.contract_id or "").strip():
         raise GrantClassificationError("partner_feed_requires_contract")
+    if rel == "public_reference" and (
+        body.commercial_reuse_allowed or body.model_training_allowed or body.cross_tenant_aggregate_allowed
+    ):
+        # Invariant #9: public reference data is context, not licensed content.
+        raise GrantClassificationError("public_reference_reuse_forbidden")
+    if olympus_scope:
+        declared = _catalog_relationship(body.connector_id)
+        if declared is not None and declared != rel:
+            # An Olympus grant for a catalogued provider carries the relationship
+            # the catalog declares (e.g. CoinGecko is public_reference).
+            raise GrantClassificationError("catalog_relationship_mismatch")
 
 
 class DataRightsService:
@@ -438,6 +462,7 @@ class DataRightsService:
                 commercial_reuse_allowed=grant.commercial_reuse_allowed,
                 granted_at=grant.granted_at,
                 revoked_at=grant.revoked_at,
+                source_relationship=grant.source_relationship,
             ) for grant in grants]
 
         return results

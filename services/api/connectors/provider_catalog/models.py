@@ -249,6 +249,13 @@ class ProviderSourceEntry(BaseModel):
     model_training_review_required: bool = True
     tenant_visible: bool = False  # Olympus provider internals not exposed to tenants by default
     kyber_visible: bool = True
+    # The relationship an Olympus grant for this source must carry:
+    # olympus_source (Olympus-contracted data) or public_reference (public
+    # reference data, never commercially reused, trained on or aggregated).
+    source_relationship: str = "olympus_source"
+    # The same provider capability can also be connected by a tenant with its
+    # own credentials (an organization_system source in that tenant's scope).
+    tenant_connectable: bool = False
     operator_owner: str = "olympus_labs"
     last_verified_at: Optional[str] = None
     compliance_status: str = "pending_review"

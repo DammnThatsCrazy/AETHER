@@ -508,6 +508,36 @@ const continuationSelectionSchema = z.object({
 }).passthrough();
 
 // ─── API ─────────────────────────────────────────────────────────────────────
+export interface SystemSourcesView {
+  readonly olympus: {
+    readonly connections: ReadonlyArray<{
+      readonly connection_id: string;
+      readonly provider_identity: string;
+      readonly display_name: string;
+      readonly state: string;
+      readonly credential_stored: boolean;
+      readonly account_count: number;
+      readonly updated_at?: string | null;
+    }>;
+    readonly grants: ReadonlyArray<{
+      readonly grant_id: string;
+      readonly source_id: string;
+      readonly connector_id: string;
+      readonly connector_class: string;
+      readonly olympus_baseline_allowed: boolean;
+      readonly model_training_allowed: boolean;
+      readonly commercial_reuse_allowed: boolean;
+      readonly granted_at: string;
+    }>;
+  };
+  readonly tenants: {
+    readonly providers: Record<string, { readonly connections: Record<string, number>; readonly grants: Record<string, number> }>;
+    readonly tenant_count: number;
+    readonly connection_count: number;
+  };
+  readonly truncated: boolean;
+}
+
 export const api = {
 
   demoSeed: {
@@ -2057,6 +2087,10 @@ export const api = {
         /** Per-provider connection counts by lifecycle state (aggregate-only). */
         overview: () =>
           restClient.get('/v1/admin/kyber/provider-connections/overview', wrap(unknownSchema)).then(r => r.data),
+        /** Olympus-owned sources in full; tenant sources aggregated by provider. */
+        systemSources: () =>
+          restClient.get('/v1/admin/kyber/provider-connections/system-sources', wrap(unknownSchema))
+            .then(r => r.data as SystemSourcesView),
         /** Registry summary: providers loaded, legacy vs native plugin counts. */
         health: () =>
           restClient.get('/v1/admin/kyber/provider-connections/health', wrap(providerRuntimeHealthSchema)).then(r => r.data),

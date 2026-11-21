@@ -105,7 +105,7 @@ class FakeBridge:
     def __init__(self) -> None:
         self.events: list[Any] = []
 
-    async def ingest_events(self, tenant_id: str, events) -> int:
+    async def ingest_events(self, tenant_id: str, events, **_kwargs) -> int:
         self.events.extend(events)
         return len(events)
 

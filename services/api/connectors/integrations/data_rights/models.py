@@ -483,3 +483,4 @@ class DataRightsGrantSummary(BaseModel):
     commercial_reuse_allowed: bool
     granted_at: str
     revoked_at: Optional[str] = None
+    source_relationship: SourceRelationship = "unclassified"

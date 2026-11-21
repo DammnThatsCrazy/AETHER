@@ -561,6 +561,10 @@ class TrustPlaneConfig:
     sso_self_signup_enabled: bool = _env_bool(
         "SSO_SELF_SIGNUP_ENABLED", _env("AETHER_ENV", "local") != "staging"
     )
+    # A first-time Auth0 sign-up (any connection) must enter a one-time code
+    # emailed to its address before a workspace is created. Returning users and
+    # accepted invitations are never asked.
+    sso_signup_email_code_required: bool = _env_bool("SSO_SIGNUP_EMAIL_CODE_REQUIRED", True)
 
     # One-time, staging-only first-admin bootstrap.  This is deliberately
     # disabled by default and requires a high-entropy operator token plus an
@@ -824,6 +828,13 @@ class IngressConsentConfig:
     feed_ingress_consent_enforcement_enabled: bool = _env_bool(
         "FEED_INGRESS_CONSENT_ENFORCEMENT_ENABLED", True
     )
+    # First use of a feed source (``feed:<source>``) needs an active
+    # DataRightsGrant allowing the tenant lake. Sources a tenant already fed keep
+    # working as unclassified, tenant-lake-only rows until converged.
+    feed_source_grant_required: bool = _env_bool("FEED_SOURCE_GRANT_REQUIRED", True)
+    # Same rule for the Dune feeder (``dune:<source_tag>``), in the scope that will
+    # own the rows: a tenant's, or the reserved ``olympus`` scope for global ingests.
+    dune_source_grant_required: bool = _env_bool("DUNE_SOURCE_GRANT_REQUIRED", True)
     # C class — connector/communication durability seam (services/api/journeys/comms/ingest):
     # scrub + data-policy always run; the flag enables the per-subject (S)
     # server-receipt rejection (additionally gated by the authoritative flag AND
@@ -960,7 +971,11 @@ class CredentialPlatformConfig:
 
 @dataclass(frozen=True)
 class IngestionV2Config:
-    enabled: bool = _env_bool("INGESTION_V2_ENABLED", False)
+    # One SDK durable authority: deploy targets default to the transactional
+    # typed Bronze + outbox path; an explicit env var still wins.
+    enabled: bool = _env_bool(
+        "INGESTION_V2_ENABLED", _env("AETHER_ENV", "local") in ("staging", "production")
+    )
     canary_tenants: list[str] = field(
         default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
     )

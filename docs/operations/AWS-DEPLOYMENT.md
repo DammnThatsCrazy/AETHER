@@ -90,7 +90,7 @@ source_hashes:
   "infra/aws/config/": "sha256:984a0d6c283c0394725f89ed882eb900e2d323345443e7e37036962184e4b5fe"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:d1e1e4c25455ecd6638eb507b18f907193b736b8dfc4ae7f4b4f40fd1c362af1"
-  "infra/aws/terraform/": "sha256:bbd3497fcb5acc899b25460ad39d51b4b4f10b11336ad2fbab4435a0b9947092"
+  "infra/aws/terraform/": "sha256:0ff5cc91dfc0980263d78e19104bd55c2d73b929e9a94041614fa1c2bb4a1b52"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -905,6 +905,10 @@ module enables a provider when its credentials are provisioned: Google from the
 Apple from `TF_AUTH0_APPLE_CLIENT_ID` / `_CLIENT_SECRET` / `_TEAM_ID` /
 `_KEY_ID` (a Services ID and its key). In the pilot lane only provisioned
 providers are created; with `enable_social_connections=true` every provider is.
+The Google connection is enabled for the Aether web and CLI clients, plus the
+Kyber client outside the pilot (`social_kyber_enabled`); the pilot defers Kyber
+identity, and its plan policy refuses any association change that enables
+Kyber or drops an already enabled client.
 The module's `aether_social_connections` output feeds
 `VITE_AUTH0_SOCIAL_CONNECTIONS`, so the sign-in and sign-up screens show
 exactly the buttons that work.

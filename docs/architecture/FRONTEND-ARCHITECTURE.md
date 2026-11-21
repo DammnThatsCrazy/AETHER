@@ -50,8 +50,8 @@ reviewed_source_commits:
   - {'commit': '0d252082', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
   - {'commit': 'f74f8919', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/src/": "sha256:79272e3fd0173a0b65bc9e40247271df82f5e56a571fa71ddc6dd244dd6b3a58"
-  "apps/kyber-web/src/": "sha256:5bcc84037e56c027dd6b529e4767005f87972e4d87a4ebfec8eab4c898c73660"
+  "apps/aether-web/src/": "sha256:fcfe2d51a7c1cf121cd942a8cc1fb79b0ee630f8de92f5a97e4f0cb6099c79ff"
+  "apps/kyber-web/src/": "sha256:6f221ade2b355146a8a61e2d0645705229a1da75c99cfcab6b4729cdd7bd08d0"
   "packages/ui/core/src/": "sha256:fc8aca633ab6ac00f6e699bd36b3ab8d89e70970c2b1ca7ecb1c1519f838c7e5"
 ---
 
@@ -89,7 +89,7 @@ the root.
   is shown as a wait message built from `retry_after_seconds`
   (`features/auth/rate-limit.ts`) rather than as a wrong password or code. Login
   mirrors the public website's portal (shared `AuthPortal*` primitives in
-  `@aether/ui`, also used by Kyber's operator login; Kyber's session banners, including **Step-up required** with **Re-verify with Google**, are mounted once in its app shell so they show on every console page) and is email-first; the
+  `@aether/ui`, also used by Kyber's operator login; Kyber's session banners, including **Step-up required** with **Re-verify with Google**, are mounted once in its app shell so they show on every console page; Kyber's **System Sources** page (`/system-sources`) lists Olympus-owned sources in full and tenant sources aggregated by provider, from `GET /v1/admin/kyber/provider-connections/system-sources`) and is email-first; the
   website's "Sign in" link `/app/signin` redirects to `/login`. Google and Apple
   (full-width) and Microsoft and Slack (compact) appear for each social
   connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`
@@ -108,7 +108,7 @@ the root.
   session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
   the next sign-in asks again instead of silently reusing it; if Auth0 cannot
   be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
-  `/v1/auth/sso/callback`, which links a verified email to its existing user or
+  `/v1/auth/sso/callback`; a first-time sign-up then shows **Check your email** and finishes with the emailed 6-digit code (the same token sent again with `signup_code`), and a user with two-step verification gets the **Two-step verification** code step (authenticator or recovery code, `/v1/auth/mfa/verify`), which also follows the password step on `/login` (`SignInCodeStep` in `features/auth`). Settings → Personal → Profile has the opt-in **Two-step verification** card: set up with a QR code (`qrcode-generator`) or the key, confirm with a code, save recovery codes, turn off or replace codes with a current code. `/v1/auth/sso/callback` which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
   Auth0 configured, `/signup` is the portal sign-up screen (same primitives as
   sign-in; it shows the chosen plan, the same social buttons, and a work email

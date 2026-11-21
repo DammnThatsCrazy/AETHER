@@ -133,7 +133,8 @@ disabled until a durable replay identity and consumer idempotency boundary exist
 ```
 POST /v1/ingest/events        — deprecated single-event alias
 POST /v1/ingest/events/batch  — deprecated batch alias
-POST /v1/ingest/feed          — server-to-server external feed (requires external_id)
+POST /v1/ingest/feed          — server-to-server external feed (requires external_id;
+                                first use of a source needs a grant for feed:<source>)
 ```
 
 SDKs **must** use `/v1/batch`. These aliases are retained for internal tools only and are marked deprecated in the OpenAPI schema.

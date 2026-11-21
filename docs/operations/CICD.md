@@ -181,7 +181,8 @@ re-plans. For `deployment_lane=pilot`, policy validation runs both when the
 reviewed plan is produced and immediately before apply. It rejects ECS service
 or scaling-target replacement, Application Auto Scaling ownership-tag drift,
 destructive Aether Auth0 changes, and Auth0 changes outside the Aether pilot
-path; its shared database-connection step appends only Aether and leaves the
+path (which includes the Google and Apple social connections and their Aether
+client associations once their credentials are provisioned); its shared database-connection step appends only Aether and leaves the
 existing client set outside Terraform's pilot write scope. The guard permits
 only non-destructive state-only release of legacy full-set addresses. Staging
 wake and sleep use the same guard.

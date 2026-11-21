@@ -19,7 +19,7 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:b1c2ebd96136fe70afcbaf79ebef7ac4076c4727de20cd8fb955fa07c78bf508"
+  "services/api/config/settings.py": "sha256:c736e4b21d24dd3221980002b0959ce7319f377d0166dd58e81a7ce7076fb2bc"
   "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
   "services/api/workers/runtime/consumer_specs.py": "sha256:03cfaa1cf4341a5ac31b6222d09b29e2823162e5c6c0aac10e7c8215089cf516"
   "services/api/workers/runtime/roles.py": "sha256:f3dcb2ef61fa3a0b2d3a3d77f76e08c5343c1d2388b6894d1ea578c2ee57998b"

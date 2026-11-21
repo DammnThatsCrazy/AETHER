@@ -8,7 +8,7 @@ import {
 } from "@aether/ui";
 import { AetherLogo } from "@aether-app/components/aether-logo";
 import type { SocialProvider } from "@aether/ui";
-import { useAuth, resolveAuthGrant, describeAuthRateLimit } from "@aether-app/features/auth";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit, SignInCodeStep, type AuthGrantResponse } from "@aether-app/features/auth";
 import { rememberPostAuthDestination, resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
 import { api } from "@aether-app/lib/api/endpoints";
 import { env } from "@aether-app/lib/env";
@@ -46,6 +46,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
 
   const redirectTo = resolvePostAuthRedirect(searchParams.get("redirect"));
 
@@ -111,19 +112,28 @@ export function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      // Trust-plane posture returns a durable session; legacy returns api_key.
-      const grant = resolveAuthGrant(await api.auth.login(email.trim(), password));
-      if (grant.kind === "session") {
-        await sessionLogin(grant.session);
-      } else {
-        await apiKeyLogin(grant.apiKey);
-      }
-      void navigate(redirectTo, { replace: true });
+      await finishSignIn(await api.auth.login(email.trim(), password));
     } catch (err) {
       setError(describeAuthRateLimit(err) ?? "Incorrect email or password");
     } finally {
       setLoading(false);
     }
+  }
+
+  /** Issue the session, or stop for the user's two-step verification code. */
+  async function finishSignIn(response: AuthGrantResponse) {
+    if (response.mfa_required && response.mfa_challenge) {
+      setMfaChallenge(response.mfa_challenge);
+      return;
+    }
+    // Trust-plane posture returns a durable session; legacy returns api_key.
+    const grant = resolveAuthGrant(response);
+    if (grant.kind === "session") {
+      await sessionLogin(grant.session);
+    } else {
+      await apiKeyLogin(grant.apiKey);
+    }
+    void navigate(redirectTo, { replace: true });
   }
 
   async function handleDevelopmentSession() {
@@ -139,6 +149,16 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (mfaChallenge) {
+    return (
+      <SignInCodeStep
+        kind="mfa"
+        onSubmit={async code => { await finishSignIn(await api.auth.mfaVerify(mfaChallenge, code)); }}
+        onCancel={() => { setMfaChallenge(null); setPassword(""); setStep("email"); }}
+      />
+    );
   }
 
   return (

@@ -36,15 +36,15 @@ source_hashes:
   "services/api/actions/": "sha256:d1cf7b1487cb20463f07f8d2b7c029eb2e2d250da256b5a3391e0a22f768c28b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
-  "services/api/connectors/": "sha256:4fd7758e6766a029ae72e7d2b2ae19368c417b1e2f51b8ddd12536a4afe39264"
+  "services/api/connectors/": "sha256:a118c9bd771134a73062f7f271795836d7f952d5c57799070905bc6a9578d2a6"
   "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
   "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
-  "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:be54ec166f57d24fb928ccb5022759eb9f428c133d0d357a2cbd289a08ce3b59"
+  "services/api/identity/": "sha256:c54fe130e4198fd6b3fb99b0a288d3c5e2b61f6dadfd11737c4a4fdf8c266036"
+  "services/api/ingestion/": "sha256:222a17aecf26f82f603f5a351ee036171dc59f946e331dfad5d48d186f20dcee"
   "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:28cdda6ac3d856069bf3fffe785df1d8318dd1646e435d99f2efb224e04b37ad"
+  "services/api/tenancy/": "sha256:03c7b4e615911ead747c377eff99837a96dfd4b0f6a3c1afe7785c90d6e5340c"
   "services/api/value/": "sha256:000220c291567fc2fc4dfabb735f69947d1dd6f4c030be874e1a903ccb8bf44a"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
@@ -264,8 +264,9 @@ signature-verification failures.
 | `/v1/auth/register` | POST | Email sign-up step 1 — send OTP to the supplied email (20 requests per minute per client IP; 5 codes per address per 15 minutes) |
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key (20 requests per minute per client IP; 5 wrong codes per address per 15 minutes, then `429` even for the right code) |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost (same IP and per-address limits as `register`) |
-| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP; 5 failed attempts per 15 minutes per address from one client IP (so one caller cannot lock the account holder out); and 25 failed attempts per 15 minutes per address from anywhere. A successful login clears both failure counts; over any limit answers `429`, and `errors[0].limiter` names which limit refused the request |
-| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off unless `session_required: true`, which refuses before token validation or membership side effects). The Access Kit CLI uses Auth0 Device Authorization and this guard. An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](../architecture/ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
+| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP; 5 failed attempts per 15 minutes per address from one client IP (so one caller cannot lock the account holder out); and 25 failed attempts per 15 minutes per address from anywhere. A successful login clears both failure counts; over any limit answers `429`, and `errors[0].limiter` names which limit refused the request. A user with two-step verification on gets `{mfa_required: true, mfa_challenge}` and no credential; `/v1/auth/mfa/verify` finishes the sign-in |
+| `/v1/auth/mfa/verify` | POST | Second step for a user with two-step verification. Body: `challenge` (from the first step, 5 minutes, single use) and `code` (current authenticator code, or one unused recovery code). A replayed code is refused; five wrong codes end the challenge. Answers the same session (or legacy key) as the first step would have |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off unless `session_required: true`, which refuses before token validation or membership side effects). The Access Kit CLI uses Auth0 Device Authorization and this guard. An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; otherwise, only when `SSO_SELF_SIGNUP_ENABLED` is on (the staging profile turns it on), a new tenant is provisioned. A first-time sign-up is first answered `{signup_verification_required: true, email}` and a 6-digit code (10 minutes, bound to the Auth0 `sub`) is emailed; the same token sent again with `signup_code` creates the tenant (`SSO_SIGNUP_EMAIL_CODE_REQUIRED`, default on). Returning users and invitations are never asked. Two-step verification applies as for `/v1/auth/login`. A rejected token returns 400 and logs the reason (see [Access Control](../architecture/ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth), including whether revocable human-session auth is enabled |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
@@ -311,6 +312,11 @@ permission gate beyond authentication.
 | `/v1/me/api-keys/{key_id}` | PATCH | Rename an existing API key |
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
+| `/v1/me/mfa` | GET | Two-step verification status for the signed-in user: `enabled`, `method` (`totp`), `enrolled_at`, `recovery_codes_remaining`. Requires a signed-in user session; API keys get `403` |
+| `/v1/me/mfa/enroll` | POST | Start authenticator enrolment: returns `secret` and an `otpauth_uri` for a QR code. Nothing changes until it is confirmed (15 minutes) |
+| `/v1/me/mfa/enroll/confirm` | POST | Body `code` from the authenticator. Turns two-step on and returns 10 recovery codes once; the secret is stored encrypted (`BYOK_ENCRYPTION_KEY`) and only hashes of the recovery codes are kept |
+| `/v1/me/mfa/disable` | POST | Body `code` (current code or a recovery code). Turns two-step off |
+| `/v1/me/mfa/recovery-codes` | POST | Body `code`. Replaces every recovery code and returns the new set once |
 
 `GET /v1/me` includes `graph_scope` with `tenant_id`, `workspace_id`,
 `environment_id`, and `scope_model`. In the current
@@ -701,7 +707,13 @@ The deprecated server-to-server aliases `POST /v1/ingest/events` and
 `POST /v1/ingest/events/batch` are converged (WS-B2) onto this same canonical
 spine — validation, consent, scrub, Bronze-durable write, idempotency, and
 publish semantics match `/v1/batch`, and the aliases now require the same
-`write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
+`write` permission. They take the same dispatch as `/v1/batch`
+(`ingest_sdk_batch`), so when the transactional path is selected for a tenant
+an alias also writes typed Bronze plus outbox and never publishes in-request.
+`INGESTION_V2_ENABLED` defaults on for `staging` and `production`. An SDK
+heartbeat whose `manifest_status` is not `healthy` (forbidden, expired,
+signature_invalid, unavailable) is never scored `healthy`; it is at most
+`degraded`. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
 retires them with HTTP 410 (routes stay mounted; their bodies return the
 retired error and direct callers to `/v1/batch`).
 
@@ -3864,6 +3876,8 @@ Operator command center for ML model registry, artifact management, feature cont
 
 Manage automated Dune query polling schedules per tenant. All endpoints require `admin` permission.
 
+Every ingest (`POST /v1/admin/dune-feeder/ingest`, manual or scheduled) resolves rights for `dune:<source_tag>` in the scope that will own the rows: a tenant's own grant (tenant lake use) for a tenant scope, or an Olympus grant (Olympus baseline use) under the reserved `olympus` scope for a global ingest by a Kyber operator. First use without a grant answers 403 `dune_source_grant_required`; a source already fed in that scope continues as legacy (`unclassified`, tenant-lake-only). Rows carry `owner_scope`, `source_rights` and a matching `license_status`.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/admin/dune-feeder/schedule` | Create a new scheduled Dune query polling config |
@@ -4679,7 +4693,10 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   only after discovery recorded its live shop identity (the stored credential is
   used for discovery whenever one exists), and is rejected while another tenant
   holds the same shop selected on a connection that is not revoked, disabled,
-  or failed.
+  or failed. A successful selection also creates the account's
+  `organization_system` data-rights grant (`provider-account:<connection>:<account>`,
+  tenant lake, graph and insights only) unless one is already active, and
+  returns its id as `source_grant_id`; the reserved `olympus` scope never gets one.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
   (optional `since` for backfill and optional `stream_ids` to select at most 32
   unique, nonblank stream identifiers). An omitted or empty list runs all
@@ -4709,6 +4726,11 @@ fail-closed):
 
 - `GET /v1/admin/kyber/provider-connections/overview` — per-provider connection
   counts by lifecycle state (aggregate only).
+- `GET /v1/admin/kyber/provider-connections/system-sources` — System Sources:
+  every connection and active grant under the reserved `olympus` scope (state,
+  whether a credential is stored, account count, permitted uses), and tenant
+  sources aggregated per provider (connections by state, active grants by
+  relationship, tenant count). No tenant id, configuration or credential.
 - `GET /v1/admin/kyber/provider-connections/providers` — provider list
   (installed plugins + legacy connectors) at the admin surface, distinct from
   the tenant-scoped `/v1/provider-connections/providers`.

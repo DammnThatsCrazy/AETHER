@@ -594,7 +594,9 @@ class WebhookGateway:
         accepted_count = 0
         if events:
             try:
-                accepted_count = await self._bridge().ingest_events(tenant_id, events)
+                accepted_count = await self._bridge().ingest_events(
+                    tenant_id, events, raw_records=persisted_records
+                )
             except Exception as exc:
                 logger.warning(
                     "provider webhook event persistence failed tenant=%s provider=%s error=%s",

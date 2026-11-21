@@ -23,9 +23,9 @@ reviewed_source_commits:
   - {'commit': '0d252082', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
   - {'commit': 'f74f8919', 'reason': 'Merge of development (reviewed upstream) with this branch''s owned-domain change; no further doc change.'}
 source_hashes:
-  "apps/aether-web/": "sha256:4782139d05616b4fb8fade1da1e3b0cc67984bba7dcc806780583a2b70ddbb83"
+  "apps/aether-web/": "sha256:8b16d6f6e712d52aca467397c31be800e8bd41f0c090a80b8e84898c00160e6e"
   "apps/demo/": "sha256:3ac6a6e98824000241d9e03ba38cfb251190a6e86a8c1abfddfd0b384b091902"
-  "apps/kyber-web/": "sha256:4c7983c3a5a62b9231fa30835a1786d316c57581a4ac345b1908f57e6cd64825"
+  "apps/kyber-web/": "sha256:697cefb739f7cf48d5002b5f6468f18f43e20948f2f400a492e02cfa334cde10"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
   "scripts/validate_frontend_data_truth.py": "sha256:25de73c82ac07cdc52b7a9be8d7f8ef69ff50ca7ba735c1e8d51652dcf92636c"
 ---

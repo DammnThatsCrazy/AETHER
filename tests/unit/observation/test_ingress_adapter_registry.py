@@ -52,13 +52,13 @@ def test_each_family_carries_a_blueprint_adapter_name() -> None:
     }
 
 
-def test_sdk_and_replay_families_are_registered_today() -> None:
-    """WS-B1 ships the SDK adapter and WS-B4 the replay adapter; the other five
-    families are *declared* with a WS-B convergence status — never silent
-    stubs."""
-    assert adapters.registered_families() == ("sdk", "replay")
+def test_sdk_connector_and_replay_families_are_registered_today() -> None:
+    """WS-B1 ships the SDK adapter, WS-B4 the replay adapter and the provider
+    runtime the connector adapter; the other families are *declared* with a
+    WS-B convergence status — never silent stubs."""
+    assert adapters.registered_families() == ("sdk", "connector", "replay")
     for spec in adapters.FAMILY_SPECS:
-        if spec.source_type in ("sdk", "replay"):
+        if spec.source_type in ("sdk", "connector", "replay"):
             assert spec.adapter_class is not None
             assert spec.status.startswith("implemented")
         else:
