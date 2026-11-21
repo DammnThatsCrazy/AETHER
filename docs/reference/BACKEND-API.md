@@ -33,16 +33,16 @@ source_hashes:
   "services/api/actions/": "sha256:d1cf7b1487cb20463f07f8d2b7c029eb2e2d250da256b5a3391e0a22f768c28b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
-  "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
+  "services/api/connectors/": "sha256:4fd7758e6766a029ae72e7d2b2ae19368c417b1e2f51b8ddd12536a4afe39264"
   "services/api/governance/": "sha256:e58aa729dabca28978fed0766f2af7dddcf07610c9c4223caf594dd18be1308f"
-  "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
+  "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
   "services/api/ingestion/": "sha256:b6213f37eb693cbd8217b682b05b14d62c6a31a034d06bf026b5f093d420a14e"
-  "services/api/intelligence/": "sha256:30264bdf53288e451d3452155ef114d716cfe4b6caed329fddf0c27329a616fc"
+  "services/api/intelligence/": "sha256:d7775c31e3fe675f277a26bccd56de3217ccf2f09bf78be6387084e7957fa6f1"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:10697d043619996e07d0d2bfe73f68e878e94482f6f7bd9be0ce4539288aff7b"
-  "services/api/value/": "sha256:76a33eaf5e2714c8fc57b35cec1f9e8ccbe89835696e9f92250d49f79e63d1d8"
+  "services/api/tenancy/": "sha256:28cdda6ac3d856069bf3fffe785df1d8318dd1646e435d99f2efb224e04b37ad"
+  "services/api/value/": "sha256:000220c291567fc2fc4dfabb735f69947d1dd6f4c030be874e1a903ccb8bf44a"
   "services/api/workers/": "sha256:946ad924210e7bbba8e77f94160e677a00c81eb356671583d7c4131edb332e89"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1520,7 +1520,7 @@ applied because the action's graph mutations do not share a transaction.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/x402/capture` | Ingest an x402 exchange a tenant's server observed; when the report carries a payment proof, verify it on-chain and return `settlement.state` (`settled` / `failed` / `pending` / `not_observable`) |
+| POST | `/v1/x402/capture` | Ingest an x402 exchange a tenant's server observed; when the report carries a payment proof, verify it on-chain and return `settlement.state` (`settled` / `failed` / `pending` / `not_observable` / `conflicting`) |
 | GET | `/v1/x402/graph` | Economic graph snapshot |
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
@@ -4583,7 +4583,7 @@ workstream the catalog read model above deferred: it combines the catalog's
 provider truth with the tenant's connection record facts under the "Connected
 ≠ Ready" honesty law.
 
-| GET | `/v1/tenant/integration-readiness` | The joined projection for the calling tenant: every connectable catalog manifest (plus any tenant-configured family the catalog no longer exposes) joined with the tenant's stored connection facts into an evidence-derived `tenant_state` per integration. |
+| GET | `/v1/tenant/integration-readiness` | The joined projection for the calling tenant: every tenant-connectable catalog manifest (enabled somewhere and offered for tenant self-service; Olympus reference sources such as venue market data are excluded) (plus any tenant-configured family the catalog no longer exposes) joined with the tenant's stored connection facts into an evidence-derived `tenant_state` per integration. |
 | GET | `/v1/tenant/integration-readiness?experience_category={cat}` | Restrict the projection to one customer experience category (e.g. `advertising_campaigns`). |
 | GET | `/v1/tenant/integration-readiness?state={state}` | Restrict to one tenant-contextual state (`available` / `connected` / `ready` / `connection_disabled` / `needs_attention`). |
 
@@ -5610,11 +5610,11 @@ own linked subjects and never writes graph truth. Responses follow
 
 | Method | Path | Summary |
 |---|---|---|
-| POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` first syncs the tenant's linked accounts through rights admission. Runs use only fills admitted under a grant; others are excluded and reported as `unadmitted_fills_excluded` |
+| POST | `/v1/social360/propagation/runs` | Compute one run for `window_start`..`window_end` (optional `instrument_keys`, `channels`, `exposure_window_seconds`, `max_hops`, `include_live`). Returns one episode per instrument and side: first-entry adopters, evidence-backed exposure paths, separate reach/radius/breadth/velocity/lag metrics, an exposed-vs-unexposed baseline, coordination signals, and an inferred `organic` / `viral` / `coordinated` / `insufficient_data` classification. `include_live` first syncs the tenant's linked accounts through rights admission. Runs use only fills admitted under a grant whose grant still permits the use now; never-admitted fills are excluded as `unadmitted_fills_excluded`, fills behind a revoked (or re-link-replaced) grant as `revoked_grant_fills_excluded`, and an unreadable grant authority excludes them as `fill_grant_authority_unavailable` |
 | POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
 | GET | `/v1/social360/propagation/runs` | Saved runs of the tenant (runs created with `save=true`), newest first |
 | GET | `/v1/social360/propagation/runs/{run_id}` | One saved run with `stale` and `stale_reasons`: `source_grant_revoked` when a grant behind one of its fills is no longer active, `linked_population_changed` when links were added, revoked or reassigned. `404` for another tenant's run |
-| POST | `/v1/social360/propagation/runs/{run_id}/recompute` | Run the saved query again over current inputs and save the new run with `supersedes` set |
+| POST | `/v1/social360/propagation/runs/{run_id}/recompute` | Run the saved query again over current inputs and save the new run with `supersedes` set. An unchanged recompute (same deterministic run id) leaves the saved run intact and returns it with fresh staleness |
 
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate

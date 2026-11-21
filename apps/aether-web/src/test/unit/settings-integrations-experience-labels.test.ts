@@ -13,7 +13,7 @@ interface Stub {
 const item = (id: string, experience_category: string | null): Stub => ({ id, experience_category });
 
 describe('features/settings experience-category presentation', () => {
-  it('maps the eight server wire tokens to the §6 customer vocabulary', () => {
+  it('maps the nine server wire tokens to the §6 customer vocabulary', () => {
     expect(EXPERIENCE_CATEGORY_LABELS).toEqual({
       advertising_campaigns: 'Advertising',
       commerce_revenue: 'Commerce & Revenue',
@@ -23,6 +23,7 @@ describe('features/settings experience-category presentation', () => {
       social_community: 'Social & Community',
       customer_support: 'Customer Support',
       work_operations: 'Work Operations',
+      markets_trading: 'Markets & Trading',
     });
   });
 

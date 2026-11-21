@@ -30,7 +30,7 @@ export const TENANT_STATE_READY = 'ready';
 export const TENANT_STATE_CONNECTION_DISABLED = 'connection_disabled';
 export const TENANT_STATE_NEEDS_ATTENTION = 'needs_attention';
 
-/** §6 UX display labels for the eight customer experience categories. */
+/** §6 UX display labels for the nine customer experience categories. */
 export const EXPERIENCE_CATEGORY_LABELS: Record<string, string> = {
   advertising_campaigns: 'Advertising',
   commerce_revenue: 'Commerce & Revenue',
@@ -40,6 +40,7 @@ export const EXPERIENCE_CATEGORY_LABELS: Record<string, string> = {
   social_community: 'Social & Community',
   customer_support: 'Customer Support',
   work_operations: 'Work Operations',
+  markets_trading: 'Markets & Trading',
 };
 
 export function experienceCategoryLabel(category: string): string {

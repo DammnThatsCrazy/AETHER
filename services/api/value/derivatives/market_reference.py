@@ -70,6 +70,11 @@ class MarketFact:
     def canonical_instrument_id(self) -> str:
         if self.instrument_type == "event_contract":
             return f"event_contract:{self.venue}:{self.venue_market_id}"
+        if self.instrument_type == "dated_future":
+            # Each dated contract (expiry, multiplier) is its own instrument;
+            # an underlying/quote key would collapse every expiry into the
+            # first one written (the instrument insert does nothing on conflict).
+            return f"dated_future:{self.venue}:{self.venue_market_id}"
         return f"{self.instrument_type}:{self.underlying_asset_id}:{self.quote_asset_id}"
 
 

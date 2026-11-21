@@ -36,7 +36,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:ce75e7b9566aead77908aed4764a361d12d5bd1783516fd3adb29cd3c26d5414"
   "services/api/repositories/repos.py": "sha256:fe2d94f66f7df1d52bc135c9021d1039fc39140378587b7ed2b24f123164a324"
-  "services/api/value/x402/": "sha256:9adb59933e0b97374586571246ddc5aaa9c7ba2edca5d460d4d7331b906076a4"
+  "services/api/value/x402/": "sha256:ee57b396af08dd128a1fad054736d6c366ef211797538623bf7b5f2acc73be2d"
 ---
 # x402 Protocol Support Audit — Aether Repository
 

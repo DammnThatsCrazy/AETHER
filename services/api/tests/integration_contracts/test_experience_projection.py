@@ -20,7 +20,7 @@ from shared.integration_contracts.experience import (
     experience_category_for,
 )
 
-# The eight lifecycle experiences, in stable presentation order (ADR-0010).
+# The nine lifecycle experiences, in stable presentation order (ADR-0010).
 _EXPECTED = (
     ExperienceCategory.ADVERTISING_CAMPAIGNS,
     ExperienceCategory.COMMERCE_REVENUE,
@@ -30,12 +30,13 @@ _EXPECTED = (
     ExperienceCategory.SOCIAL_COMMUNITY,
     ExperienceCategory.CUSTOMER_SUPPORT,
     ExperienceCategory.WORK_OPERATIONS,
+    ExperienceCategory.MARKETS_TRADING,
 )
 
 
-def test_experience_categories_are_the_fixed_eight() -> None:
+def test_experience_categories_are_the_fixed_nine() -> None:
     assert EXPERIENCE_CATEGORIES == _EXPECTED
-    assert len(set(ExperienceCategory)) == 8
+    assert len(set(ExperienceCategory)) == 9
     values = [c.value for c in ExperienceCategory]
     assert len(values) == len(set(values)), "experience category values must be unique"
 

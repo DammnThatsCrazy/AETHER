@@ -51,6 +51,7 @@ class ExperienceCategory(str, enum.Enum):
     SOCIAL_COMMUNITY = "social_community"
     CUSTOMER_SUPPORT = "customer_support"
     WORK_OPERATIONS = "work_operations"
+    MARKETS_TRADING = "markets_trading"
 
 
 # Stable presentation order for the customer-facing catalog / Settings groups.
@@ -63,6 +64,7 @@ EXPERIENCE_CATEGORIES: tuple[ExperienceCategory, ...] = (
     ExperienceCategory.SOCIAL_COMMUNITY,
     ExperienceCategory.CUSTOMER_SUPPORT,
     ExperienceCategory.WORK_OPERATIONS,
+    ExperienceCategory.MARKETS_TRADING,
 )
 
 # ── Derivation rule tables ───────────────────────────────────────────────────
@@ -95,6 +97,9 @@ _CATEGORY_TO_EXPERIENCE: dict[str, ExperienceCategory] = {
     "project": ExperienceCategory.WORK_OPERATIONS,
     "messaging": ExperienceCategory.WORK_OPERATIONS,
     "support": ExperienceCategory.CUSTOMER_SUPPORT,
+    # Read-only derivatives and prediction-market venue accounts (account
+    # fills, positions, market data) that a tenant links to observe trading.
+    "derivatives": ExperienceCategory.MARKETS_TRADING,
 }
 
 # ADR-C11 cohort token. Communications membership is derived from manifest data

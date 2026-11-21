@@ -3,8 +3,8 @@
 
 Sources (read-only — canonical single source of truth, never edited here):
   services/api/shared/integration_contracts/catalog.py
-      ALL_MANIFESTS four-group union — connectors (21) / ad-platforms (7) /
-      payment-rails (5) / deferred-credit-bureaus (3). Each ProviderManifest is
+      ALL_MANIFESTS five-group union — connectors (21) / ad-platforms (7) /
+      payment-rails (5) / derivatives-venues (16) / deferred-credit-bureaus (3). Each ProviderManifest is
       honesty-validated at import (validate_manifest), so everything projected
       here is already honest.
   services/api/shared/integration_contracts/experience.py
@@ -78,8 +78,8 @@ _DESCRIPTOR_TAXONOMY_TEMPLATE = '''/**
  *   2. PROVIDER / CATEGORY MIRROR (generated) — a pure TypeScript mirror of the
  *      unified integration catalog derived from
  *        services/api/shared/integration_contracts/catalog.py
- *      (ALL_MANIFESTS four-group union: connectors / ad-platforms /
- *      payment-rails / deferred-credit-bureaus) and
+ *      (ALL_MANIFESTS five-group union: connectors / ad-platforms /
+ *      payment-rails / derivatives-venues / deferred-credit-bureaus) and
  *        services/api/shared/integration_contracts/experience.py
  *      (customer-facing experience categories). Keep it in step by running the
  *      generator — never by hand-editing this file.
@@ -275,6 +275,10 @@ export interface IntelligenceSourceCoverage {
 # ---------------------------------------------------------------------------
 
 
+def _joined(values) -> str:
+    return "|".join(sorted(set(values)))
+
+
 def _load_catalog():
     from shared.certification.readiness import readiness_rank
     from shared.integration_contracts.catalog import (
@@ -282,6 +286,7 @@ def _load_catalog():
         ALL_MANIFESTS,
         CONNECTOR_MANIFESTS,
         DEFERRED_CREDIT_BUREAU_MANIFESTS,
+        DERIVATIVES_VENUE_MANIFESTS,
         PAYMENT_RAIL_MANIFESTS,
     )
     from shared.integration_contracts.experience import (
@@ -294,6 +299,15 @@ def _load_catalog():
             ("connectors", "ingestion", "connector", CONNECTOR_MANIFESTS),
             ("ad_platforms", "ads", "metrics", AD_MANIFESTS),
             ("payment_rails", "payment_rails", "observe", PAYMENT_RAIL_MANIFESTS),
+            # Venues expose two products (account reads, market data) with a
+            # per-venue capability, so the group's product/capability are the
+            # sorted unique values joined with '|'.
+            (
+                "derivatives_venues",
+                _joined(m.product_id for m in DERIVATIVES_VENUE_MANIFESTS),
+                _joined(m.capability_id for m in DERIVATIVES_VENUE_MANIFESTS),
+                DERIVATIVES_VENUE_MANIFESTS,
+            ),
             (
                 "deferred_credit_bureaus",
                 "credit",
@@ -363,7 +377,7 @@ def _build() -> str:
     lines.append("\n// ════════════════════════════════════════════════════════════════════")
     lines.append("// Provider / category mirror — GENERATED from the Python catalog")
     lines.append("// Source of truth: shared/integration_contracts/catalog.py (ALL_MANIFESTS")
-    lines.append("// four-group union) + shared/integration_contracts/experience.py.")
+    lines.append("// five-group union) + shared/integration_contracts/experience.py.")
     lines.append("// Regenerate: python scripts/generate_connector_taxonomy.py")
     lines.append("// ════════════════════════════════════════════════════════════════════\n")
 
@@ -389,12 +403,14 @@ def _build() -> str:
             "connectors": "CONNECTOR_FAMILIES",
             "ad_platforms": "AD_PLATFORM_FAMILIES",
             "payment_rails": "PAYMENT_RAIL_FAMILIES",
+            "derivatives_venues": "DERIVATIVES_VENUE_FAMILIES",
             "deferred_credit_bureaus": "DEFERRED_CREDIT_BUREAU_FAMILIES",
         }[group_id]
         type_name = {
             "connectors": "ConnectorFamily",
             "ad_platforms": "AdPlatformFamily",
             "payment_rails": "PaymentRailFamily",
+            "derivatives_venues": "DerivativesVenueFamily",
             "deferred_credit_bureaus": "DeferredCreditBureauFamily",
         }[group_id]
 

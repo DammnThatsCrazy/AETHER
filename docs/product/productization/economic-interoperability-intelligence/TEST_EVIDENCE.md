@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [tests/unit/stablecoin/, tests/unit/derivatives/, tests/unit/interop/, tests/unit/test_economic_noesis_ooda_wiring.py]
 canonical_owner: platform@aether
 source_hashes:
-  "tests/unit/derivatives/": "sha256:98fc450b9b0107485eced87801834dc99ada05de97eab2367ca2251b7bdf8b90"
+  "tests/unit/derivatives/": "sha256:dd3e5ebf9219f9a6e8e37526db2866b6e63ed4f5503df724667ec58921be6e55"
   "tests/unit/interop/": "sha256:bcd2fb4f4ef848a76e7ddb843a7f423167469b93f598468df28586e99a38e86e"
   "tests/unit/stablecoin/": "sha256:22b6ec6271545c603ccdc2950387ed959afc6b04433787a7f4148d9b7718eac6"
   "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:fcf7ac56e7e4fb008fae05e265d60703dea60bce1581f005a91972eb67b8839d"
@@ -53,15 +53,17 @@ source_hashes:
   `public_reference` grants with no tenant, cross-tenant, training or
   commercial rights; public market records are admitted before registry rows
   are written; a revoked source stops counting and a denied raw write writes
-  nothing. Kalshi (`test_kalshi_account.py`): RSA-PSS signature verifies
+  nothing; dated futures with different expiries are separate instruments.
+  Kalshi (`test_kalshi_account.py`): RSA-PSS signature verifies
   against the public key; signed portfolio reads project per-side
   event-contract fills and positions; no credential means no read;
   conformance and certification pass; key link then signed sync writes
   admitted fills; wallet links are refused. Bybit and Coinbase futures
   (`test_cex_futures_adapters.py`): HMAC signatures match the sent query,
   ES256 JWTs verify and name the exact request, OAuth tokens are sent as
-  bearer, conformance and certification pass, and the shared REST transport
-  keeps a pre-signed query string. Venue OAuth (`test_venue_oauth.py`): the app
+  bearer, conformance and certification pass, the shared REST transport
+  keeps a pre-signed query string, and Bybit HTTP-200 application errors
+  (`retCode`) are classified failed reads, never healthy empty pages. Venue OAuth (`test_venue_oauth.py`): the app
   credential lives only under `olympus`; PKCE authorize URLs carry no secret;
   states are single-use and tenant-bound; mutating granted scopes are refused;
   expired tokens are refreshed and rotated in place.

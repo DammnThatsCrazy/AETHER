@@ -8,7 +8,8 @@ loudly here rather than surfacing as a dishonest "Ready" badge:
   - no connectable capability may be enabled in an environment it does not
     evidence (level >= 3 rule is the load-bearing gate);
   - nothing in the catalog may claim sandbox/production enablement today
-    (the R1 posture is honest-but-dormant: credential_waiting material only);
+    (the R1 posture is honest-but-dormant: credential_waiting material, except
+    the derivatives venues, whose read-only adapters are replay_validated);
   - deferred credit bureaus stay scaffolded, tenant-invisible, and enabled in
     NO environment; the tenant-visible catalog therefore excludes them;
   - every readiness state is a canonical CredentialReadiness ladder token
@@ -39,7 +40,9 @@ from shared.integration_contracts.catalog import (  # noqa: E402
     ALL_MANIFESTS,
     CONNECTOR_MANIFESTS,
     DEFERRED_CREDIT_BUREAU_MANIFESTS,
+    DERIVATIVES_VENUE_MANIFESTS,
     PAYMENT_RAIL_MANIFESTS,
+    tenant_connectable,
 )
 from connectors.integrations.connectors.catalog_endpoints import (  # noqa: E402
     _manifest_entry,
@@ -100,7 +103,10 @@ def test_visible_catalog_excludes_deferred_bureaus():
     visible_keys = {entry["key"] for entry in visible}
     deferred_keys = {m.identity_key for m in DEFERRED_CREDIT_BUREAU_MANIFESTS}
     assert not (visible_keys & deferred_keys)
-    assert len(visible) == len(ALL_MANIFESTS) - len(deferred_keys) == 33
+    # Visible == tenant-connectable: self-service and enabled somewhere. Venue
+    # market-data feeds are platform-operated, so they stay out too.
+    assert visible_keys == {m.identity_key for m in ALL_MANIFESTS if tenant_connectable(m)}
+    assert len(visible) == 41
 
 
 def test_readiness_level_is_consistent_with_state():
@@ -125,13 +131,20 @@ def test_readiness_level_is_consistent_with_state():
 def test_readiness_rank_is_monotonic_with_state():
     ranks = [readiness_rank(m.readiness.state) for m in ALL_MANIFESTS]
     assert all(rank is not None for rank in ranks)
-    credential_waiting = readiness_rank(CredentialReadiness.CREDENTIAL_WAITING)
-    # Every connectable capability is credential-waiting material or better.
+    venue_keys = {m.identity_key for m in DERIVATIVES_VENUE_MANIFESTS}
+    # Every enabled capability is credential-waiting material; derivatives
+    # venues are exactly replay_validated (recorded-fixture adapters), never
+    # sandbox or live.
     for manifest in ALL_MANIFESTS:
         if _env_enabled(manifest):
-            assert (
-                manifest.readiness.state == CredentialReadiness.CREDENTIAL_WAITING
-            ), f"unexpected visible state {manifest.identity_key}"
+            expected = (
+                CredentialReadiness.REPLAY_VALIDATED
+                if manifest.identity_key in venue_keys
+                else CredentialReadiness.CREDENTIAL_WAITING
+            )
+            assert manifest.readiness.state == expected, (
+                f"unexpected visible state {manifest.identity_key}"
+            )
 
 
 def test_endpoint_entry_readiness_is_the_manifest_ladder():
@@ -181,8 +194,9 @@ def test_payment_rail_manifests_are_observe_only():
 
 def test_catalog_counts():
     assert len(CONNECTOR_MANIFESTS) == 21
-    assert len(ALL_MANIFESTS) == 36
-    assert len(manifest_identity_keys()) == 36
+    assert len(DERIVATIVES_VENUE_MANIFESTS) == 16
+    assert len(ALL_MANIFESTS) == 52
+    assert len(set(manifest_identity_keys())) == 52
 
 
 def manifest_identity_keys():

@@ -91,6 +91,9 @@ SYNTHETIC_FIXTURE_VALUES: frozenset[str] = frozenset({
     "token: 'in-memory-session-secret'",
     'xoxb-other-tenant',
     'xoxb-own-tenant',
+    # aether-web onboarding snippet test: a fake publishable key proving the
+    # React snippet embeds the full revealed key verbatim.
+    "apiKey: 'pk_live_abcdefghijklmnopqrstuvwxyz'",
 })
 
 

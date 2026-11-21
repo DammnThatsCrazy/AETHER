@@ -17,7 +17,7 @@ estimated_read_minutes: 13
 toc_depth: 3
 source_hashes:
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
-  "services/api/shared/integration_contracts/catalog.py": "sha256:66a6fcc0d34d1b41ecc13b91b98cc8a052e4e0512896c9ac13ec2fb8e0ce5ccd"
+  "services/api/shared/integration_contracts/catalog.py": "sha256:f07531dd715a96608d7d6f71949e8625f2554bb9e8e31417ab8e1a4787d7c904"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
   "services/api/shared/integration_contracts/manifest.py": "sha256:88f1a5c8f3a8fa5d6b0e53d9277c26dab7e6ef1681caa4ef1a52085e9e038658"
   "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
@@ -238,7 +238,11 @@ because the two data relationships differ:
 
 Both are `replay_validated` (level 3), visible only in `local` and
 `integration`. Availability never decides ownership: the account link's grant
-does.
+does. Only the account capability is tenant-connectable
+(`catalog.tenant_connectable`: enabled somewhere and `tenant_self_service`), so
+only it appears in the customer integrations catalog and tenant readiness view,
+grouped under the `markets_trading` experience (category `derivatives`). Market
+data stays an Olympus reference source and never appears there.
 
 ### 13.3 Shopify native manifest
 

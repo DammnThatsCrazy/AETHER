@@ -9,8 +9,10 @@ population). Reading it back checks those inputs against the current state:
 
 A stale run is still returned (it is a record of what was computed), marked
 ``stale`` with its reasons; ``recompute`` runs the same query again and saves
-the new run with ``supersedes`` pointing at the old one. Nothing here writes
-graph truth.
+the new run with ``supersedes`` pointing at the old one. Run ids are
+deterministic, so an unchanged recompute yields the same id: the saved record
+is then left exactly as it was (no self-supersession, no rewritten timestamp)
+and returned with fresh staleness. Nothing here writes graph truth.
 """
 
 from __future__ import annotations
@@ -155,6 +157,9 @@ class PropagationRunStore:
             return None
         service = self._service()
         run = await service.run(query, include_live=bool(record.get("include_live")))
+        if run.run_id == run_id:
+            # Same query over the same effective inputs: nothing to supersede.
+            return await self.get(tenant_id, run_id)
         return await self.save(run, service.last_inputs, include_live=bool(record.get("include_live")),
                                supersedes=run_id)
 

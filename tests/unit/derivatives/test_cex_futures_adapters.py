@@ -172,3 +172,22 @@ async def test_transport_keeps_a_pre_signed_query_string():
     await client.request_json({"method": "GET", "url": "https://x.test/a?b=1&c=2"}, health={})
     await client.request_json({"method": "GET", "url": "https://x.test/a", "params": {"d": "3"}}, health={})
     assert seen == ["https://x.test/a?b=1&c=2", "https://x.test/a?d=3"]
+
+
+@pytest.mark.parametrize(
+    "ret_code,health",
+    [(10003, "auth_error"), (10005, "auth_error"), (10006, "rate_limited"), (110001, "client_error")],
+)
+async def test_bybit_http_200_application_errors_are_failed_reads(ret_code, health):
+    """A rejected key arrives as HTTP 200 + retCode; it must not read as a healthy empty account."""
+    def handler(request):
+        return httpx.Response(200, json={"retCode": ret_code, "retMsg": "nope", "result": {}}, request=request)
+
+    adapter = BybitAdapter(
+        http_transport=httpx.MockTransport(handler), account_ref="uid-1", sleeper=_noop,
+        credential=KeyIdSecretCredential(key_id="bybit-key", secret="bybit-secret"),
+        clock=lambda: 1_763_650_000_000,
+    )
+    events, checkpoint = await adapter.pull_events()
+    assert events == []
+    assert checkpoint["provider_health"] == health

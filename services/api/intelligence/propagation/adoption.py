@@ -110,7 +110,11 @@ def adoptions_from_fill_events(
             continue
         payload = event.get("payload") or {}
         venue = str(payload.get("venue_id") or "")
-        account = _account_ref(str(payload.get("trading_account_id") or ""))
+        # Prefer the linked account the sources attached; reversing the stored
+        # key only works for adapters that key fills as ``acct_<account>``.
+        account = str(payload.get("linked_account_ref") or "") or _account_ref(
+            str(payload.get("trading_account_id") or "")
+        )
         subject = _linked_subject(subjects_by_account, venue, account)
         if subject is None:
             reasons.add("fill_account_not_linked")

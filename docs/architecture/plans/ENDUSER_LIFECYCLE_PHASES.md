@@ -163,7 +163,8 @@ presentation + connect-flow reuse.
    pattern) so tenant FE and marketing consume identical ids.
 3. **`experience_category`** — additive enum: `advertising_campaigns`,
    `commerce_revenue`, `crm_customer`, `communications_lifecycle`,
-   `analytics_behavior`, `social_community`, `customer_support`, `work_operations`.
+   `analytics_behavior`, `social_community`, `customer_support`, `work_operations`,
+   and (added 2026-11) `markets_trading`.
 4. **State model.** `ConnectionState` (30 members + legal transitions) is the
    machine; customer states (§7.1 of the spec) and "Connected ≠ Ready" are a
    projection onto ConnectionState + CredentialReadiness.
@@ -238,7 +239,7 @@ recorded GREEN 72/0 at the R1 head this lane is cut from (`a32f63a0`).
    `scripts/generate_connector_taxonomy.py` derives
    `packages/shared/connector-taxonomy.ts` from
    `services/api/shared/integration_contracts/catalog.py`
-   (`ALL_MANIFESTS` four-group union) + `experience.py` — pure mirror, never
+   (`ALL_MANIFESTS` five-group union) + `experience.py` — pure mirror, never
    hand-edited; the six-layer descriptor enums from `base.py` are preserved
    verbatim by the generator. Regenerate with
    `python scripts/generate_connector_taxonomy.py` (supports `--check`).

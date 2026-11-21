@@ -24,6 +24,7 @@ from shared.integration_contracts.catalog import (
     ALL_MANIFESTS,
     ad_manifest_by_family,
     manifest_by_family,
+    tenant_connectable,
 )
 from shared.integration_contracts.lifecycle import (
     ConnectionState,
@@ -49,13 +50,18 @@ _STATE_VALUES = {s.value for s in TenantIntegrationState}
 _VISIBLE_FAMILIES = {
     m.provider_family
     for m in ALL_MANIFESTS
-    if m.availability.environments.any_enabled()
+    if tenant_connectable(m)
+}
+#: The honest catalog baseline each tenant-connectable manifest declares
+#: (most are credential_waiting; replayed derivatives venues are higher).
+_BASELINE_READINESS = {
+    m.identity_key: m.readiness.state.value
+    for m in ALL_MANIFESTS
+    if tenant_connectable(m)
 }
 #: One readiness item is emitted per *visible manifest* (a family can carry two
 #: enabled manifests), so the coverage count is the manifest list, not the set.
-_VISIBLE_MANIFEST_COUNT = sum(
-    1 for m in ALL_MANIFESTS if m.availability.environments.any_enabled()
-)
+_VISIBLE_MANIFEST_COUNT = sum(1 for m in ALL_MANIFESTS if tenant_connectable(m))
 
 
 def _row(*, connector_type="shopify", enabled=True, secret_configured=True,
@@ -277,8 +283,8 @@ def test_build_items_covers_catalog_and_marks_unconfigured_available() -> None:
     for item in items:
         assert item["connection"]["configured"] is False
         assert item["tenant_state"] == TenantIntegrationState.AVAILABLE.value
-        # Every connectable manifest carries its honest catalog baseline.
-        assert item["readiness"]["state"] == CredentialReadiness.CREDENTIAL_WAITING.value
+        # Every connectable manifest carries its own honest catalog baseline.
+        assert item["readiness"]["state"] == _BASELINE_READINESS[item["key"]]
         assert item["readiness"]["rank"] == readiness_rank(
             CredentialReadiness(item["readiness"]["state"])
         )
@@ -382,7 +388,7 @@ def test_route_serves_every_connectable_manifest_as_available(readiness_client) 
         assert item["tenant_state"] == TenantIntegrationState.AVAILABLE.value
         assert item["connection"]["configured"] is False
         # The honest catalog baseline is served for every connectable provider.
-        assert item["readiness"]["state"] == CredentialReadiness.CREDENTIAL_WAITING.value
+        assert item["readiness"]["state"] == _BASELINE_READINESS[item["key"]]
 
 
 def test_route_reports_connected_record_fact_without_raising_catalog(readiness_client) -> None:

@@ -26,7 +26,7 @@ toc_depth: 3
 This document is the taxonomy **as the code declares it**. The authoritative
 definitions live in
 `services/api/connectors/integrations/connectors/base.py`
-(the enums below) and the customer catalog derives its four-group
+(the enums below) and the customer catalog derives its five-group
 provider/category mirror from
 `shared/integration_contracts/catalog.py` (see §8). The TypeScript twin in
 `packages/shared/connector-taxonomy.ts` carries a verbatim copy of the six-layer
@@ -176,21 +176,26 @@ mocked or credential-gated.
 | `HIGH` | Outage reduces signal quality significantly |
 | `RESTRICTED` | Compliance/legal-restricted; additional gating |
 
-## 8. Customer catalog (four-group mirror)
+## 8. Customer catalog (five-group mirror)
 
-The **customer** provider taxonomy is a derived four-group union over the
+The **customer** provider taxonomy is a derived five-group union over the
 authoritative backend manifests (`shared/integration_contracts/catalog.py`),
 grouped by product id: `connectors` (ingestion.connector, 21), `ad_platforms`
-(ads.metrics, 7), `payment_rails` (payment_rails.observe, 5), and
-`deferred_credit_bureaus` (credit.report, 3) — 36 `family.product.capability`
+(ads.metrics, 7), `payment_rails` (payment_rails.observe, 5),
+`derivatives_venues` (account.* and markets.market_data, 16), and
+`deferred_credit_bureaus` (credit.report, 3) — 52 `family.product.capability`
 identities in `ALL_MANIFESTS`. The `deferred_credit_bureaus` group is
-scaffolded and not shown on customer surfaces.
+scaffolded and not shown on customer surfaces. Each derivatives venue has a
+tenant-connectable read-only `account.*` capability and a platform-operated
+`markets.market_data` capability that is not tenant self-service, so only the
+eight account capabilities are customer-visible.
 
 | Group (`product.capability`) | Count | Families |
 |---|---|---|
 | `connectors` (`ingestion.connector`) | 21 | slack, webhook, shopify, stripe, hubspot, salesforce, klaviyo, segment, posthog, ga4, jira, linear, zendesk, intercom, dune, sendgrid, customerio, mailchimp, postmark, iterable, braze |
 | `ad_platforms` (`ads.metrics`) | 7 | google_ads, meta_ads, tiktok_ads, linkedin_ads, x_ads, reddit_ads, microsoft_ads |
 | `payment_rails` (`payment_rails.observe`) | 5 | privy, stripe, coinbase, moonpay, bridge |
+| `derivatives_venues` (`account\|markets`) | 16 | hyperliquid, polymarket, dydx, gmx, drift, kalshi, bybit, coinbase_futures (one `account.*` and one `markets.market_data` capability each) |
 | `deferred_credit_bureaus` (`credit.report`) | 3 | experian, equifax, transunion |
 
 The mirror (group order, family arrays + counts, group/category tables,

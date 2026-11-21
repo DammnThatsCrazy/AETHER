@@ -76,7 +76,7 @@ reviewed_source_commits:
   - {'commit': '5dcf75ba', 'reason': 'Reviewed 5dcf75ba: the contract generator now types freshnessPolicy.slots and states per-slot maximum ages in the surface catalog. Generated-output typing only; this document needs no change.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "packages/shared/": "sha256:4c7bb3b46f92f2447cf2179527ffce55e32dbff2be322c0d2fe99785a134b428"
+  "packages/shared/": "sha256:8209d8478d43fa7df568a0c233cae38c0f5c4a37ab4cb191164d92c356147fae"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:4f903310623b89e4616b8f822028fa5a52bda10651b1146267b1c5c77ab7db96"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"

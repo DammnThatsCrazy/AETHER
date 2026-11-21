@@ -54,7 +54,7 @@ source_hashes:
   "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:9adb59933e0b97374586571246ddc5aaa9c7ba2edca5d460d4d7331b906076a4"
+  "services/api/value/x402/": "sha256:ee57b396af08dd128a1fad054736d6c366ef211797538623bf7b5f2acc73be2d"
   "services/api/workers/runtime/specs.py": "sha256:4ff2c134a396e6e253f56a0c3b6d46768c2f648eee0dc04230e6d3bc5fa797b1"
 ---
 

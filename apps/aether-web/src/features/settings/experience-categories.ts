@@ -19,6 +19,7 @@ export const EXPERIENCE_CATEGORY_LABELS: Readonly<Record<string, string>> = {
   social_community: 'Social & Community',
   customer_support: 'Customer Support',
   work_operations: 'Work Operations',
+  markets_trading: 'Markets & Trading',
 };
 
 /** Canonical grouping order (mirrors the server's EXPERIENCE_CATEGORIES order). */
@@ -31,6 +32,7 @@ export const EXPERIENCE_CATEGORY_ORDER: readonly string[] = [
   'social_community',
   'customer_support',
   'work_operations',
+  'markets_trading',
 ];
 
 /** Label for integrations the catalog does not classify into an experience. */

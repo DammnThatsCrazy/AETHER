@@ -840,6 +840,20 @@ ALL_MANIFESTS: list[ProviderManifest] = [
 ]
 
 
+def tenant_connectable(manifest: ProviderManifest) -> bool:
+    """True when a tenant can connect this capability itself.
+
+    The capability must be enabled in at least one environment and offered for
+    tenant self-service. Olympus reference sources (venue market data granted
+    under the reserved ``olympus`` scope) and deferred credit bureaus are not
+    tenant-connectable, so they stay out of tenant-facing catalogs.
+    """
+    return (
+        manifest.availability.tenant_self_service
+        and manifest.availability.environments.any_enabled()
+    )
+
+
 def _index_by_identity(
     manifests: list[ProviderManifest],
 ) -> dict[str, ProviderManifest]:
@@ -888,6 +902,7 @@ __all__ = [
     "deferred_manifests",
     "manifest_by_family",
     "manifest_by_identity",
+    "tenant_connectable",
     "manifest_from_ad_platform",
     "manifest_from_connector_descriptor",
     "manifest_from_credit_bureau",

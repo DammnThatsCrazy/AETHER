@@ -23,7 +23,7 @@ source_hashes:
   "services/api/value/x402/commerce_store.py": "sha256:c55caae3f9e9f81830f493b729c8bc5ef8ba1f4f6244628c7059580e429f216e"
   "services/api/value/x402/provenance.py": "sha256:fe227df986d4c03f770d97d6236bc4c5c5ee4410db66415dd38b7a697779d556"
   "services/api/value/x402/routes.py": "sha256:66e7776f519b954f6202966ec0091cc5e97e20808701f819b901a22cc46e01b3"
-  "services/api/value/x402/settlement_observer.py": "sha256:d7779f89245892329488cfc587ae4afa4988b012494e4b5acce736acec45874e"
+  "services/api/value/x402/settlement_observer.py": "sha256:46522979888495ad174b1dae683766579b6376561b456c0c2138fd43316f7a1d"
   "services/api/value/x402/verification.py": "sha256:61d0ae47bd75ad4b8c1285d75a42501e381149502b8a0db44d79c34963b03757"
 ---
 
@@ -50,7 +50,7 @@ is gone:
 
 | Surface | Behaviour |
 |---|---|
-| `POST /v1/x402/capture` | Records an x402 exchange a tenant's server observed. When the report carries a payment proof, `settlement_observer.py` verifies it on-chain and returns `settled`, `failed`, `pending` or `not_observable`. |
+| `POST /v1/x402/capture` | Records an x402 exchange a tenant's server observed. When the report carries a payment proof, `settlement_observer.py` verifies it on-chain and returns `settled`, `failed`, `pending`, `not_observable` or `conflicting`. |
 | Settlement observer | The only authoritative x402 producer. Emits `COMMERCE_SETTLEMENT_COMPLETED` / `FAILED` as `x402.settlement_observer`; the lifecycle consumer projects them into `PaymentIntent` / `SettlementEvent`. A `pending` verdict records nothing terminal; reporting again re-checks the chain. |
 | Verification engine | Unchanged on-chain checks (receipt status, matching transfer from payer to recipient of at least the amount, finality), using the tenant's own RPC credential. |
 | Historical store | `commerce_store.py` and `commerce_models.py` keep records the control plane wrote. Agent 360, Workflow 360, analytics and `/v1/diagnostics/commerce/*` read them; erasure still covers them. |
