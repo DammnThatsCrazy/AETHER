@@ -73,7 +73,7 @@ Aether.shared.grantConsent(categories: ["analytics"])
 
 `AetherConfig(apiKey:)` takes the key Aether issued for this app; the tenant is
 derived from the key on the server, so there is no tenant ID to pass. The
-ingestion endpoint defaults to `https://api.aether.network` (override with
+ingestion endpoint defaults to `https://api.olympuslabsml.com` (override with
 `config.endpoint`). Initialization prepares the batch queue and session; events
 are sent once you call the tracking methods below.
 

@@ -34,6 +34,7 @@ from shared.common.common import (
     ErrorCode,
     ForbiddenError,
     NotFoundError,
+    ServiceUnavailableError,
     UnauthorizedError,
     utc_now,
 )
@@ -698,7 +699,27 @@ async def select_account(connection_id: str, body: AccountSelectBody, request: R
         _get_coordinator().select_account(connection, account_id=body.account_id, plugin=plugin)
     )
     await _await_or_error(orchestrator.connections.upsert(connection))
-    return APIResponse(data=_as_dict(connection)).to_dict()
+    data = _as_dict(connection)
+    if body.account_id in (connection.selected_accounts or []):
+        # A selected tenant account is a source the tenant owns: provision its
+        # organization_system grant so the first sync is admitted.
+        from connectors.provider_runtime.organization_grants import (
+            GrantProvisioningBusy,
+            ensure_organization_system_grant,
+        )
+
+        tenant = getattr(request.state, "tenant", None)
+        try:
+            data["source_grant_id"] = await ensure_organization_system_grant(
+                connection,
+                body.account_id,
+                actor=str(getattr(tenant, "user_id", None) or tenant_id),
+            )
+        except GrantProvisioningBusy as exc:
+            raise ServiceUnavailableError(
+                "This account's source grant is being set up by another request. Select it again shortly."
+            ) from exc
+    return APIResponse(data=data).to_dict()
 
 
 # ── Sync ────────────────────────────────────────────────────────────────────
@@ -891,6 +912,81 @@ async def provider_connections_overview(request: Request):
             "cap": 5000,
         }
     ).to_dict()
+
+
+@admin_router.get("/system-sources")
+async def system_sources(request: Request):
+    """Kyber System Sources: Olympus-owned sources in full, tenant sources in aggregate.
+
+    ``olympus``: every connection and grant under the reserved ``olympus``
+    scope — state, whether a credential is stored (never the credential),
+    account count, and each grant's relationship and permitted uses.
+    ``tenants``: per provider, connection counts by state and active grant
+    counts by relationship. No tenant id, config or credential is returned.
+    """
+    _require_operator(request)
+    from connectors.integrations.data_rights.models import GrantStatus
+    from connectors.integrations.data_rights.service import data_rights_service
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    cap = 5000
+    orchestrator = _get_orchestrator()
+    rows = await _await_or_error(orchestrator.connections.find_many(filters={}, limit=cap))
+    grants = await data_rights_service.list_grants(status=GrantStatus.ACTIVE)
+
+    def _state(row: dict) -> str:
+        raw = row.get("state") or "unknown"
+        return raw.value if hasattr(raw, "value") else str(raw)
+
+    olympus_connections = []
+    tenants: dict[str, dict[str, Any]] = {}
+    tenant_ids: set[str] = set()
+    for row in rows:
+        identity = str(row.get("provider_identity") or "unknown")
+        if row.get("tenant_id") == OLYMPUS_SOURCE_TENANT_ID:
+            olympus_connections.append({
+                "connection_id": row.get("connection_id") or row.get("id"),
+                "provider_identity": identity,
+                "display_name": row.get("display_name") or identity,
+                "state": _state(row),
+                "credential_stored": bool(row.get("credential_ref")),
+                "account_count": len(row.get("selected_accounts") or []),
+                "updated_at": row.get("updated_at"),
+            })
+            continue
+        tenant_ids.add(str(row.get("tenant_id") or ""))
+        bucket = tenants.setdefault(identity, {"connections": {}, "grants": {}})
+        bucket["connections"][_state(row)] = bucket["connections"].get(_state(row), 0) + 1
+
+    olympus_grants = []
+    for grant in grants:
+        if grant.revoked_at is not None:
+            continue
+        if grant.tenant_id == OLYMPUS_SOURCE_TENANT_ID:
+            olympus_grants.append({
+                "grant_id": grant.data_rights_grant_id,
+                "source_id": grant.source_id,
+                "connector_id": grant.connector_id,
+                "connector_class": grant.connector_class,
+                "olympus_baseline_allowed": grant.olympus_baseline_allowed,
+                "model_training_allowed": grant.model_training_allowed,
+                "commercial_reuse_allowed": grant.commercial_reuse_allowed,
+                "granted_at": grant.granted_at,
+            })
+            continue
+        bucket = tenants.setdefault(str(grant.connector_id or "unknown"), {"connections": {}, "grants": {}})
+        relationship = str(getattr(grant, "source_relationship", "") or "unclassified")
+        bucket["grants"][relationship] = bucket["grants"].get(relationship, 0) + 1
+
+    return APIResponse(data={
+        "olympus": {"connections": olympus_connections, "grants": olympus_grants},
+        "tenants": {
+            "providers": tenants,
+            "tenant_count": len(tenant_ids - {""}),
+            "connection_count": sum(sum(b["connections"].values()) for b in tenants.values()),
+        },
+        "truncated": len(rows) >= cap,
+    }).to_dict()
 
 
 @admin_router.get("/health")

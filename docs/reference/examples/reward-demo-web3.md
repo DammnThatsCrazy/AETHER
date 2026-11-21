@@ -47,7 +47,7 @@ Smart contract: verifyOracleSignature() → transfer tokens to user
 
 ```bash
 export API_KEY="ak_live_your_key_here"
-export BASE="https://api.aether.network/v1"
+export BASE="https://api.olympuslabsml.com/v1"
 
 # Your deployed AnalyticsRewards.sol contract
 export CONTRACT_ADDRESS="0xYourContractAddress"

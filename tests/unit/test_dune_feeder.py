@@ -42,6 +42,13 @@ def backend_module_path():
                     sys.modules.pop(name, None)
 
 
+@pytest.fixture(autouse=True)
+def _grants_not_under_test(monkeypatch):
+    """These tests cover freshness, quality and promotion, not source rights;
+    rights are pinned in tests/unit/test_dune_source_rights.py."""
+    monkeypatch.setenv("DUNE_SOURCE_GRANT_REQUIRED", "false")
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 

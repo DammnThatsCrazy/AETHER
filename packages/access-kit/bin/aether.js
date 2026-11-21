@@ -63,7 +63,7 @@ Authentication:
   AETHER_AUTH0_AUDIENCE    Aether API resource-server audience
   AETHER_PUBLISHABLE_KEY   Site-bound pk_ key, for ingest only
   AETHER_SITE_ID           Site ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
-  AETHER_API_URL           API origin (default: https://api.aether.network)
+  AETHER_API_URL           API origin (default: https://api.olympuslabsml.com)
 
 Set exactly one API credential: AETHER_API_KEY or AETHER_SESSION_TOKEN. The CLI
 uses a saved human session from the OS credential store when neither is supplied.

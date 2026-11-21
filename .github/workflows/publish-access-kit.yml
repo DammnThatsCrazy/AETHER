@@ -45,13 +45,13 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Install the locked Access Kit dependency graph
-        run: pnpm install --frozen-lockfile --filter @aether/access-kit...
+        run: pnpm install --frozen-lockfile --filter @olympuslabs/aether-access-kit...
 
       - name: Verify package contract and create release tarball
         id: package
         run: |
           set -euo pipefail
-          pnpm --filter @aether/access-kit test
+          pnpm --filter @olympuslabs/aether-access-kit test
           mkdir -p "$RUNNER_TEMP/access-kit-package"
           tarball="$(npm pack ./packages/access-kit --pack-destination "$RUNNER_TEMP/access-kit-package")"
           version="$(node -p "require('./packages/access-kit/package.json').version")"
@@ -83,6 +83,16 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Require the public release to be approved
+        # The CLI and MCP stay internal until the staging proof passes. Set the
+        # ACCESS_KIT_PUBLIC_RELEASE_APPROVED repository variable to "true" only then.
+        env:
+          APPROVED: ${{ vars.ACCESS_KIT_PUBLIC_RELEASE_APPROVED }}
+        run: |
+          if [ "${APPROVED}" != "true" ]; then
+            echo '::error::The Access Kit is internal until the staging proof passes. Set ACCESS_KIT_PUBLIC_RELEASE_APPROVED=true to publish.'
+            exit 1
+          fi
       - name: Require configured npm-production reviewers
         env:
           GH_TOKEN: ${{ github.token }}
@@ -129,7 +139,7 @@ jobs:
         run: |
           {
             echo '### Access Kit npm release'
-            echo "- Version: @aether/access-kit@$PACKAGE_VERSION"
+            echo "- Version: @olympuslabs/aether-access-kit@$PACKAGE_VERSION"
             echo "- npm tag: $PACKAGE_TAG"
             echo '- Disposition: published to the public npm registry.'
           } >> "$GITHUB_STEP_SUMMARY"

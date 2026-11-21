@@ -12,6 +12,7 @@ connector route admission and downstream writer fencing are separate gates.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any, Optional
 
 from shared.events.events import Topic
 from shared.integration_contracts.events import (
@@ -28,8 +29,19 @@ logger = get_logger("aether.provider_runtime.bridge")
 class EventBridge:
     """Consent-gated provider event writer using the shared durable outbox."""
 
-    async def ingest_events(self, tenant_id: str, events: Iterable[AetherEvent]) -> int:
+    async def ingest_events(
+        self,
+        tenant_id: str,
+        events: Iterable[AetherEvent],
+        *,
+        raw_records: Iterable[Any] = (),
+    ) -> int:
         """Return the count of newly persisted canonical events.
+
+        ``raw_records`` are the persisted records the events were normalized
+        from. Each carries the rights admission that stored it, which the
+        Envelope-B projection (``observation_envelope``) cites so a provider
+        observation names its source instance, relationship and rights decision.
 
         Provider raw records have already been stored by the caller. A denied
         canonical event leaves that raw input available for governed replay.
@@ -45,6 +57,7 @@ class EventBridge:
             metrics.increment("provider_bridge_olympus_scope_skipped_total")
             return 0
 
+        raw_by_id = {getattr(record, "record_id", ""): record for record in raw_records}
         bronze_rows: list[BronzeSDKEvent] = []
         outbox_rows: list[OutboxEvent] = []
         commerce_orders: list[AetherEvent] = []
@@ -81,6 +94,9 @@ class EventBridge:
             payload = event.model_dump()
             payload["source"] = event.provider
             payload["source_type"] = "provider"
+            envelope = _observation_envelope(payload, raw_by_id.get(event.source_record_id))
+            if envelope is not None:
+                payload["observation_envelope"] = envelope
             bronze_rows.append(
                 BronzeSDKEvent(
                     tenant_id=tenant_id,
@@ -198,6 +214,32 @@ class EventBridge:
             )
             return False
         return True
+
+
+def _observation_envelope(payload: dict, raw_record: Any) -> Optional[dict]:
+    """The flag-gated Envelope-B projection for one provider event, as on the SDK path.
+
+    Additive: a build failure is counted and the flat row is kept, so envelope
+    shape can never stall a pull cursor or a webhook receipt.
+    """
+    from config.settings import settings
+
+    if not settings.observation_envelope.enabled:
+        return None
+    try:
+        from ingestion.ingestion.adapters.provider import ProviderIngressAdapter
+
+        envelope = ProviderIngressAdapter().build_observation_envelope(payload, raw_record=raw_record)
+    except Exception as exc:  # never fail the durable write on the additive projection
+        logger.warning("provider observation envelope build failed: %s", type(exc).__name__)
+        metrics.increment("provider_bridge_observation_envelope_failed_total")
+        return None
+    if envelope is None:
+        metrics.increment("provider_bridge_observation_envelope_skipped_total")
+        return None
+    if raw_record is None or envelope.rights is None:
+        metrics.increment("provider_bridge_observation_envelope_unattributed_total")
+    return envelope.to_bronze_additive()
 
 
 __all__ = ["EventBridge"]

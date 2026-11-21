@@ -21,7 +21,7 @@ is one option, not a requirement.**
 | **Connector pull** | Provider sync (Shopify, HubSpot, GA4, …) | `POST /v1/integrations/connectors/{type}/sync` | `connector_sync` |
 | **Public webhook** | Provider pushes HMAC-signed events (unauthenticated, tenant-resolved) | `POST /v1/integrations/webhooks/{connector_type}` | `webhook_ingested` |
 | **Authenticated webhook** | Tenant-authenticated manual/test webhook ingest | `POST /v1/integrations/connectors/{type}/webhook` | `webhook_ingested` |
-| **External API feed** | Server-to-server batch/import feeds (requires `external_id`) | `POST /v1/ingest/feed` | `event_ingested` |
+| **External API feed** | Server-to-server batch/import feeds (requires `external_id`). First use of a source needs an active data-rights grant for `feed:<source>` (else 403 `feed_source_grant_required`); sources already fed stay unclassified and tenant-lake-only | `POST /v1/ingest/feed` | `event_ingested` |
 | **Internal replay** | Operator replay only — `EventPipelineEnvelope` path | `POST /v1/events/ingest` | n/a |
 
 ## Normalization

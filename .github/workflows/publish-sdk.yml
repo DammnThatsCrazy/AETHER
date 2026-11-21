@@ -302,7 +302,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      CDN_BUCKET: ${{ vars.AETHER_SDK_CDN_BUCKET || 'cdn.aether.network' }}
+      CDN_BUCKET: ${{ vars.AETHER_SDK_CDN_BUCKET || 'cdn.olympuslabsml.com' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -648,13 +648,13 @@ jobs:
               '',
               '**Web — one script tag (CDN)**',
               '```html',
-              '<script async src="https://cdn.aether.network/v1.js"',
+              '<script async src="https://cdn.olympuslabsml.com/v1.js"',
               '  data-key="pk_live_..." data-site="site_..." data-autocapture="safe"></script>',
               '```',
-              'Stable loader: https://cdn.aether.network/v1.js',
-              `Version-pinned bundle: https://cdn.aether.network/sdk/${version}/web/aether.umd.js`,
-              `Major-version loader: https://cdn.aether.network/sdk/v${major}/loader.js`,
-              'Version manifest: https://cdn.aether.network/sdk/manifests/web/latest.json',
+              'Stable loader: https://cdn.olympuslabsml.com/v1.js',
+              `Version-pinned bundle: https://cdn.olympuslabsml.com/sdk/${version}/web/aether.umd.js`,
+              `Major-version loader: https://cdn.olympuslabsml.com/sdk/v${major}/loader.js`,
+              'Version manifest: https://cdn.olympuslabsml.com/sdk/manifests/web/latest.json',
               '',
               '**Install**',
               '```',

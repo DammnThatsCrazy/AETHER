@@ -72,6 +72,10 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
       sessions: (params: unknown) => s.sessions(params),
       revokeSession: (id: string) => s.revokeSession(id),
       revokeOtherSessions: () => s.revokeOtherSessions(),
+      // The two-step verification section loads its status on mount.
+      mfa: {
+        status: () => Promise.resolve({ enabled: false, method: null, enrolled_at: null, recovery_codes_remaining: 0 }),
+      },
     },
   },
 }));

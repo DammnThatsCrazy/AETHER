@@ -33,14 +33,21 @@ action execution.
 Node.js 20 or later is required. In a workspace checkout, install the
 repository dependencies and invoke the package scripts or workspace binaries.
 After an approved npm release, install the customer CLI with
-`npm install --global @aether/access-kit`; `aether` is the installed command.
+`npm install --global @olympuslabs/aether-access-kit`; `aether` is the installed command.
 Before that release, use the workspace checkout or the reviewed Aether AWS
 container image described below. Release validation is available through the
 manual `Publish Access Kit CLI and MCP` workflow; it defaults to a pack
 dry-run. Before enabling a public release, configure the npm-production
 environment with at least one required reviewer and an NPM_TOKEN. The
-workflow fails closed if that reviewer rule is absent. The package is not yet
-published.
+workflow fails closed if that reviewer rule is absent. The package stays
+internal until the staging proof passes: a real publish also requires the
+`ACCESS_KIT_PUBLIC_RELEASE_APPROVED` repository variable to be `true`. The
+package is not yet published.
+
+The CLI and MCP offer reads and observation submission only; they offer no
+operation that acts on the world (sending messages, pausing campaigns). The
+API refuses any call they label as theirs that is not one of their named
+capabilities.
 CLI login requires a persistent native credential store: macOS Keychain,
 Windows Credential Manager, or Linux Secret Service. Linux kernel keyutils is
 not used as a fallback because it does not persist across restarts.
@@ -50,7 +57,7 @@ depends on the host OS credential service; unit tests inject a fake store and
 do not prove native Keychain, Credential Manager, or Secret Service access.
 
 Set `AETHER_API_URL` to an API origin if using a non-default environment. It
-defaults to `https://api.aether.network`; the client requires HTTPS except for
+defaults to `https://api.olympuslabsml.com`; the client requires HTTPS except for
 loopback development origins.
 
 Supply only the credential required by the command being used:
@@ -104,7 +111,7 @@ The caller supplies one tenant credential from its secret manager; the client
 does not accept tenant IDs or make graph/provider writes.
 
 ```js
-import { createAccessClient } from '@aether/access-kit';
+import { createAccessClient } from '@olympuslabs/aether-access-kit';
 
 const access = createAccessClient({
   apiUrl: process.env.AETHER_API_URL,
@@ -348,7 +355,7 @@ Native application provisioned by the existing Terraform Auth0 module:
 ```sh
 export AETHER_AUTH0_DOMAIN=your-tenant.us.auth0.com
 export AETHER_AUTH0_CLIENT_ID="$(terraform -chdir=infra/aws/terraform output -raw aether_cli_auth0_client_id)"
-export AETHER_AUTH0_AUDIENCE=https://api.aether.network
+export AETHER_AUTH0_AUDIENCE=https://api.olympuslabsml.com
 ```
 
 The CLI opens Auth0's verification URL and prints the short user code. It does
@@ -464,7 +471,7 @@ Build the standalone Access Kit image from the repository root:
 ```sh
 docker build -f packages/access-kit/Dockerfile -t aether-access-kit .
 docker run --rm -p 8080:8080 \
-  -e AETHER_API_URL=https://api.aether.network \
+  -e AETHER_API_URL=https://api.olympuslabsml.com \
   -e AETHER_MCP_ALLOWED_HOSTS=mcp.example.com \
   -e AETHER_MCP_ALLOWED_ORIGINS=https://console.example.com \
   aether-access-kit
@@ -546,7 +553,7 @@ service is required for explicit environment credentials:
 
 ```sh
 docker run --rm \
-  -e AETHER_API_URL=https://api.aether.network \
+  -e AETHER_API_URL=https://api.olympuslabsml.com \
   -e AETHER_API_KEY \
   aether-access-kit node ./bin/aether.js entities list --json
 ```
@@ -561,7 +568,7 @@ CloudShell, ECS task, Lambda container, CI job, or other Node 20+ cloud runner
 can install the CLI without ECR access:
 
 ```sh
-npm install --global @aether/access-kit
+npm install --global @olympuslabs/aether-access-kit
 aether entities list --json
 ```
 
@@ -583,7 +590,7 @@ aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 ACCESS_KIT_IMAGE="${ECR_REGISTRY}/aether-access-mcp@${ACCESS_MCP_IMAGE_DIGEST}"
 docker run --rm \
-  -e AETHER_API_URL=https://api.aether.network \
+  -e AETHER_API_URL=https://api.olympuslabsml.com \
   -e AETHER_API_KEY \
   "$ACCESS_KIT_IMAGE" node ./bin/aether.js entities list --json
 ```
@@ -605,7 +612,7 @@ runs `entities_list` and `usage_summary`:
 export AETHER_API_URL=https://api.example.com
 export AETHER_API_KEY # inject through the host's secret manager
 export AETHER_MCP_URL=https://mcp.example.com/v1/access/mcp # optional
-npm run acceptance:v1 --workspace @aether/access-kit
+npm run acceptance:v1 --workspace @olympuslabs/aether-access-kit
 ```
 
 The runner requires `AETHER_API_URL` explicitly and performs no deployment,

@@ -26,7 +26,7 @@ Register a site in **Settings → SDK Sites** and mint a publishable key for it,
 then paste the tag the platform renders:
 
 ```html
-<script src="https://cdn.aether.network/v1.js"
+<script src="https://cdn.olympuslabsml.com/v1.js"
         data-key="pk_YOUR_PUBLISHABLE_KEY"
         data-site="site_YOUR_SITE_ID"
         async></script>

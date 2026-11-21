@@ -652,7 +652,7 @@ const Aether = {
     async recordReceipt(input: CanonicalConsentReceiptInput) {
       if (!activeConfig) throw new Error('Aether SDK is not initialized');
       const receipt = await buildCanonicalConsentReceipt(input);
-      const endpoint = activeConfig.endpoint ?? 'https://api.aether.network';
+      const endpoint = activeConfig.endpoint ?? 'https://api.olympuslabsml.com';
       const response = await fetch(`${endpoint}/v1/consent/records`, {
         method: 'POST',
         headers: {

@@ -979,3 +979,131 @@ def _make_cert_plugin():
             return _FakeNormalizer()
 
     return _CertPlugin()
+
+
+def test_selecting_an_account_provisions_its_organization_system_grant(client, orchestrator, monkeypatch):
+    import asyncio
+    from connectors.integrations.data_rights import service as dr_service_mod
+    from connectors.integrations.data_rights.models import GrantStatus
+
+    service = dr_service_mod.DataRightsService()
+    monkeypatch.setattr(dr_service_mod, "data_rights_service", service)
+    await_create_connection(orchestrator)
+
+    first = client.post("/v1/provider-connections/conn_test/accounts/select", json={"account_id": "acct_1"})
+    again = client.post("/v1/provider-connections/conn_test/accounts/select", json={"account_id": "acct_1"})
+
+    assert first.status_code == again.status_code == 200
+    grant_id = first.json()["data"]["source_grant_id"]
+    assert grant_id and again.json()["data"]["source_grant_id"] == grant_id
+    grants = asyncio.run(service._repository.list(
+        tenant_id="tenant_abc", source_id="provider-account:conn_test:acct_1", status=GrantStatus.ACTIVE,
+    ))
+    assert len(grants) == 1
+    grant = grants[0]
+    assert grant.source_relationship == "organization_system"
+    assert grant.raw_data_owner == "tenant"
+    assert grant.tenant_lake_allowed and grant.tenant_graph_allowed
+    assert not grant.olympus_baseline_allowed and not grant.cross_tenant_aggregate_allowed
+
+
+def test_olympus_scope_connections_get_no_tenant_grant():
+    import asyncio
+    from connectors.provider_runtime.organization_grants import ensure_organization_system_grant
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    connection = ProviderConnection(
+        connection_id="conn_o", tenant_id=OLYMPUS_SOURCE_TENANT_ID, provider_identity="shopify.admin.orders_read",
+    )
+    assert asyncio.run(ensure_organization_system_grant(connection, "acct", actor="op")) is None
+
+
+def test_overlapping_account_selections_create_one_grant():
+    """Two concurrent selections must not create two grants (Codex P2 on #899)."""
+    import asyncio
+    from connectors.integrations.data_rights.service import DataRightsService
+    from connectors.provider_runtime.organization_grants import ensure_organization_system_grant
+
+    class SharedCache:
+        def __init__(self):
+            self.store = {}
+
+        async def set_nx(self, key, value, ttl=0):
+            if key in self.store:
+                return False
+            self.store[key] = value
+            return True
+
+        async def delete(self, key):
+            self.store.pop(key, None)
+
+    service = DataRightsService()
+    original_list = service._repository.list
+
+    async def slow_list(**kwargs):
+        rows = await original_list(**kwargs)
+        await asyncio.sleep(0.01)  # both requests read before either creates
+        return rows
+
+    service._repository.list = slow_list
+    connection = ProviderConnection(
+        connection_id="conn_race", tenant_id="t_race", provider_identity="shopify.admin.orders_read",
+    )
+    cache = SharedCache()
+
+    async def race():
+        return await asyncio.gather(*[
+            ensure_organization_system_grant(connection, "acct", actor="op", grant_service=service, cache=cache)
+            for _ in range(2)
+        ])
+
+    first, second = asyncio.run(race())
+    assert first and first == second
+    grants = asyncio.run(original_list(tenant_id="t_race"))
+    assert len(grants) == 1
+    assert not cache.store
+
+
+def test_system_sources_fail_closed_without_operator():
+    client = TestClient(_make_app())
+    response = client.get("/v1/admin/kyber/provider-connections/system-sources")
+    assert response.status_code in (401, 403)
+
+
+def test_system_sources_show_olympus_in_full_and_tenants_in_aggregate(client, orchestrator, monkeypatch):
+    import asyncio
+    from connectors.integrations.data_rights import service as dr_service_mod
+    from connectors.integrations.data_rights.models import DataRightsGrantCreate
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    monkeypatch.setattr(routes_mod, "_require_operator", lambda request: {"actor": "operator"})
+    service = dr_service_mod.DataRightsService()
+    monkeypatch.setattr(dr_service_mod, "data_rights_service", service)
+    for cid, tenant, ref in (("c_oly", OLYMPUS_SOURCE_TENANT_ID, "secret-ref"), ("c_t1", "tenant_abc", "t-ref")):
+        asyncio.run(orchestrator.connections.upsert(ProviderConnection(
+            connection_id=cid, tenant_id=tenant, provider_identity="dune.analytics.query",
+            credential_ref=ref, selected_accounts=["acct"],
+        )))
+    asyncio.run(service.create_grant(DataRightsGrantCreate(
+        tenant_id=OLYMPUS_SOURCE_TENANT_ID, source_id="provider-account:c_oly:acct", connector_id="dune.analytics.query",
+        connector_class="olympus_provider", data_category="onchain", raw_data_owner="olympus_labs",
+        source_relationship="olympus_source",
+    ), granted_by_user_id="op"))
+    asyncio.run(service.create_grant(DataRightsGrantCreate(
+        tenant_id="tenant_abc", source_id="provider-account:c_t1:acct", connector_id="dune.analytics.query",
+        connector_class="tenant_byod_data", data_category="onchain", raw_data_owner="tenant",
+        source_relationship="organization_system", tenant_lake_allowed=True,
+    ), granted_by_user_id="u"))
+
+    response = client.get("/v1/admin/kyber/provider-connections/system-sources")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    [olympus] = data["olympus"]["connections"]
+    assert olympus["connection_id"] == "c_oly" and olympus["credential_stored"] is True
+    assert data["olympus"]["grants"][0]["olympus_baseline_allowed"] is True
+    tenant_view = data["tenants"]["providers"]["dune.analytics.query"]
+    assert tenant_view["grants"] == {"organization_system": 1}
+    assert sum(tenant_view["connections"].values()) == 1
+    assert data["tenants"]["tenant_count"] == 1
+    assert "tenant_abc" not in response.text and "secret-ref" not in response.text and "t-ref" not in response.text

@@ -2,7 +2,7 @@
 """SDK import-boundary gate (SDK thinness).
 
 The Aether client SDKs are thin: they talk to the canonical backend over the
-network (api.aether.network) and must NEVER import backend
+network (api.olympuslabsml.com) and must NEVER import backend
 implementation code. The internal trees — the deployed Python monolith
 (``services/api``) and the two legacy TypeScript
 duplicates (``docs/archive/legacy-architecture/data-ingestion-layer/``, ``docs/archive/legacy-architecture/data-lake-architecture/``) — are not
@@ -254,7 +254,7 @@ def main() -> int:
     for entry in sorted(actual - allowlist):
         errors.append(
             "NEW SDK import of a legacy/backend internal target — SDKs must stay "
-            f"thin (talk to api.aether.network): {entry}"
+            f"thin (talk to api.olympuslabsml.com): {entry}"
         )
     for entry in sorted(allowlist - actual):
         errors.append(f"allowlist entry no longer references an internal target — REMOVE it (shrink-only): {entry}")

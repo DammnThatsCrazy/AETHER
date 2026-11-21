@@ -18,6 +18,7 @@ import {
   useUpdateOrganizationProfile,
 } from '@aether-app/features/onboarding/use-workspace-setup';
 import { TIMEZONE_CHOICES } from '@aether-app/pages/onboarding/onboarding-model';
+import { TwoStepVerificationBlock } from './two-step-section';
 import { api } from '@aether-app/lib/api/endpoints';
 import { env } from '@aether-app/lib/env';
 
@@ -699,6 +700,7 @@ export function PersonalHub() {
           <EmptyRow>Your profile is not available.</EmptyRow>
         )}
       </SettingsBlock>
+      <TwoStepVerificationBlock />
       <SettingsBlock title="Appearance" sub="Stored on this device." testId="settings-appearance">
         <SettingsRow label="Theme" description="Stone is light. Graphite is dark.">
           {THEMES.map(t => (

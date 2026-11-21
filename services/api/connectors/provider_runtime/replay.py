@@ -457,7 +457,9 @@ class ProviderRawReplayService:
                 else:
                     # The bridge owns ingress consent and atomic canonical
                     # Bronze/outbox writes; a duplicate from a retry is safe.
-                    accepted = await self._bridge().ingest_events(scope.tenant_id, result.events)
+                    accepted = await self._bridge().ingest_events(
+                        scope.tenant_id, result.events, raw_records=[item.record]
+                    )
                     admitted = 0
                 totals["scanned"] += 1
                 totals["candidates"] += len(result.events)

@@ -15,7 +15,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/connectors/provider_runtime/": "sha256:f3f6063e945f011d8c68b42dd1835ed6e41aeebe8ecb18d029ef794244d6a41e"
   "services/api/connectors/providers/routes.py": "sha256:49308bb682d1347fb244676eaf438349c42b961d87561900ba24f20549cee523"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
   "services/api/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"

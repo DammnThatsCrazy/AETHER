@@ -1468,6 +1468,41 @@ def test_pilot_may_create_google_and_apple_social_sign_in_but_never_destroy_it()
     assert MODULE.pilot_plan_safety_violations(plan((twitter, ["create"]))).get("pilot.auth0_scope") == [twitter]
 
 
+def test_pilot_social_associations_never_enable_kyber_or_drop_a_client():
+    """The association sets the whole client list: enabling the deferred Kyber
+    client or removing an enabled client is refused (Codex P2 on #899)."""
+    google = "module.auth0.auth0_connection_clients.google_aether[0]"
+    kyber_client = {"address": "module.auth0.auth0_client.kyber", "type": "auth0_client",
+                    "change": {"actions": ["no-op"], "before": {"client_id": "kyb"}, "after": {"client_id": "kyb"}}}
+
+    def plan(actions, before, after):
+        return {"resource_changes": [kyber_client, {
+            "address": google, "type": "auth0_connection_clients",
+            "change": {"actions": actions, "before": before, "after": after},
+        }]}
+
+    aether_only = MODULE.pilot_plan_safety_violations(
+        plan(["create"], None, {"enabled_clients": ["aeth", "cli"]}))
+    assert not aether_only.get("pilot.auth0_scope")
+    assert not aether_only.get("pilot.auth0_destructive_change")
+
+    with_kyber = MODULE.pilot_plan_safety_violations(
+        plan(["create"], None, {"enabled_clients": ["aeth", "kyb", "cli"]}))
+    assert with_kyber.get("pilot.auth0_scope") == [google]
+
+    dropped = MODULE.pilot_plan_safety_violations(
+        plan(["update"], {"enabled_clients": ["aeth", "cli"]}, {"enabled_clients": ["aeth"]}))
+    assert dropped.get("pilot.auth0_destructive_change") == [google]
+
+    kyber_in_prior_state = {"resource_changes": [{
+        "address": google, "type": "auth0_connection_clients",
+        "change": {"actions": ["create"], "before": None, "after": {"enabled_clients": ["kyb"]}},
+    }], "prior_state": {"values": {"root_module": {"child_modules": [{"resources": [
+        {"address": "module.auth0.auth0_client.kyber", "values": {"client_id": "kyb"}},
+    ]}]}}}}
+    assert MODULE.pilot_plan_safety_violations(kyber_in_prior_state).get("pilot.auth0_scope") == [google]
+
+
 def test_pilot_allows_mcp_oauth_and_registration_auth0_resources_but_not_deletion():
     mcp = (
         "module.auth0.auth0_resource_server.access_mcp[0]",

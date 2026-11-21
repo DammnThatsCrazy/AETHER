@@ -345,7 +345,7 @@ def test_client_supplied_source_claims_are_ignored():
     normalized["properties"] = {"source_relationship": "partner_feed", "source_instance": "evil"}
     normalized["context"] = {
         **(normalized.get("context") or {}),
-        "library": {"name": "@aether/access-kit", "version": "0.1.0"},
+        "library": {"name": "@olympuslabs/aether-access-kit", "version": "0.1.0"},
         "surface": "mcp",
         "source_instance": "site:other",
     }

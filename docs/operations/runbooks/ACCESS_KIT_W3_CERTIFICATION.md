@@ -133,7 +133,7 @@ read tenant A's entity.
 
 | Host | Transport | Registration | Result | Date / evidence |
 |---|---|---|---|---|
-| Claude Code / Claude Desktop | stdio (`npx @aether/access-kit` MCP) and remote | DCR/CIMD or preregistered | not run | |
+| Claude Code / Claude Desktop | stdio (`npx @olympuslabs/aether-access-kit` MCP) and remote | DCR/CIMD or preregistered | not run | |
 | Claude.ai custom connector | remote | DCR/CIMD | not run | |
 | Cursor / VS Code | stdio and remote | DCR/CIMD | not run | |
 | ChatGPT connector | remote | DCR/CIMD | not run | |
@@ -144,7 +144,7 @@ The CLI and local MCP ship as an npm prerelease through the protected
 `npm-production` release on `main` (`publish-access-kit.yml`, alpha/beta
 dist-tag). Before announcing it to the design partner, install the published
 version into an empty directory, run `aether --help`, and repeat the stdio host
-rows with `npx @aether/access-kit@<tag>`.
+rows with `npx @olympuslabs/aether-access-kit@<tag>`.
 
 ## Failure triage
 

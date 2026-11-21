@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472
 WORKDIR /workspace
 RUN corepack enable
 COPY . .
-RUN pnpm install --filter @aether/access-kit --prod --frozen-lockfile
+RUN pnpm install --filter @olympuslabs/aether-access-kit --prod --frozen-lockfile
 
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 

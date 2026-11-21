@@ -97,10 +97,12 @@ class IngressAdapterFamilySpec:
 # import time, not first use).
 from ingestion.ingestion.adapters.sdk import SdkIngressAdapter  # noqa: E402
 from ingestion.ingestion.adapters.replay import ReplayIngressAdapter  # noqa: E402
+from ingestion.ingestion.adapters.provider import ProviderIngressAdapter  # noqa: E402
 
 REGISTERED_ADAPTERS: dict[str, Type[UniversalIngressAdapter]] = {
     "sdk": SdkIngressAdapter,
     "replay": ReplayIngressAdapter,
+    "connector": ProviderIngressAdapter,
 }
 
 _IMPLEMENTED_STATUS = {
@@ -108,6 +110,8 @@ _IMPLEMENTED_STATUS = {
     "observation:write + config:read",
     "replay": "implemented — ReplayIngressAdapter (WS-B4); OPERATOR_REPLAY "
     "credential, original-time preservation (Invariant #15)",
+    "connector": "implemented — ProviderIngressAdapter; MANAGED_CONNECTOR credential, "
+    "source relationship/instance and rights refs from the admitting grant",
 }
 
 # Family specs in canonical Envelope-B SOURCE_TYPES order.

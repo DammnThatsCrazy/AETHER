@@ -293,7 +293,7 @@ is on the delegated-MCP read allowlist.
   whichever credential the selected command needs through the host's environment
   or secret injection mechanism. The bridge does not save either credential.
 - `AETHER_API_URL` selects the API origin and defaults to
-  `https://api.aether.network`. The client requires HTTPS, allowing HTTP only for
+  `https://api.olympuslabsml.com`. The client requires HTTPS, allowing HTTP only for
   `localhost`, `127.0.0.1`, or `::1`. The value cannot include credentials,
   paths, query strings, or fragments.
 - Key issuance, tenant membership, role/scopes, revocation, request correlation,
@@ -461,7 +461,7 @@ tokens are read-only. The server-side REST permission check remains authoritativ
   reviewer, but no package version is published yet. That environment is not
   currently configured. Customer
   CloudShell/ECS/other-cloud installation by `npm install --global
-  @aether/access-kit` becomes available after that release. The ECR image
+  @olympuslabs/aether-access-kit` becomes available after that release. The ECR image
   remains private to Aether AWS principals and is intended for the hosted MCP
   service and authorized Aether runners.
 - This package has no usage-consumption or pricing interpretation, combined

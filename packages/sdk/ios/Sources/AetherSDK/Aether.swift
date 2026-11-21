@@ -46,7 +46,7 @@ public struct AetherConfig {
     public let apiKey: String
     public var environment: Environment = .production
     public var debug: Bool = false
-    public var endpoint: String = "https://api.aether.network"
+    public var endpoint: String = "https://api.olympuslabsml.com"
     public var modules: ModuleConfig = ModuleConfig()
     public var privacy: PrivacyConfig = PrivacyConfig()
     public var batchSize: Int = 10

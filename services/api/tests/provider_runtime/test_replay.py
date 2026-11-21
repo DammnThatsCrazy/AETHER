@@ -467,12 +467,12 @@ async def test_durable_handler_checkpoints_prefix_then_retry_resumes_suffix(monk
     original_ingest = service.bridge.ingest_events
     failed_once = False
 
-    async def fail_second(tenant_id, events):
+    async def fail_second(tenant_id, events, **kwargs):
         nonlocal failed_once
         if events[0].source_record_id == second.record_id and not failed_once:
             failed_once = True
             raise RuntimeError("temporary canonical store failure")
-        return await original_ingest(tenant_id, events)
+        return await original_ingest(tenant_id, events, **kwargs)
 
     service.bridge.ingest_events = fail_second
     monkeypatch.setattr(replay_mod, "ProviderRawReplayService", lambda: service)

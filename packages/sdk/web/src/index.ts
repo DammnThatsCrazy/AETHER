@@ -71,7 +71,7 @@ const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version
 // Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts (web
 // bundles standalone; literal kept in sync by scripts/validate_sdk_release_alignment.py).
 const CONTRACT_SCHEMA_VERSION = '1.0.0';
-const DEFAULT_ENDPOINT = 'https://api.aether.network';
+const DEFAULT_ENDPOINT = 'https://api.olympuslabsml.com';
 
 class AetherSDK implements AetherSDKInterface {
   private config: AetherConfig | null = null;

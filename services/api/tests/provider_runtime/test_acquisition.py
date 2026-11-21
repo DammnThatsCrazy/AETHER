@@ -104,7 +104,7 @@ class _RawStore:
 
 
 class _Bridge:
-    async def ingest_events(self, tenant_id: str, events) -> int:
+    async def ingest_events(self, tenant_id: str, events, **_kwargs) -> int:
         return len(events)
 
 

@@ -22,14 +22,14 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR main.py diff: it mounts Social360 evidence and Workflow definition routers. Universal Provider Runtime connection, credential, and webhook mounts are unchanged."
 source_hashes:
-  "services/api/config/settings.py": "sha256:b1c2ebd96136fe70afcbaf79ebef7ac4076c4727de20cd8fb955fa07c78bf508"
-  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/config/settings.py": "sha256:c736e4b21d24dd3221980002b0959ce7319f377d0166dd58e81a7ce7076fb2bc"
+  "services/api/connectors/provider_runtime/": "sha256:f3f6063e945f011d8c68b42dd1835ed6e41aeebe8ecb18d029ef794244d6a41e"
   "services/api/connectors/providers/": "sha256:9f3b77f51f15de12bdcd9141260a8ffc8315bd8572a2beebad921a76356df608"
   "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
   "services/api/shared/integration_contracts/": "sha256:12e9434604d968e96658cb7e51ca267be6898281c5cd0a1315d492810db8dc3b"
-  "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
+  "services/api/shared/rate_limit/feature_gate.py": "sha256:8cc037fcab180fd9949d448f8c90d8b419faebdf056d28a4dab8e8af823dfec9"
 ---
 
 # Universal Provider Runtime
@@ -202,6 +202,9 @@ Normalization engine (EventNormalizer.normalize)
         ▼
 Event bridge
   1. consent-admitted canonical AetherEvent → typed bronze_sdk_events
+     (+ Envelope-B `observation_envelope` when the adoption flag is on: source
+     type connector/webhook, relationship and instance from the grant that
+     admitted the raw record, its source/grant/`rdec_` refs, raw-record lineage)
   2. SDK_EVENTS_VALIDATED outbox row in the same database transaction
   3. supervised event-outbox relay → event bus when enabled
         ▼
@@ -227,6 +230,16 @@ The pipeline honors three invariants:
   randomness, or provider I/O. Dropped or invalid records remain a visible
   normalization outcome; provider-specific quarantine and repair are still
   required before a stream is promoted.
+- **Source provenance.** Callers pass the persisted raw records with the
+  events (`ingest_events(..., raw_records=...)`). `ProviderIngressAdapter`
+  builds each event's Envelope-B from the rights admission stored on its raw
+  record (`metadata.aether_rights_admission`); nothing in the event payload can
+  set the relationship or rights references. An event without its raw record is
+  `unclassified` and cites no rights. Selecting an account on a tenant's own
+  connection creates its `organization_system` grant
+  (`organization_grants.py`, under a per-source claim in the shared cache so
+  overlapping selections create one grant), and deleting a tenant revokes its grants and
+  closes its connections (`tenant_offboarding.py`).
 - **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
   from each `AetherEvent`'s `data`/`context` in place before the durable dump
   (mandatory and unconditional — Bronze and the publish carry only scrubbed

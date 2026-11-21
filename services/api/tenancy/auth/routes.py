@@ -10,6 +10,7 @@ Public endpoints (no auth required):
   POST /v1/auth/resend-verification   Resend OTP (anti-enumeration safe)
   POST /v1/auth/login                 Email + password → new session API key
   POST /v1/auth/sso/callback          Auth0 JWT → AETHER tenant + API key
+  POST /v1/auth/mfa/verify            Two-step verification code → session
   GET  /v1/auth/sso/providers         List available SSO providers
   GET/POST /v1/auth/bootstrap/first-admin  Staging-only, bootstrap-token protected
 
@@ -42,6 +43,7 @@ from shared.common.common import (
     ForbiddenError,
     NotFoundError,
     RateLimitedError,
+    ServiceUnavailableError,
     UnauthorizedError,
     utc_now,
 )
@@ -344,6 +346,84 @@ async def _issue_human_session(
     return APIResponse(data=data).to_dict()
 
 
+async def _finish_sign_in(
+    response: Optional[Response],
+    *,
+    tenant_id: str,
+    user_id: Optional[str],
+    plan_tier_value: str,
+    method: str,
+    message: str,
+    legacy_label: str,
+    user_record: Optional[dict] = None,
+) -> dict:
+    """Issue the session for a completed first factor, or stop for two-step verification.
+
+    Every sign-in method ends here, so a user who enrolled an authenticator is
+    always asked for it, whichever way they signed in.
+    """
+    from tenancy.auth import mfa
+
+    user = user_record
+    if user is None and user_id:
+        try:
+            from repositories.repos import UserRepository
+            user = await UserRepository().find_by_id(user_id)
+        except Exception as e:
+            # Fail closed: without the record we cannot tell whether a second
+            # factor is required, so no credential is issued.
+            logger.warning(f"MFA user lookup failed; refusing sign-in: {e}")
+            metrics.increment("auth_mfa_lookup_failures")
+            raise ServiceUnavailableError("Sign-in is temporarily unavailable. Try again shortly.") from e
+    if user_id and mfa.is_enabled(user):
+        challenge = await mfa.create_challenge(
+            mfa.get_cache(), tenant_id=tenant_id, user_id=user_id, method=method,
+            plan_tier=plan_tier_value,
+        )
+        metrics.increment("auth_mfa_challenges", labels={"method": method})
+        return APIResponse(data={
+            "mfa_required": True,
+            "mfa_challenge": challenge,
+            "mfa_methods": ["totp", "recovery_code"],
+            "message": "Enter the code from your authenticator app.",
+        }).to_dict()
+
+    if settings.trust_plane.human_sessions_enabled:
+        return await _issue_human_session(response, tenant_id, user_id, message)
+
+    # Legacy path (flag off) — reusable API key.
+    raw_key = await _issue_api_key(tenant_id, plan_tier_value, legacy_label)
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "api_key": raw_key,
+        "message": f"{message.split('.')[0]}. Store your API key securely — it will not be shown again.",
+    }).to_dict()
+
+
+async def _send_signup_code_email(email: str, otp: str, name: str = "") -> None:
+    try:
+        from shared.email import email_service
+        from shared.email.templates import _base
+        greeting = f"Hi {name}," if name else "Hi,"
+        body_html = _base("Confirm your email", f"""
+<p>{greeting}</p>
+<p>Enter this code to finish creating your Aether workspace:</p>
+<div style="font-size:36px;font-weight:bold;letter-spacing:8px;text-align:center;
+            padding:24px;background:#f4f4f4;border-radius:8px;margin:24px 0">
+  {otp}
+</div>
+<p>This code expires in <strong>10 minutes</strong>.</p>
+<p>If you did not try to sign up for Aether, you can ignore this email.</p>
+""")
+        await email_service.send_email(
+            to=email,
+            subject="Aether — your sign-up code",
+            body_html=body_html,
+        )
+    except Exception as e:
+        logger.debug(f"Sign-up code email skipped: {e}")
+
+
 async def _send_otp_email(email: str, otp: str, name: str = "") -> None:
     try:
         from shared.email import email_service
@@ -524,6 +604,13 @@ async def _cascade_delete_tenant(tenant_id: str) -> dict:
     counts["public_ingest_identifiers_revoked"] = (
         await public_ingest_service.revoke_all_for_tenant(tenant_id)
     )
+
+    # 1b. Close every data source the tenant owns: revoke its data-rights grants
+    # (the revocation fence denies any in-flight raw write) and delete provider
+    # credentials, closing each connection. Failures leave the tenant present.
+    from connectors.provider_runtime.tenant_offboarding import close_tenant_sources
+
+    counts["sources"] = await close_tenant_sources(tenant_id, actor="tenant_deletion")
 
     # 2. Erase every non-retained data surface written by the rehearsal before
     # removing the owning rows.  Any failure leaves the tenant present and the
@@ -901,19 +988,16 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     metrics.increment("auth_logins", labels={"method": "password"})
     logger.info(f"Login: tenant={tenant_id}")
 
-    if settings.trust_plane.human_sessions_enabled:
-        return await _issue_human_session(
-            response, tenant_id, user_rec.get("user_id"),
-            "Authenticated. A secure session has been created.",
-        )
-
-    # Legacy path (flag off) — reusable API key.
-    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "Login session")
-    return APIResponse(data={
-        "tenant_id": tenant_id,
-        "api_key": raw_key,
-        "message": "Authenticated. Store your API key securely — it will not be shown again.",
-    }).to_dict()
+    return await _finish_sign_in(
+        response,
+        tenant_id=tenant_id,
+        user_id=user_rec.get("user_id") or user_rec.get("id"),
+        plan_tier_value=plan_tier_value,
+        method="password",
+        message="Authenticated. A secure session has been created.",
+        legacy_label="Login session",
+        user_record=user_rec,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -926,6 +1010,12 @@ class SSOCallbackRequest(BaseModel):
     session_required: bool = Field(
         default=False,
         description="Refuse the exchange unless the server can issue a revocable human session.",
+    )
+    signup_code: Optional[str] = Field(
+        default=None,
+        min_length=6,
+        max_length=6,
+        description="One-time code emailed to a first-time sign-up; omit to request one.",
     )
 
 
@@ -1046,6 +1136,35 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
                 "Ask an Olympus administrator to invite this email address."
             )
 
+    if not tenant_id and settings.trust_plane.sso_signup_email_code_required:
+        # A first-time sign-up proves it receives mail at this address before
+        # any workspace exists. The code is bound to the Auth0 subject, so it
+        # cannot complete someone else's sign-up.
+        from shared.auth.verification import generate_otp, store_otp, verify_otp
+
+        if not email:
+            raise BadRequestError("Your sign-in provider did not share an email address.")
+        redis = _get_redis()
+        code_key = f"sso-signup:{sub}"
+        email_key = throttle.email_digest(email)
+        if not body.signup_code:
+            await throttle.enforce_rate(throttle.otp_sends, email_key, throttle.OTP_SENDS_PER_EMAIL, redis)
+            otp = generate_otp()
+            await store_otp(code_key, otp, redis)
+            import asyncio
+            asyncio.ensure_future(_send_signup_code_email(email, otp, name if name != email else ""))
+            metrics.increment("sso_signup_codes_sent")
+            return APIResponse(data={
+                "signup_verification_required": True,
+                "email": email,
+                "message": "We emailed you a 6-digit code to finish creating your workspace.",
+            }).to_dict()
+        await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
+        if not await verify_otp(code_key, body.signup_code.strip(), redis):
+            raise BadRequestError("Invalid or expired code.")
+        await throttle.verify_failures.clear(email_key, redis)
+        claims = {**claims, "email_verified": True}
+
     if not tenant_id:
         # First SSO login — provision a new tenant
         tenant_id = str(uuid.uuid4())
@@ -1112,18 +1231,86 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
 
     metrics.increment("auth_logins", labels={"method": "sso"})
 
-    if settings.trust_plane.human_sessions_enabled:
-        return await _issue_human_session(
-            response, tenant_id, principal_user_id,
-            "Authenticated via SSO. A secure session has been created.",
-        )
+    return await _finish_sign_in(
+        response,
+        tenant_id=tenant_id,
+        user_id=principal_user_id,
+        plan_tier_value=plan_tier_value,
+        method="sso",
+        message="Authenticated via SSO. A secure session has been created.",
+        legacy_label="SSO session",
+    )
 
-    # Legacy path (flag off) — reusable API key.
-    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "SSO session")
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /v1/auth/mfa/verify  — second step for two-step verification
+# ──────────────────────────────────────────────────────────────────────
+
+class MfaVerifyRequest(BaseModel):
+    challenge: str = Field(..., min_length=20, max_length=128)
+    code: str = Field(..., min_length=6, max_length=16,
+                      description="Authenticator code, or one unused recovery code")
+
+
+@router.post("/v1/auth/mfa/verify")
+async def verify_mfa(body: MfaVerifyRequest, response: Response = None, request: Request = None):
+    """Complete a sign-in that stopped for two-step verification."""
+    from tenancy.auth import mfa
+    from repositories.repos import UserRepository
+
+    redis = _get_redis()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    cache = mfa.get_cache()
+    expired = "This sign-in has expired. Sign in again."
+    challenge = await mfa.load_challenge(cache, body.challenge)
+    if not challenge:
+        raise BadRequestError(expired)
+    user_id = challenge["user_id"]
+    users = UserRepository()
+    try:
+        # One two-step write per user at a time; the record is re-read inside
+        # the lock so a recovery code or time step is consumed exactly once.
+        async with mfa.user_lock(cache, user_id):
+            user = await users.find_by_id(user_id) or {}
+            if not mfa.is_enabled(user):
+                await mfa.drop_challenge(cache, body.challenge)
+                raise BadRequestError(expired)
+
+            secret = mfa.unseal_secret(user["mfa_totp_secret"])
+            counter = mfa.match_totp(secret, body.code, last_counter=user.get("mfa_last_counter"))
+            update: dict = {}
+            if counter is not None:
+                update["mfa_last_counter"] = counter
+                used = "totp"
+            else:
+                remaining = mfa.consume_recovery_code(list(user.get("mfa_recovery_hashes") or []), body.code)
+                if remaining is None:
+                    if not await mfa.record_failed_attempt(cache, body.challenge, challenge):
+                        metrics.increment("auth_mfa_failures", labels={"outcome": "exhausted"})
+                        raise BadRequestError("Too many incorrect codes. Sign in again.")
+                    metrics.increment("auth_mfa_failures", labels={"outcome": "wrong_code"})
+                    raise BadRequestError("Incorrect code.")
+                update["mfa_recovery_hashes"] = remaining
+                used = "recovery_code"
+
+            # Only the request that wins the challenge may issue a session.
+            if not await mfa.consume_challenge(cache, body.challenge):
+                metrics.increment("auth_mfa_failures", labels={"outcome": "challenge_reused"})
+                raise BadRequestError(expired)
+            await users.update(user_id, update)
+    except mfa.UserLockTimeout as exc:
+        raise ServiceUnavailableError("Another sign-in for this account is in progress. Try again.") from exc
+    metrics.increment("auth_mfa_verified", labels={"factor": used})
+    tenant_id = challenge["tenant_id"]
+    message = "Authenticated. A secure session has been created."
+    if settings.trust_plane.human_sessions_enabled:
+        extra = {"recovery_codes_remaining": len(update["mfa_recovery_hashes"])} if used == "recovery_code" else None
+        return await _issue_human_session(response, tenant_id, user_id, message, extra=extra)
+    raw_key = await _issue_api_key(tenant_id, challenge.get("plan_tier") or "alpha", "Login session")
     return APIResponse(data={
         "tenant_id": tenant_id,
         "api_key": raw_key,
-        "message": "Authenticated via SSO. Store your API key securely — it will not be shown again.",
+        "message": "Authenticated. Store your API key securely — it will not be shown again.",
     }).to_dict()
 
 

@@ -984,6 +984,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.MEDIUM,
         ml_value_tags=["on_chain_behavior", "wallet_interaction", "defi_protocol"],
         lake_layer_tags=["onchain_core"],
+        tenant_connectable=True,
     ),
     ProviderSourceEntry(
         provider_id="dune_datashare",
@@ -1007,6 +1008,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         ml_value_tags=["on_chain_history", "wallet_history", "defi_protocol"],
         lake_layer_tags=["onchain_core"],
         notes="Requires Dune Enterprise contract + warehouse provisioning",
+        tenant_connectable=True,
     ),
     ProviderSourceEntry(
         provider_id="dune_sim",
@@ -1030,6 +1032,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         ml_value_tags=["real_time_enrichment", "wallet_balance", "token_holdings"],
         lake_layer_tags=["onchain_core"],
         notes="Not used for bulk historical extraction; use datashare for that",
+        tenant_connectable=True,
     ),
 
     # ── Web3 On-Chain: Data Aggregators ─────────────────────────────────────
@@ -1072,6 +1075,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["price_context", "market_data", "token_classification"],
         lake_layer_tags=["price_reference"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="coinmarketcap",
@@ -1092,6 +1096,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["price_context", "market_data"],
         lake_layer_tags=["price_reference"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="etherscan",
@@ -1274,6 +1279,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["funding_rates", "liquidation_risk", "market_microstructure"],
         lake_layer_tags=["cex_market_data"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="coinbase_exchange",
@@ -1294,6 +1300,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["price_reference", "market_microstructure"],
         lake_layer_tags=["cex_market_data"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="kraken",
@@ -1314,6 +1321,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["price_reference", "funding_rates"],
         lake_layer_tags=["cex_market_data"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="okx",
@@ -1334,6 +1342,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["funding_rates", "liquidation_risk"],
         lake_layer_tags=["cex_market_data"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="bybit",
@@ -1354,6 +1363,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["funding_rates", "liquidation_risk"],
         lake_layer_tags=["cex_market_data"],
+        source_relationship="public_reference",
     ),
     ProviderSourceEntry(
         provider_id="ccxt",
@@ -1374,6 +1384,7 @@ PROVIDER_CATALOG: List[ProviderSourceEntry] = [
         risk_tier=RiskTier.LOW,
         ml_value_tags=["arbitrage_signals", "market_microstructure"],
         lake_layer_tags=["cex_market_data"],
+        source_relationship="public_reference",
     ),
 
     # ── Prediction Markets ───────────────────────────────────────────────────

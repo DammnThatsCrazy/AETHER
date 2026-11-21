@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:34f80cacf02ce6f956f37fc2ee2b5a3fc77f9f3038bc1f8571f46cdbc5403b9f"
+  "CHANGELOG.md": "sha256:0d7b2b6faf6f29321499025ecb0aa37fb09680be9af6dca69ee4c3c658a6633d"
 ---
 # Changelog
 
@@ -59,7 +59,10 @@ source_hashes:
 
 ### Fixed
 
-- The pilot Terraform plan policy allows the Google and Apple Auth0 social connections and their Aether client associations, which are created when their credentials are provisioned; deleting or replacing them is still rejected.
+- Feed ingestion: revoking or expiring a source's data-rights grant now stops `/v1/ingest/feed` (and Dune ingestion) for that source. The tenant-only legacy fallback applies only to sources that have never had a grant and only counts feed rows written before grants were required; a lake-denying grant or an unreadable rights authority denies.
+- Selecting a provider account creates its `organization_system` grant under a per-source claim in the shared cache, so overlapping selections no longer create two grants that leave the source ambiguous and refuse its syncs.
+- Two-step verification: sign-in now refuses (`503`) instead of skipping the second factor when the user record cannot be read; challenges and pending enrolments use the shared cache instead of process memory, so any API process can finish them; and overlapping verifies are serialized per user, so a challenge, recovery code or authenticator time step can be used only once.
+- The pilot Terraform plan policy allows the Google and Apple Auth0 social connections and their Aether client associations, which are created when their credentials are provisioned. In the pilot the Google association holds only the Aether clients (`social_kyber_enabled=false`), and the policy refuses an association change that enables Kyber or drops an enabled client; deleting or replacing them is still rejected.
 - x402 settlement observer: a report whose terms differ from an already verified receipt for the same transaction is now `conflicting` and records nothing; settled events carry the verified receipt's terms, never the report's.
 - Propagation no longer uses stored venue fills whose data-rights grant has since been revoked (or replaced by re-linking); they are excluded with `revoked_grant_fills_excluded`, and an unreadable grant authority excludes them with `fill_grant_authority_unavailable`.
 - An unchanged propagation recompute leaves the saved run intact instead of overwriting it with a self-superseding record.

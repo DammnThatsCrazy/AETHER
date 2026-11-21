@@ -1715,16 +1715,22 @@ PILOT_AUTH0_MUTABLE_ADDRESSES = frozenset({
     "module.auth0.auth0_tenant.access_mcp_client_registration[0]",
     "module.auth0.auth0_client_grant.access_mcp_third_party_read[0]",
     # Google and Apple social sign-in (owner-approved for the pilot): each
-    # connection and its Aether client association exist only when that
-    # provider's credentials are provisioned. The association resource sets
-    # the connection's whole client list, which for these dedicated social
-    # connections is only the Aether client. Deletion or replacement stays a
-    # destructive violation; Twitter, Microsoft and Slack stay out of scope.
+    # connection and its client association exist only when that provider's
+    # credentials are provisioned. The association resource sets the
+    # connection's whole client list, so PILOT_AUTH0_SOCIAL_ASSOCIATIONS adds
+    # two checks: it may not enable the deferred Kyber client and may not drop
+    # a client already enabled. Deletion or replacement stays a destructive
+    # violation; Twitter, Microsoft and Slack stay out of scope.
     "module.auth0.auth0_connection.google[0]",
     "module.auth0.auth0_connection_clients.google_aether[0]",
     "module.auth0.auth0_connection.apple[0]",
     "module.auth0.auth0_connection_clients.apple_aether[0]",
 })
+PILOT_AUTH0_SOCIAL_ASSOCIATIONS = frozenset({
+    "module.auth0.auth0_connection_clients.google_aether[0]",
+    "module.auth0.auth0_connection_clients.apple_aether[0]",
+})
+PILOT_AUTH0_KYBER_CLIENT_ADDRESS = "module.auth0.auth0_client.kyber"
 # The shared DB connection may change in pilot only to flip its domain-level
 # flag for MCP client registration; any other attribute change is out of scope.
 PILOT_AUTH0_DOMAIN_CONNECTION_ADDRESS = "module.auth0.auth0_connection.database"
@@ -1934,6 +1940,42 @@ def check_staging_legacy_aurora_safety(
         _record(results, name, True, detail, address=LEGACY_STAGING_AURORA_ADDRESS)
 
 
+def _auth0_client_ids(plan: dict[str, Any], address: str) -> set[str]:
+    """Every known id of one Auth0 client in the plan (change and prior state)."""
+    ids: set[str] = set()
+
+    def collect(values: Any) -> None:
+        if isinstance(values, dict):
+            for key in ("client_id", "id"):
+                value = values.get(key)
+                if isinstance(value, str) and value:
+                    ids.add(value)
+
+    for change in plan.get("resource_changes") or []:
+        if change.get("address") == address:
+            body = change.get("change") or {}
+            collect(body.get("before"))
+            collect(body.get("after"))
+
+    def walk(module: Any) -> None:
+        if not isinstance(module, dict):
+            return
+        for resource in module.get("resources") or []:
+            if resource.get("address") == address:
+                collect(resource.get("values"))
+        for child in module.get("child_modules") or []:
+            walk(child)
+
+    walk(((plan.get("prior_state") or {}).get("values") or {}).get("root_module"))
+    return ids
+
+
+def _enabled_clients(values: Any) -> set[str]:
+    if not isinstance(values, dict):
+        return set()
+    return {str(c) for c in values.get("enabled_clients") or [] if c is not None}
+
+
 def pilot_plan_safety_violations(plan: dict[str, Any]) -> dict[str, list[str]]:
     """Return fail-closed pilot findings before any staging apply is dispatched.
 
@@ -2015,6 +2057,13 @@ def pilot_plan_safety_violations(plan: dict[str, Any]) -> dict[str, list[str]]:
                 violations["pilot.auth0_scope"].append(address)
             elif "delete" in actions:
                 violations["pilot.auth0_destructive_change"].append(address)
+            elif address in PILOT_AUTH0_SOCIAL_ASSOCIATIONS:
+                before_clients = _enabled_clients(change.get("before"))
+                after_clients = _enabled_clients(change.get("after"))
+                if after_clients & _auth0_client_ids(plan, PILOT_AUTH0_KYBER_CLIENT_ADDRESS):
+                    violations["pilot.auth0_scope"].append(address)
+                if before_clients - after_clients:
+                    violations["pilot.auth0_destructive_change"].append(address)
 
     return {key: sorted(set(addresses)) for key, addresses in violations.items()}
 

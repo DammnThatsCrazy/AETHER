@@ -13,8 +13,9 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
+  - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:e572628211e30a12ae0778974524a613b7d42d5a1b1897e5cb938e4a7c3f7705"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:41a95d6b8aa593ddad2fea21b0316335affe7d7f0777ef95da6dc6c7d884771c"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
@@ -376,7 +377,7 @@ data class AetherConfig(
     val apiKey: String,
     val environment: Environment = Environment.PRODUCTION,
     val debug: Boolean = false,
-    val endpoint: String = "https://api.aether.network",
+    val endpoint: String = "https://api.olympuslabsml.com",
     val batchSize: Int = 10,
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),
