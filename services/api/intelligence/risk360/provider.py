@@ -2964,8 +2964,9 @@ class Risk360Provider:
             },
             warnings=warnings or None,
             canonicalAuthorityRefs=[
-                "computation_runs",
-                "gold_identity.anomaly_alert",
+                # Registered authorities: computation runs are "computation";
+                # gold identity anomaly alerts are risk signals.
+                "computation",
                 "graph",
                 "relationship_facts",
                 "risk_assessments",

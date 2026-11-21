@@ -1,6 +1,6 @@
 """Throttles on the unauthenticated email/password endpoints.
 
-The counter is tested with a fake clock and a fake Redis; the endpoints are
+The counter is tested with a fake clock and a fake shared cache; the endpoints are
 tested by calling the handlers with a fake request, the way
 ``tests/unit/test_trust_containment.py`` does.
 """
@@ -35,41 +35,40 @@ class Clock:
         return self.now
 
 
-class FakeRedis:
+class FakeCache:
+    """The shared CacheClient surface the counters use (set_nx/get/incr_by/delete)."""
+
     def __init__(self) -> None:
-        self.values: dict[str, int] = {}
-        self.ttls: dict[str, int] = {}
+        self.values: dict[str, object] = {}
 
-    async def incr(self, key):
-        self.values[key] = self.values.get(key, 0) + 1
-        return self.values[key]
-
-    async def eval(self, script, numkeys, key):
-        # The refund script: decrement only an existing positive count.
-        if self.values.get(key, 0) > 0:
-            self.values[key] -= 1
-            return self.values[key]
-        return 0
-
-    async def expire(self, key, seconds):
-        self.ttls[key] = seconds
-
-    async def ttl(self, key):
-        return self.ttls.get(key, -1)
+    async def set_nx(self, key, value, ttl=0):
+        if key in self.values:
+            return False
+        self.values[key] = value
+        return True
 
     async def get(self, key):
         return self.values.get(key)
 
+    async def set(self, key, value, ttl=0):
+        self.values[key] = value
+
+    async def incr_by(self, key, amount, ttl=0):
+        self.values[key] = int(self.values.get(key, 0)) + amount
+        return self.values[key]
+
     async def delete(self, key):
         self.values.pop(key, None)
-        self.ttls.pop(key, None)
+
+    def counts(self):
+        return {k: v for k, v in self.values.items() if not k.endswith(":window")}
 
 
-class BrokenRedis:
-    async def incr(self, key):
-        raise ConnectionError("redis down")
+class BrokenCache:
+    async def set_nx(self, *args, **kwargs):
+        raise ConnectionError("cache down")
 
-    get = delete = expire = ttl = eval = incr
+    get = delete = incr_by = set_nx
 
 
 # ── the counter ──────────────────────────────────────────────────────────
@@ -104,27 +103,41 @@ def test_memory_fallback_is_bounded_and_drops_the_window_closing_soonest():
     assert "k0" not in counter._memory and "k3" in counter._memory
 
 
-def test_redis_counts_expires_and_clears():
-    redis = FakeRedis()
+def test_the_shared_cache_counts_and_clears():
+    cache = FakeCache()
     counter = at.AttemptCounter("t", 900, clock=Clock())
-    assert _run(counter.hit("k", redis)) == (1, 900)
-    assert _run(counter.hit("k", redis))[0] == 2
-    _run(counter.clear("k", redis))
-    assert _run(counter.hit("k", redis)) == (1, 900)
+    assert _run(counter.hit("k", cache)) == (1, 900)
+    assert _run(counter.hit("k", cache))[0] == 2
+    _run(counter.clear("k", cache))
+    assert not cache.values
+    assert _run(counter.hit("k", cache)) == (1, 900)
 
 
-def test_a_redis_key_without_an_expiry_is_repaired_not_kept_forever():
-    redis = FakeRedis()
-    counter = at.AttemptCounter("t", 900, clock=Clock())
-    redis.values["auththrottle:t:k"] = 4  # incr succeeded, expire never ran
-    assert _run(counter.hit("k", redis)) == (5, 900)
-    assert redis.ttls["auththrottle:t:k"] == 900
+def test_the_shared_window_closes_after_its_length_and_starts_a_fresh_count():
+    clock, cache = Clock(), FakeCache()
+    counter = at.AttemptCounter("t", 60, clock=clock)
+    assert _run(counter.hit("k", cache)) == (1, 60)
+    clock.now += 20
+    assert _run(counter.hit("k", cache)) == (2, 40)
+    # The cache expires the window key at its TTL; a new window means a new counter key.
+    cache.values.pop("auththrottle:t:k:window")
+    clock.now += 41
+    assert _run(counter.hit("k", cache)) == (1, 60)
 
 
-def test_a_redis_outage_falls_back_to_the_local_window():
+def test_two_processes_share_one_budget():
+    """Separate counters (one per process) count against the same shared cache."""
+    cache = FakeCache()
+    first, second = at.AttemptCounter("t", 900, clock=Clock()), at.AttemptCounter("t", 900, clock=Clock())
+    for _ in range(3):
+        _run(first.hit("k", cache))
+    assert _run(second.hit("k", cache))[0] == 4
+
+
+def test_a_cache_outage_falls_back_to_the_local_window():
     counter = at.AttemptCounter("t", 60, clock=Clock())
-    assert _run(counter.hit("k", BrokenRedis()))[0] == 1
-    assert _run(counter.hit("k", BrokenRedis()))[0] == 2
+    assert _run(counter.hit("k", BrokenCache()))[0] == 1
+    assert _run(counter.hit("k", BrokenCache()))[0] == 2
 
 
 # ── the limits ───────────────────────────────────────────────────────────
@@ -158,22 +171,32 @@ def test_parallel_attempts_cannot_all_slip_under_the_cap():
 
 def test_a_refunded_event_no_longer_counts():
     counter = at.AttemptCounter("t", 60, clock=Clock())
-    redis = FakeRedis()
+    cache = FakeCache()
     _run(counter.hit("k"))
     _run(counter.hit("k"))
     _run(counter.refund("k"))
     assert _run(counter.hit("k"))[0] == 2
-    _run(counter.hit("r", redis))
-    _run(counter.hit("r", redis))
-    _run(counter.refund("r", redis))
-    assert _run(counter.hit("r", redis))[0] == 2
-    # A refund can only undo a counted event: never below zero, in memory or in Redis (a plain
-    # DECR on a key a concurrent success just cleared would create -1 and admit an extra attempt).
-    _run(counter.refund("never-hit", redis))
+    _run(counter.hit("r", cache))
+    _run(counter.hit("r", cache))
+    _run(counter.refund("r", cache))
+    assert _run(counter.hit("r", cache))[0] == 2
+    # A refund can only undo a counted event: never below zero, in memory or in the shared
+    # cache (a decrement racing a clear would otherwise create -1 and admit an extra attempt).
+    _run(counter.refund("never-hit", cache))
     _run(counter.refund("never-hit"))
-    assert "auththrottle:t:never-hit" not in redis.values
+    assert all(int(v) >= 0 for v in cache.counts().values())
     assert _run(counter.hit("never-hit"))[0] == 1
-    assert _run(counter.hit("never-hit", redis))[0] == 1
+    assert _run(counter.hit("never-hit", cache))[0] == 1
+
+
+def test_a_refund_racing_a_clear_never_leaves_a_negative_count():
+    counter = at.AttemptCounter("t", 60, clock=Clock())
+    cache = FakeCache()
+    _run(counter.hit("k", cache))
+    window = cache.values["auththrottle:t:k:window"]
+    cache.values[f"auththrottle:t:k:{window}"] = 0  # a concurrent success zeroed it
+    _run(counter.refund("k", cache))
+    assert cache.values[f"auththrottle:t:k:{window}"] == 0
 
 
 def test_the_client_ip_is_the_address_the_load_balancer_appended():
@@ -194,10 +217,13 @@ PASSWORD = "pw12345678"
 
 
 @pytest.fixture()
-def auth():
+def auth(monkeypatch):
     module = importlib.import_module("tenancy.auth.routes")
     for counter in module.throttle.ALL_COUNTERS:
         counter.reset()
+    # Each test gets its own shared cache, as a fresh deployment would.
+    shared = FakeCache()
+    monkeypatch.setattr(module, "_auth_cache", lambda: shared)
     repos = importlib.import_module("repositories.repos")
     repos.reset_in_memory_stores()
     return module
@@ -223,12 +249,16 @@ def _login(auth, email, password, request=None):
     return _run(auth.login(auth.LoginRequest(email=email, password=password), None, request))
 
 
-class SlowRedis(FakeRedis):
-    """A Redis whose every call yields to other requests first, as a network round trip does."""
+class SlowCache(FakeCache):
+    """A shared cache whose every call yields to other requests first, as a network round trip does."""
 
-    async def incr(self, key):
+    async def set_nx(self, key, value, ttl=0):
         await asyncio.sleep(0)
-        return await super().incr(key)
+        return await super().set_nx(key, value, ttl)
+
+    async def incr_by(self, key, amount, ttl=0):
+        await asyncio.sleep(0)
+        return await super().incr_by(key, amount, ttl)
 
     async def get(self, key):
         await asyncio.sleep(0)
@@ -237,8 +267,8 @@ class SlowRedis(FakeRedis):
 
 def test_parallel_wrong_passwords_cannot_all_be_checked_past_the_cap(auth, monkeypatch):
     _run(_seed("p@x.io"))
-    redis = SlowRedis()  # one shared store, as every worker sees in production
-    monkeypatch.setattr(auth, "_get_redis", lambda: redis)
+    cache = SlowCache()  # one shared store, as every worker sees in production
+    monkeypatch.setattr(auth, "_auth_cache", lambda: cache)
 
     async def burst():
         return await asyncio.gather(
@@ -263,7 +293,10 @@ def test_retrying_during_the_address_wide_lockout_does_not_spend_the_clients_own
     for _ in range(6):  # the account holder keeps trying from a fresh network meanwhile
         with pytest.raises(RateLimitedError):
             _login(auth, "w@x.io", PASSWORD, _request(peer="203.0.113.7"))
-    auth.throttle.login_failures.reset()  # the address-wide window ends
+    # The address-wide window ends (its window key expires in the shared cache).
+    shared = auth._auth_cache()
+    for key in [k for k in shared.values if k.startswith("auththrottle:login-failures:")]:
+        shared.values.pop(key)
     assert "data" in _login(auth, "w@x.io", PASSWORD, _request(peer="203.0.113.7"))
 
 
@@ -360,3 +393,57 @@ def test_codes_cannot_be_mailed_to_one_address_more_than_five_times_in_a_window(
     with pytest.raises(RateLimitedError):
         _run(auth.resend_verification(auth.ResendRequest(email="m@x.io"), _request()))
     _run(auth.resend_verification(auth.ResendRequest(email="other@x.io"), _request()))
+
+
+# ── emailed codes in the shared cache ────────────────────────────────────
+
+
+def test_an_emailed_code_issued_by_one_process_verifies_on_another():
+    from shared.auth import verification as ver
+
+    cache = FakeCache()
+    _run(ver.store_otp("Code@X.io", "123456", cache))
+    ver._MEM_STORE.clear()  # another process has nothing in memory
+    assert _run(ver.verify_otp("code@x.io", "123456", cache)) is True
+    assert _run(ver.verify_otp("code@x.io", "123456", cache)) is False
+
+
+def test_overlapping_verifies_with_the_right_code_pass_once():
+    from shared.auth import verification as ver
+
+    cache = SlowCache()
+    _run(ver.store_otp("race@x.io", "654321", cache))
+
+    async def race():
+        return await asyncio.gather(*[ver.verify_otp("race@x.io", "654321", cache) for _ in range(3)])
+
+    assert _run(race()).count(True) == 1
+
+
+def test_a_wrong_code_does_not_spend_the_right_one():
+    from shared.auth import verification as ver
+
+    cache = FakeCache()
+    _run(ver.store_otp("w@x.io", "111111", cache))
+    assert _run(ver.verify_otp("w@x.io", "222222", cache)) is False
+    assert _run(ver.verify_otp("w@x.io", "111111", cache)) is True
+
+
+def test_the_auth_routes_use_the_platform_cache_client():
+    from shared.cache.cache import CacheClient
+
+    auth = importlib.import_module("tenancy.auth.routes")
+    assert isinstance(auth._auth_cache(), CacheClient)
+
+
+def test_a_non_ascii_code_is_a_wrong_code_not_a_server_error():
+    """Fullwidth digits used to raise TypeError in hmac.compare_digest (Codex P2 on #902)."""
+    from shared.auth import verification as ver
+
+    cache = FakeCache()
+    _run(ver.store_otp("u@x.io", "123456", cache))
+    assert _run(ver.verify_otp("u@x.io", "１２３４５６", cache)) is False
+    assert _run(ver.verify_otp("u@x.io", "123456", cache)) is True
+    ver._MEM_STORE.clear()
+    _run(ver.store_otp("m@x.io", "123456"))
+    assert _run(ver.verify_otp("m@x.io", "１２３４５６")) is False

@@ -1356,7 +1356,10 @@ def test_agent360_value_slot_preserves_cost_evidence_and_unknown_freshness():
     assert slot.state == "available"
     assert slot.freshness.state == "unknown"
     assert slot.evidenceRefs[0].observedAt == "2026-10-18T10:00:00Z"
-    assert "freshness_threshold_not_configured" in slot.reasonCodes
+    # The catalog now configures a freshness threshold for every slot, so an
+    # unknown freshness here is attributed to the missing source timestamp.
+    assert "freshness_threshold_not_configured" not in slot.reasonCodes
+    assert "freshness_source_timestamp_missing" in slot.reasonCodes
     summary = next(
         section["content"]
         for section in slot.content["sections"]
@@ -2271,7 +2274,7 @@ async def test_episode360_entity_context_joins_exact_user_and_episode_evidence()
         if item.sourceKind == "section"
     }
     assert authority_refs == {
-        ("episode360", "episode_context"): ("episode_facts", "graph"),
+        ("episode360", "episode_context"): ("episode_facts", "graph", "temporal"),
         ("profile360", "evidence"): ("episode_facts", "identity"),
         ("profile360", "state"): ("episode_facts", "identity"),
         ("profile360", "summary"): ("episode_facts", "identity"),

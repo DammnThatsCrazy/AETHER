@@ -18,7 +18,7 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:0f5968d9a03c8924c2f35571a670e2e35077cccd2c934a73332214d833f3504d"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a724e282e98893b5c3781277fd43b6087a15ce9ed5d1aca3b746f59d5cf8e945"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -91,7 +91,7 @@ an exact tenant-owned product or offer. `POST /v1/commerce/intents` requires
 idempotent revisions with actor, effective and observed times, and evidence.
 Views, cart changes, checkout starts, and payment attempts do not create an
 intent. Agent-authored declarations, commerce/SKU/checkout subjects, and a
-freshness threshold remain unsupported, so the projection does not grant
+source freshness timestamp remain unsupported, so the projection does not grant
 purchase or execution authority and the slot remains partial.
 
 Agent360's capabilities slot exposes bounded persisted `capability.invoke`

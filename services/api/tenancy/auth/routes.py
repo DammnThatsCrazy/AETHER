@@ -126,13 +126,15 @@ async def first_admin_bootstrap_status(request: Request):
 # Internal helpers
 # ──────────────────────────────────────────────────────────────────────
 
-def _get_redis():
-    try:
-        from dependencies.providers import get_registry
-        registry = get_registry()
-        return getattr(getattr(registry, "cache", None), "_redis", None)
-    except Exception:
-        return None
+def _auth_cache():
+    """The platform's shared ``CacheClient`` for sign-in throttles, codes and challenges.
+
+    Every API process must see the same counters and codes, so this is the
+    registry cache (Redis or DynamoDB when deployed), never process memory.
+    None only when the platform registry is unavailable (local tooling).
+    """
+    from tenancy.auth import mfa
+    return mfa.get_cache()
 
 
 def _caller_ip(request: Optional[Request]) -> Optional[str]:
@@ -143,11 +145,11 @@ def _caller_ip(request: Optional[Request]) -> Optional[str]:
     return throttle.client_ip(request.headers, peer)
 
 
-async def _throttle_ip(request: Optional[Request], counter, limit: int, redis) -> None:
+async def _throttle_ip(request: Optional[Request], counter, limit: int, cache) -> None:
     """Per-IP request cap. A direct call without a request (tests) has no caller to count."""
     ip = _caller_ip(request)
     if ip is not None:
-        await throttle.enforce_rate(counter, ip, limit, redis)
+        await throttle.enforce_rate(counter, ip, limit, cache)
 
 
 async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> str:
@@ -676,10 +678,10 @@ async def register(body: RegisterRequest, request: Request = None):
     """
     if "@" not in body.email:
         raise BadRequestError("email must be a valid email address")
-    redis = _get_redis()
-    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    cache = _auth_cache()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, cache)
     await throttle.enforce_rate(
-        throttle.otp_sends, throttle.email_digest(body.email), throttle.OTP_SENDS_PER_EMAIL, redis,
+        throttle.otp_sends, throttle.email_digest(body.email), throttle.OTP_SENDS_PER_EMAIL, cache,
     )
     try:
         PlanTier(body.plan_tier)
@@ -717,7 +719,7 @@ async def register(body: RegisterRequest, request: Request = None):
         logger.warning(f"Pending user store failed: email={email!r} error={e}")
 
     otp = generate_otp()
-    await store_otp(email, otp, redis)
+    await store_otp(email, otp, cache)
 
     import asyncio
     asyncio.ensure_future(_send_otp_email(email, otp, body.name))
@@ -749,18 +751,18 @@ async def verify_email(body: VerifyEmailRequest, response: Response = None, requ
     verified_user_id: Optional[str] = None
 
     email = body.email.lower()
-    redis = _get_redis()
+    cache = _auth_cache()
 
     # A 6-digit code is only safe with a cap on wrong guesses: per IP, and per address.
-    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, cache)
     email_key = throttle.email_digest(email)
     # Counted before the code is checked (one atomic increment), so parallel
     # guesses cannot all pass a check-then-record gap; success clears it below.
-    await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
+    await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, cache)
 
-    if not await verify_otp(email, body.code, redis):
+    if not await verify_otp(email, body.code, cache):
         raise BadRequestError("Invalid or expired verification code.")
-    await throttle.verify_failures.clear(email_key, redis)
+    await throttle.verify_failures.clear(email_key, cache)
 
     # Retrieve pending registration (graceful if missing — re-verify after restart)
     pending: dict = {}
@@ -877,10 +879,10 @@ async def resend_verification(body: ResendRequest, request: Request = None):
     from shared.auth.verification import generate_otp, store_otp
 
     email = body.email.lower()
-    redis = _get_redis()
-    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    cache = _auth_cache()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, cache)
     await throttle.enforce_rate(
-        throttle.otp_sends, throttle.email_digest(email), throttle.OTP_SENDS_PER_EMAIL, redis,
+        throttle.otp_sends, throttle.email_digest(email), throttle.OTP_SENDS_PER_EMAIL, cache,
     )
 
     # Peek at the pending record for the name (best-effort — not required)
@@ -893,7 +895,7 @@ async def resend_verification(body: ResendRequest, request: Request = None):
         pass
 
     otp = generate_otp()
-    await store_otp(email, otp, redis)
+    await store_otp(email, otp, cache)
 
     import asyncio
     asyncio.ensure_future(_send_otp_email(email, otp, name))
@@ -933,22 +935,22 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     from shared.auth.password import verify_password
 
     email = body.email.lower()
-    redis = _get_redis()
-    await _throttle_ip(request, throttle.login_ip, throttle.LOGIN_ATTEMPTS_PER_IP_PER_MINUTE, redis)
+    cache = _auth_cache()
+    await _throttle_ip(request, throttle.login_ip, throttle.LOGIN_ATTEMPTS_PER_IP_PER_MINUTE, cache)
     email_key = throttle.email_digest(email)
     pair_key = throttle.email_ip_digest(email, _caller_ip(request) or "direct")
     # Each attempt is counted before the password is checked, in one atomic
     # increment, so parallel guesses cannot all pass a check-then-record gap. A
     # successful login clears both counts, so only a run of failures reaches a limit.
     await throttle.enforce_rate(
-        throttle.login_failures_by_ip, pair_key, throttle.LOGIN_FAILURES_PER_EMAIL_AND_IP, redis,
+        throttle.login_failures_by_ip, pair_key, throttle.LOGIN_FAILURES_PER_EMAIL_AND_IP, cache,
     )
     try:
-        await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
+        await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, cache)
     except RateLimitedError:
         # Refused by the address-wide ceiling: do not also spend this client's own
         # budget, or retrying during the lockout would extend it for that client.
-        await throttle.login_failures_by_ip.refund(pair_key, redis)
+        await throttle.login_failures_by_ip.refund(pair_key, cache)
         raise
 
     user_rec: dict = {}
@@ -970,8 +972,8 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     tenant_id = user_rec.get("tenant_id", "")
     if not tenant_id:
         raise BadRequestError(_LOGIN_ERROR)
-    await throttle.login_failures_by_ip.clear(pair_key, redis)
-    await throttle.login_failures.clear(email_key, redis)
+    await throttle.login_failures_by_ip.clear(pair_key, cache)
+    await throttle.login_failures.clear(email_key, cache)
 
     # Confirm tenant is active
     plan_tier_value = "alpha"
@@ -1144,13 +1146,13 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
 
         if not email:
             raise BadRequestError("Your sign-in provider did not share an email address.")
-        redis = _get_redis()
+        cache = _auth_cache()
         code_key = f"sso-signup:{sub}"
         email_key = throttle.email_digest(email)
         if not body.signup_code:
-            await throttle.enforce_rate(throttle.otp_sends, email_key, throttle.OTP_SENDS_PER_EMAIL, redis)
+            await throttle.enforce_rate(throttle.otp_sends, email_key, throttle.OTP_SENDS_PER_EMAIL, cache)
             otp = generate_otp()
-            await store_otp(code_key, otp, redis)
+            await store_otp(code_key, otp, cache)
             import asyncio
             asyncio.ensure_future(_send_signup_code_email(email, otp, name if name != email else ""))
             metrics.increment("sso_signup_codes_sent")
@@ -1159,10 +1161,10 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
                 "email": email,
                 "message": "We emailed you a 6-digit code to finish creating your workspace.",
             }).to_dict()
-        await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
-        if not await verify_otp(code_key, body.signup_code.strip(), redis):
+        await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, cache)
+        if not await verify_otp(code_key, body.signup_code.strip(), cache):
             raise BadRequestError("Invalid or expired code.")
-        await throttle.verify_failures.clear(email_key, redis)
+        await throttle.verify_failures.clear(email_key, cache)
         claims = {**claims, "email_verified": True}
 
     if not tenant_id:
@@ -1258,9 +1260,8 @@ async def verify_mfa(body: MfaVerifyRequest, response: Response = None, request:
     from tenancy.auth import mfa
     from repositories.repos import UserRepository
 
-    redis = _get_redis()
-    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
-    cache = mfa.get_cache()
+    cache = _auth_cache()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, cache)
     expired = "This sign-in has expired. Sign in again."
     challenge = await mfa.load_challenge(cache, body.challenge)
     if not challenge:

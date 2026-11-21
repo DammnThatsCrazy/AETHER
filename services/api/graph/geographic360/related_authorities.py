@@ -71,7 +71,8 @@ def _unknown(slot_id: str, reason: str) -> dict[str, Any]:
     return _slot(
         state="unknown",
         reason=reason,
-        authorities=(slot_id,),
+        # An unknown slot read no authority; a slot id is not an authority.
+        authorities=(),
     )
 
 
@@ -278,7 +279,7 @@ class RepositoryGeographicRelatedAuthorityReader:
                 "truncated": truncated,
             },
             evidence=list(evidence.values()),
-            authorities=("silver_campaign_touchpoint_facts", "campaigns"),
+            authorities=("campaign_touchpoints", "campaign_facts"),
             latest_observed_at=max((ref.observedAt or "" for ref in evidence.values()), default=None) or None,
         )
 
@@ -355,7 +356,7 @@ class RepositoryGeographicRelatedAuthorityReader:
                 "truncated": truncated,
             },
             evidence=list(evidence.values()),
-            authorities=("journey_versions",),
+            authorities=("journeys",),
             latest_observed_at=max((ref.observedAt or "" for ref in evidence.values()), default=None) or None,
         )
 
@@ -406,7 +407,7 @@ class RepositoryGeographicRelatedAuthorityReader:
                 "profileUpdatedAt": observed,
             },
             evidence=[ref],
-            authorities=("entities", "identity_profiles"),
+            authorities=("entities", "entity_identity"),
             latest_observed_at=observed,
         )
 

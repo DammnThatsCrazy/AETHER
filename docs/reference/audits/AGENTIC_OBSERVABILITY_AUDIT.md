@@ -20,7 +20,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:0f5968d9a03c8924c2f35571a670e2e35077cccd2c934a73332214d833f3504d"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a724e282e98893b5c3781277fd43b6087a15ce9ed5d1aca3b746f59d5cf8e945"
   "packages/shared/events.ts": "sha256:9a1838ed3fd0737a6c0ef3453f78263b309c3a208c9600aa5893056efccfa28d"
   "services/api/actions/agent/": "sha256:3ec4ff6e349f0fd6a28d21612e35bd1e337c063856e17ac18e7f006e224b11d6"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -41,7 +41,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/": "sha256:1db751d88f2ac539dbbb6ee4bbf7459826b6597190472c0b9b697ff28a2c2725"
+  "services/api/intelligence/risk360/": "sha256:2ce8247aab1e9642929ed00351e1407fe36ef71d7f4b150a02f261f9770c031a"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/": "sha256:21ee4cb483aa3d4cd48f85f4d78c643749de053b7390aa4f89900ead25bc4862"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
@@ -597,7 +597,7 @@ and stored action/resource references where available. An action or resource
 conflict suppresses the linked request and decision evidence. The view retains
 the latest decision pointer and supported decision history, but covers x402
 commerce only; effective authorization, other approval systems, historical run
-replay, and a freshness threshold remain unknown. Risk360 can read
+replay, and a source freshness timestamp remain unknown. Risk360 can read
 typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
 but no production detector currently writes those records. These additions
 close evidence-path pieces; they do not complete Agent360, Execution360,

@@ -68,7 +68,9 @@ def match_totp(secret: str, code: str, *, last_counter: Optional[int] = None,
     cannot be replayed within its validity window.
     """
     code = (code or "").strip().replace(" ", "")
-    if len(code) != DIGITS or not code.isdigit():
+    # isascii first: str.isdigit() also accepts fullwidth and other Unicode
+    # digits, which compare_digest would reject with a TypeError.
+    if len(code) != DIGITS or not code.isascii() or not code.isdigit():
         return None
     now_counter = int((time.time() if at is None else at) // PERIOD)
     for counter in range(now_counter - WINDOW, now_counter + WINDOW + 1):

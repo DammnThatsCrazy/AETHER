@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a724e282e98893b5c3781277fd43b6087a15ce9ed5d1aca3b746f59d5cf8e945"
 ---
 
 # 360 System Blueprint
@@ -44,7 +44,10 @@ facts therefore reads `unknown`, never fresh. A surface's `freshnessPolicy.slots
 `maxAgeSeconds` and the watermarked authorities it depends on; the oldest of
 those watermarks decides the slot. Profile360 declares ten slots: sessions
 and communications 1 hour, risk 6 hours, relationships, agent delegations and
-value 24 hours, and location 7 days. Operators override a threshold with
+value 24 hours, and location 7 days. Every surface also declares a
+`freshnessPolicy.maxAgeSeconds` default by surface type, used by slots without
+a slot-specific entry: 900 seconds for Agent360, Execution360, Signals360 and
+Communications360, and 86,400 seconds for every other surface. Operators override a threshold with
 `EXPERIENCE360_FRESHNESS_MAX_AGE_OVERRIDES` (JSON, per surface and slot).
 
 Current frame reads carry `fresh` or `stale` with `sourceAsOf`, `ageSeconds`

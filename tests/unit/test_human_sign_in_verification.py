@@ -357,3 +357,8 @@ class TestTwoStepHardening:
             assert len(stored["mfa_recovery_hashes"]) == len(codes) - 2
             assert mfa.hash_recovery_code(codes[0]) not in stored["mfa_recovery_hashes"]
             assert mfa.hash_recovery_code(codes[1]) not in stored["mfa_recovery_hashes"]
+
+
+def test_non_ascii_authenticator_codes_are_refused_not_errors():
+    from tenancy.auth import mfa
+    assert mfa.match_totp(mfa.generate_secret(), "１２３４５６") is None

@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; this document needs no other change.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a724e282e98893b5c3781277fd43b6087a15ce9ed5d1aca3b746f59d5cf8e945"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/journeys/support360/callbacks.py": "sha256:839b7619b305ae54cf0b8f384adeab91ab7ffd28d1d1976e4d40fadd068b173b"
   "services/api/journeys/support360/cases.py": "sha256:34c94f68a108fe323e0bb8b6aa34e68dc8b988f003ca9e9191e3fcde7c5caa60"
