@@ -277,6 +277,10 @@ resource "auth0_client_grant" "kyber_api" {
   scopes    = []
 }
 
+locals {
+  social_providers = var.enable_social_connections ? toset(var.social_providers) : toset([])
+}
+
 # --------------------------------------------------------------------------
 # Social Connections (SSO)
 # Each provider requires an app/client registered with that OAuth vendor.
@@ -284,7 +288,7 @@ resource "auth0_client_grant" "kyber_api" {
 # --------------------------------------------------------------------------
 
 resource "auth0_connection" "google" {
-  count    = var.enable_social_connections ? 1 : 0
+  count    = contains(local.social_providers, "google") ? 1 : 0
   name     = "aether-${var.environment}-google"
   strategy = "google-oauth2"
 
@@ -300,13 +304,13 @@ resource "auth0_connection" "google" {
 }
 
 resource "auth0_connection_clients" "google_aether" {
-  count           = var.enable_social_connections ? 1 : 0
+  count           = contains(local.social_providers, "google") ? 1 : 0
   connection_id   = auth0_connection.google[0].id
   enabled_clients = [auth0_client.aether.id, auth0_client.kyber.id, auth0_client.aether_cli.id]
 }
 
 resource "auth0_connection" "apple" {
-  count    = var.enable_social_connections ? 1 : 0
+  count    = contains(local.social_providers, "apple") ? 1 : 0
   name     = "aether-${var.environment}-apple"
   strategy = "apple"
 
@@ -323,13 +327,13 @@ resource "auth0_connection" "apple" {
 }
 
 resource "auth0_connection_clients" "apple_aether" {
-  count           = var.enable_social_connections ? 1 : 0
+  count           = contains(local.social_providers, "apple") ? 1 : 0
   connection_id   = auth0_connection.apple[0].id
   enabled_clients = [auth0_client.aether.id, auth0_client.aether_cli.id]
 }
 
 resource "auth0_connection" "twitter" {
-  count    = var.enable_social_connections ? 1 : 0
+  count    = contains(local.social_providers, "twitter") ? 1 : 0
   name     = "aether-${var.environment}-twitter"
   strategy = "twitter"
 
@@ -344,13 +348,13 @@ resource "auth0_connection" "twitter" {
 }
 
 resource "auth0_connection_clients" "twitter_aether" {
-  count           = var.enable_social_connections ? 1 : 0
+  count           = contains(local.social_providers, "twitter") ? 1 : 0
   connection_id   = auth0_connection.twitter[0].id
   enabled_clients = [auth0_client.aether.id, auth0_client.aether_cli.id]
 }
 
 resource "auth0_connection" "microsoft" {
-  count    = var.enable_social_connections ? 1 : 0
+  count    = contains(local.social_providers, "microsoft") ? 1 : 0
   name     = "aether-${var.environment}-microsoft"
   strategy = "windowslive"
 
@@ -367,7 +371,7 @@ resource "auth0_connection" "microsoft" {
 }
 
 resource "auth0_connection_clients" "microsoft_aether" {
-  count           = var.enable_social_connections ? 1 : 0
+  count           = contains(local.social_providers, "microsoft") ? 1 : 0
   connection_id   = auth0_connection.microsoft[0].id
   enabled_clients = [auth0_client.aether.id, auth0_client.aether_cli.id]
 }
@@ -379,7 +383,7 @@ resource "auth0_connection_clients" "microsoft_aether" {
 # --------------------------------------------------------------------------
 
 resource "auth0_connection" "slack" {
-  count    = var.enable_social_connections ? 1 : 0
+  count    = contains(local.social_providers, "slack") ? 1 : 0
   name     = "aether-${var.environment}-slack"
   strategy = "oauth2"
 
@@ -414,7 +418,7 @@ resource "auth0_connection" "slack" {
 }
 
 resource "auth0_connection_clients" "slack_aether" {
-  count           = var.enable_social_connections ? 1 : 0
+  count           = contains(local.social_providers, "slack") ? 1 : 0
   connection_id   = auth0_connection.slack[0].id
   enabled_clients = [auth0_client.aether.id, auth0_client.aether_cli.id]
 }

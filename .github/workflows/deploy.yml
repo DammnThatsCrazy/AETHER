@@ -430,7 +430,7 @@ jobs:
           AETHER_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabsml.com' }}
           KYBER_AUTH0_CLIENT_ID: ${{ secrets.KYBER_AUTH0_CLIENT_ID }}
           KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL || format('wss://{0}', secrets.TF_DOMAIN_NAME) }}

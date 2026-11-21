@@ -17,6 +17,7 @@ import { useState, type ReactNode } from 'react';
 import { cn } from '@aether/ui';
 import { useKyberDevice, useKyberScope, useKyberSession, useKyberStepUp, formatCountdown } from './hooks';
 import { describePurpose } from './scope-client';
+import { buildGoogleStepUpUrl } from './session-client';
 
 type BannerTone = 'danger' | 'warning' | 'info';
 
@@ -135,17 +136,27 @@ export function UnapprovedDeviceBanner() {
   );
 }
 
-/** Backend is asking for a WebAuthn step-up before higher-authority actions. */
+/**
+ * Backend is asking for a step-up before higher-authority actions. A session
+ * bound to an enrolled device verifies its authenticator; any other session
+ * (identity-approved Kyber) re-authenticates with Google, which re-prompts for
+ * the password and Workspace 2-Step Verification.
+ */
 export function StepUpRequiredBanner() {
   const { isRequired, isSteppedUp, isSupported, state, error, stepUp } = useKyberStepUp();
+  const { isBound } = useKyberDevice();
   if (!isRequired || isSteppedUp) return null;
+  const useDevice = isBound && isSupported;
+  const reverify = () => {
+    window.location.assign(buildGoogleStepUpUrl(`${window.location.pathname}${window.location.search}`));
+  };
   return (
     <SessionBanner
       tone="warning"
       label="⚑ Step-up required"
       testId="banner-step-up-required"
       action={
-        isSupported ? (
+        useDevice ? (
           <button
             type="button"
             onClick={() => void stepUp()}
@@ -154,12 +165,20 @@ export function StepUpRequiredBanner() {
           >
             {state === 'challenging' || state === 'verifying' ? 'Verifying…' : 'Verify now'}
           </button>
-        ) : null
+        ) : (
+          <button
+            type="button"
+            onClick={reverify}
+            className="rounded border border-current px-2 py-0.5 text-[11px] hover:bg-warning/20"
+          >
+            Re-verify with Google
+          </button>
+        )
       }
     >
-      {isSupported
+      {useDevice
         ? (error ?? 'The backend requires a fresh authenticator verification before this action class.')
-        : 'This browser has no platform authenticator, so step-up cannot be completed here. Use an enrolled device.'}
+        : 'This action needs a fresh sign-in. Google will ask for your password and 2-Step Verification again.'}
     </SessionBanner>
   );
 }

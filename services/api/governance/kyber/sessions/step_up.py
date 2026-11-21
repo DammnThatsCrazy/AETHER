@@ -220,6 +220,52 @@ class StepUpService:
         )
         return grant
 
+    async def grant_reauthenticated(
+        self,
+        *,
+        session_id: str,
+        operator_id: str,
+        google_subject: str,
+        capability_id: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> tuple[StepUpGrant, str]:
+        """Elevate after a fresh Google re-authentication (identity-approved Kyber).
+
+        The caller has already verified a Google sign-in that happened moments
+        ago (``prompt=login``, ``max_age=0``, checked ``auth_time``) for this
+        same Google subject; Google enforces the password and 2-Step
+        Verification. No device is required. The grant is bound to the session
+        and rotated with it like any other elevation.
+        """
+        session = await session_service.get(session_id)
+        if session is None or session.status in ("revoked", "expired"):
+            raise UnauthorizedError("Kyber session is not live")
+        if session.operator_id != operator_id:
+            raise UnauthorizedError("Step-up operator does not match the session")
+        if not google_subject or getattr(session, "google_subject", None) != google_subject:
+            metrics.increment("kyber_auth_failure_total", labels={"reason": "step_up_identity_mismatch"})
+            await self._record_failure(session_id, operator_id, session.device_id, capability_id)
+            raise UnauthorizedError("Re-authenticated identity does not match the session")
+
+        ttl = self._clamp(await self.default_ttl_minutes(operator_id, session.environment))
+        now = self._now()
+        expires_at = (now + timedelta(minutes=ttl)).isoformat()
+        grant = StepUpGrant(
+            session_id=session_id,
+            operator_id=operator_id,
+            device_id=session.device_id,
+            capability_id=capability_id,
+            reason=reason or "google_reauthentication",
+            created_at=now.isoformat(),
+            expires_at=expires_at,
+        )
+        await self._repo.insert(grant.grant_id, grant.model_dump())
+        await session_service.apply_step_up(session_id, expires_at=expires_at, capability_id=capability_id)
+        metrics.increment("kyber_auth_success_total", labels={"strength": "stepped_up", "method": "google_reauth"})
+        await self._audit(grant, outcome="allowed")
+        _session, raw_token = await session_service.rotate(session_id, reason="step_up")
+        return grant, raw_token
+
     async def grant_and_rotate(self, **kwargs: Any) -> tuple[StepUpGrant, str]:
         """Grant an elevation and rotate the session handle.
 

@@ -433,12 +433,18 @@ def test_production_accepts_a_fully_enforced_workforce_configuration():
     assert "SETTINGS_OK" in proc.stdout
 
 
+def test_production_accepts_identity_approved_kyber_without_device_trust():
+    # Invited Google identities sign in from any device; step-up stays required.
+    proc = _construct_settings({"KYBER_DEVICE_TRUST_REQUIRED": "false", "KYBER_STEP_UP_REQUIRED": "true"})
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
         {"KYBER_WORKFORCE_IDENTITY_ENABLED": "false"},
         {"KYBER_BACKEND_AUTHZ_ENFORCED": "false"},
-        {"KYBER_DEVICE_TRUST_REQUIRED": "false"},
+        {"KYBER_STEP_UP_REQUIRED": "false"},
         {"KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED": "true"},
         {"KYBER_BOOTSTRAP_ENABLED": "true"},
         {"KYBER_GOOGLE_CLIENT_ID": ""},
@@ -447,7 +453,7 @@ def test_production_accepts_a_fully_enforced_workforce_configuration():
         {"KYBER_WEBAUTHN_ORIGIN": ""},
     ],
     ids=[
-        "identity_disabled", "authz_observe", "no_device_trust", "legacy_identity_allowed",
+        "identity_disabled", "authz_observe", "no_step_up", "legacy_identity_allowed",
         "bootstrap_open", "no_google_client_id", "no_google_redirect_uri",
         "no_webauthn_rp_id", "no_webauthn_origin",
     ],
