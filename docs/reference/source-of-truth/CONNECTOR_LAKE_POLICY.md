@@ -102,7 +102,7 @@ class to dodge a `NEVER`) is a policy-enforcement alert.
 ## 5. Related docs
 
 - `CONNECTOR_TAXONOMY.md` — full enum reference for the six-layer corpus model
-  and the derived four-group customer catalog mirror.
+  and the derived five-group customer catalog mirror.
 - `DATA_RIGHTS_LEDGER.md` — grant model that governs policy elevations.
 - `BYOK_PROVIDER_GATEWAY.md` — BYOK class and its `NEVER` default.
 - `AETHER_END_USER_LIFECYCLE.md` — how the catalog mirrors into customer-facing

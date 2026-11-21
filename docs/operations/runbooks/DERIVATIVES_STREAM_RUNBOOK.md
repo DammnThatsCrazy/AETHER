@@ -11,7 +11,7 @@ source_files:
   - services/api/value/derivatives/admin_routes.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/value/derivatives/admin_routes.py": "sha256:94eb1c95b844e86a866fc44b88e831116ebd1a8892ce2535520848e35b57924b"
+  "services/api/value/derivatives/admin_routes.py": "sha256:41419b80b418a95450c4635de38a907480c2404e052312bb43caaab5e48e8d22"
   "services/api/value/derivatives/connectors/stream.py": "sha256:5dd156c359956ad22c41d0393959dad9cf8c7340c449a5779af4d3dc4e524fff"
 ---
 
@@ -20,6 +20,16 @@ source_hashes:
 Operator surface: `/derivatives/ops` (Kyber) → `/v1/admin/kyber/derivatives/runtime`.
 Requires `DERIVATIVES_OPERATOR`; all actions audited. Aether never places,
 modifies, or cancels orders — remediation is evidence review, never trading.
+
+Market reference: an intake or sync that reports `market_reference_missing`
+means the market has no row in the global registry yet. Check
+`GET /market-sources`; if the venue's source is `null`, provision it with
+`POST /market-sources/{venue}` (Olympus `public_reference` grant under the
+reserved `olympus` scope), then re-run the link sync. GMX and Drift have no
+market fetcher yet. An OAuth link that fails with
+`venue_oauth_app_not_configured` needs the Olympus app credential:
+`PUT /oauth-apps/{venue}` (check with `GET /oauth-apps/{venue}`; the secret is
+never returned).
 This runbook covers the **market WebSocket stream** (sequence tracking, gap
 detection/recovery, reconnect). For projection-vs-snapshot variance triage see
 `docs/operations/runbooks/DERIVATIVES_RECONCILIATION_RUNBOOK.md`.

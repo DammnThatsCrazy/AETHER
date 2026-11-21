@@ -132,6 +132,12 @@ rename or remove backend engineering categories (`ConnectorCategory`,
 `ProviderCategory`, campaign platform vocabulary); they serve different purposes.
 Membership rules mirror ADR-C11: derive, never hardcode a cohort in one place.
 
+*Amendment (2026-11):* a ninth category, `markets_trading`, was added for the
+tenant-connectable derivatives and prediction-market venue accounts (category
+`derivatives`). Olympus reference sources such as venue market data are not
+tenant-connectable and stay out of the customer catalog
+(`catalog.tenant_connectable`).
+
 ## ADR-0011 — Settings → Integrations is the authenticated management authority
 
 The canonical destination for "where do I connect / manage something" is

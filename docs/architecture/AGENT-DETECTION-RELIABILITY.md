@@ -12,8 +12,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "config/release/feature_flags/production.yaml": "sha256:11012b061ec3f670dcacf00daf813331fd05f69f69a723f6b991fd4e25aa668f"
-  "config/release/feature_flags/staging.yaml": "sha256:03fe2bc078f4b8b5a9d830da70853b9139f3620cb9aa2597df538c5f7f50898f"
+  "config/release/feature_flags/production.yaml": "sha256:b324c7923422e011e9702a2d020d8faf9a5fbc1d0172ed72e11fa57d48fc4604"
+  "config/release/feature_flags/staging.yaml": "sha256:099280bb51520ae899de4b48cece2cfd00e45a3b5844e87c111500932212a1fc"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:e5ab231da8aac54b09d595f9068b49265f4bbe8fa27d26a44def030be2216d7a"
   "packages/sdk/android/src/main/java/com/aether/sdk/AutomationSignals.kt": "sha256:e4b92160a166df33266838a65d5b2fb54627362f1f408ba0b866696aede9d21e"
   "packages/sdk/android/src/main/java/com/aether/sdk/DeviceIntegrity.kt": "sha256:55abb4473b991539ecc9ab831eb3aff01f61d75753fdcc61239ad53a775acb4a"
@@ -26,11 +26,11 @@ source_hashes:
   "packages/sdk/server/src/request-evidence.ts": "sha256:0c6673b18f400d3e73e36d004650d8a915e38652839aab168a638263a20fcdf9"
   "packages/sdk/web/src/types.ts": "sha256:0b12cb075729098df014e453361ce3d42c47b016db643350bc8a44dfd03344a9"
   "packages/sdk/web/src/utils/index.ts": "sha256:69d575c70eba14c95cd7f0b82659bf7db7c8c3151dbb63d05fefcb4b137412ce"
-  "services/api/actions/agent/agent360_provider.py": "sha256:946143c4503b65def6e61157ca2776a63fd1d6a1cbd06473ac7373d704bcae49"
+  "services/api/actions/agent/agent360_provider.py": "sha256:4f903310623b89e4616b8f822028fa5a52bda10651b1146267b1c5c77ab7db96"
   "services/api/actions/agent/attestation.py": "sha256:d0930009a39420b36c083d51ba05cbd2261d6a7aa66589c9509fb62707199655"
   "services/api/actions/agent_lineage/engine.py": "sha256:da90a532b17db5e7359823c15ad44b7c45583038c5f40cf8edbcf6eda2fc3f04"
   "services/api/actions/agent_lineage/evidence.py": "sha256:80870d50700b4c9f1e6e04d20da5a49476edf52475a8dee9c1779937ba5738cc"
-  "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
+  "services/api/config/settings.py": "sha256:241a51b5e7bdf223a1163635664a4a4829f8d83013bce958dc6c877ea64e5131"
   "services/api/ingestion/device_integrity/app_attest.py": "sha256:c0c8337aa587799fb87ae67cfd942c2c32db4f7fab4e23a4a39684181e8b3a4e"
   "services/api/ingestion/device_integrity/play_integrity.py": "sha256:556236e83bcc2e4db2a43a4116c3b87794ecffb02e24a43592362ebea4c98178"
   "services/api/ingestion/device_integrity/routes.py": "sha256:28f99915d7dc6a7ce96caf318bce4adc682687cc3aafcb26dd245bb95fcf67aa"

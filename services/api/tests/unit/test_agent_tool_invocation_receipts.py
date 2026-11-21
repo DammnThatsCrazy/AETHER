@@ -1,8 +1,15 @@
+"""Historical agent invocation receipts stay readable after the producer was retired.
+
+Aether no longer invokes MCP tools or reads MCP resources for an agent (ADR-012),
+so no new receipts are written. These tests pin that existing receipts still
+validate and reach Agent 360 and workflow readers exactly as before.
+"""
+
 from __future__ import annotations
 
 import sys
+import hashlib
 import json
-from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from pathlib import Path
@@ -11,9 +18,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from actions.agent.invocation_runtime import (  # noqa: E402
+from actions.agent.invocation_receipts import (  # noqa: E402
     InvocationReceiptRepository,
-    invoke_observed_mcp_tool,
     validated_agent_receipt,
 )
 from actions.agent_access_intelligence.authority import CapabilityAuthorizationRepository  # noqa: E402
@@ -23,7 +29,6 @@ from actions.agent_access_intelligence.repositories import CapabilityCatalogRepo
 from actions.delegation.engine import DelegationEngine  # noqa: E402
 from repositories.repos import DelegationRepository, reset_in_memory_stores  # noqa: E402
 from intelligence.workflow.action_authorities import invocation_receipt  # noqa: E402
-from shared.common.common import ConflictError, ForbiddenError  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -87,449 +92,65 @@ async def _fixture():
         execution_record,
     )
 
-
-class _Response:
-    status_code = 200
-
-    def __init__(self, payload, headers=None):
-        self.payload = payload
-        self.headers = headers or {}
-        self.content = b"{}"
-
-    def json(self):
-        return self.payload
-
-
-class _SseResponse(_Response):
-    def __init__(self, payloads):
-        self.payload = None
-        self.headers = {"content-type": "text/event-stream"}
-        self.content = "".join(
-            f"event: message\ndata: {json.dumps(payload)}\n\n"
-            for payload in payloads
-        ).encode()
-
-
-class _Client:
-    payload = None
-    calls = 0
-
-    def __init__(self, **kwargs):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_):
-        return None
-
-    @classmethod
-    async def post(cls, method, url, *, json, headers, max_redirects):
-        assert method == "POST" and max_redirects == 0
-        cls.calls += 1
-        assert url == "https://tools.example/mcp"
-        if json["method"] == "initialize":
-            return _Response(
-                {"jsonrpc": "2.0", "id": json["id"], "result": {"protocolVersion": "2025-03-26"}}
-            )
-        if json["method"] == "notifications/initialized":
-            return _Response({})
-        assert json["method"] == "tools/call" and json["params"]["name"] == "lookup"
-        return _Response(cls.payload)
-
-
-@pytest.mark.asyncio
-async def test_real_provider_completion_receipt_joins_workflow_reader(monkeypatch):
-    (
-        tenant,
-        agent,
-        execution,
-        tool,
-        cap,
-        catalog,
-        grants,
-        engine,
-        config,
-        _grant,
-        run,
-    ) = await _fixture()
-    _Client.payload = {
-        "jsonrpc": "2.0", "id": execution, "result": {"content": [{"text": "real"}]}
-    }
-    _Client.calls = 0
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", _Client.post)
-
-    async def safe_url(_url):
-        return False, "safe"
-
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
-    row = await invoke_observed_mcp_tool(
-        tenant_id=tenant,
-        agent_id=agent,
-        execution_id=execution,
-        initiating_principal_user_id="owner",
-        tool_name=tool,
-        arguments={"query": "x"},
-        config=config,
-        engine=engine,
-        workflow_run_id="run-a",
-        workflow_definition_link=run["workflow_definition_link"],
-        grants=grants,
-        catalog=catalog,
-    )
-    assert row["result_status"] == "succeeded", row["provider_error"]
-    run["ended_at"] = row["completed_at"]
-    evidence = await invocation_receipt(tenant_id=tenant, workflow_run_id="run-a", execution=run)
-    assert evidence["state"] == "provider_invocation_succeeded"
-    assert evidence["receiptId"] == row["receipt_id"]
-    assert evidence["capabilityId"] == cap and evidence["resourceOperation"] == "unknown"
-    assert row["grant_id"] == "grant-a" and row["policy_decision"]["allowed"] is True
-    from actions.agent.execution360_provider import (
-        RepositoryExecution360Source,
-        _project_tool_call_read,
-    )
-
-    class EmptyGraph:
-        async def get_edges_for_tenant(self, *args, **kwargs):
-            return [], False
-
-    run.update({
-        "initiating_principal_user_id": "owner",
-        "canonical_agent_identity": True,
-        "canonical_agent_entity_id": "agent-entity-a",
-    })
-    tool_read = await RepositoryExecution360Source(
-        graph_client=EmptyGraph()
-    )._read_execution_tool_calls(tenant, [run])
-    projected = _project_tool_call_read(tool_read, admitted_execution_ids={execution})
-    assert projected.rows == []
-    assert len(projected.receipt_results) == 1
-    assert projected.receipt_results[0]["receiptId"] == row["receipt_id"]
-    assert projected.receipt_results[0]["externalEffect"] == "unknown"
-    with pytest.raises(ConflictError):
-        await invoke_observed_mcp_tool(
-            tenant_id=tenant,
-            agent_id=agent,
-            execution_id=execution,
-            initiating_principal_user_id="owner",
-            tool_name=tool,
-            arguments={"query": "x"},
-            config=config,
-            engine=engine,
-            workflow_run_id="run-a",
-            grants=grants,
-            catalog=catalog,
-        )
-    assert _Client.calls == 3  # initialize, initialized notification, one actual tool call
-
-
-@pytest.mark.asyncio
-async def test_sse_responses_select_the_matching_jsonrpc_message(monkeypatch):
-    fixture = await _fixture()
-    tenant, agent, execution, tool, _cap, catalog, grants, engine, config, _grant, run = fixture
-    _Client.payload = {"jsonrpc": "2.0", "id": execution, "result": {"content": [{"text": "real"}]}}
-
-    async def transport(method, url, **kwargs):
-        response = await _Client.post(method, url, **kwargs)
-        payload = response.payload
-        if kwargs["json"]["method"] == "notifications/initialized":
-            return response
-        # An unrelated message in the same event stream must not shadow the exact
-        # response, while the matching message remains usable.
-        return _SseResponse([{"jsonrpc": "2.0", "id": "unrelated", "result": {}}, payload])
-
-    async def safe_url(_url):
-        return False, "safe"
-
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", transport)
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
-    row = await invoke_observed_mcp_tool(
-        tenant_id=tenant, agent_id=agent, execution_id=execution,
-        initiating_principal_user_id="owner", tool_name=tool, arguments={},
-        config=config, engine=engine, workflow_run_id="run-a",
-        workflow_definition_link=run["workflow_definition_link"], grants=grants, catalog=catalog,
-    )
-    assert row["result_status"] == "succeeded"
-    assert row["provider_result"] == {"content": [{"text": "real"}]}
-
-
-@pytest.mark.asyncio
-async def test_sse_response_with_only_a_foreign_jsonrpc_id_fails_closed(monkeypatch):
-    fixture = await _fixture()
-    tenant, agent, execution, tool, _cap, catalog, grants, engine, config, _grant, run = fixture
-
-    async def transport(method, url, **kwargs):
-        if kwargs["json"]["method"] == "initialize":
-            return _SseResponse([
-                {
-                    "jsonrpc": "2.0",
-                    "id": "foreign",
-                    "result": {"protocolVersion": "2025-03-26"},
-                }
-            ])
-        return await _Client.post(method, url, **kwargs)
-
-    async def safe_url(_url):
-        return False, "safe"
-
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", transport)
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
-    row = await invoke_observed_mcp_tool(
-        tenant_id=tenant, agent_id=agent, execution_id=execution,
-        initiating_principal_user_id="owner", tool_name=tool, arguments={},
-        config=config, engine=engine, workflow_run_id="run-a",
-        workflow_definition_link=run["workflow_definition_link"], grants=grants, catalog=catalog,
-    )
-    assert row["result_status"] == "failed"
-    assert row["tool_call_attempted"] is False
-
-
-@pytest.mark.asyncio
-async def test_provider_failure_is_receipted_and_does_not_claim_success(monkeypatch):
-    fixture = await _fixture()
-    tenant, agent, execution, tool, cap, catalog, grants, engine, config, grant, run = fixture
-    _Client.payload = {"jsonrpc": "2.0", "id": execution, "error": {"code": -1, "message": "no"}}
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", _Client.post)
-
-    async def safe_url(_url):
-        return False, "safe"
-
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
-    row = await invoke_observed_mcp_tool(
-        tenant_id=tenant,
-        agent_id=agent,
-        execution_id=execution,
-        initiating_principal_user_id="owner",
-        tool_name=tool,
-        arguments={},
-        config=config,
-        engine=engine,
-        workflow_run_id="run-a",
-        workflow_definition_link=run["workflow_definition_link"],
-        grants=grants,
-        catalog=catalog,
-    )
-    run["ended_at"] = row["completed_at"]
-    assert row["result_status"] == "failed" and row["provider_result"] is None
-    assert (await invocation_receipt(tenant_id=tenant, workflow_run_id="run-a", execution=run))[
-        "state"
-    ] == "provider_invocation_failed"
-
-
-@pytest.mark.asyncio
-async def test_cross_tenant_or_missing_grant_cannot_invoke(monkeypatch):
-    fixture = await _fixture()
-    tenant, agent, execution, tool, cap, catalog, grants, engine, config, grant, run = fixture
-    await grants.revoke("grant-a", "owner")
-    called = False
-
-    async def no_call(*args, **kwargs):
-        nonlocal called
-        called = True
-
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", no_call)
-    with pytest.raises(ForbiddenError):
-        await invoke_observed_mcp_tool(
-            tenant_id="tenant-other",
-            agent_id=agent,
-            execution_id=execution,
-            initiating_principal_user_id="owner",
-            tool_name=tool,
-            arguments={},
-            config=config,
-            engine=engine,
-            grants=grants,
-            catalog=catalog,
-        )
-    with pytest.raises(ForbiddenError):
-        await invoke_observed_mcp_tool(
-            tenant_id=tenant,
-            agent_id=agent,
-            execution_id=execution,
-            initiating_principal_user_id="owner",
-            tool_name=tool,
-            arguments={},
-            config=config,
-            engine=engine,
-            grants=grants,
-            catalog=catalog,
-        )
-    assert called is False
-    assert await InvocationReceiptRepository().for_execution(tenant, agent, execution) == []
-
-
-@pytest.mark.asyncio
-async def test_reader_rejects_replayed_cross_subject_and_truncated_receipts(monkeypatch):
-    fixture = await _fixture()
-    tenant, agent, execution, tool, cap, catalog, grants, engine, config, grant, run = fixture
-    repo = InvocationReceiptRepository()
-    base = {
-        "receipt_id": "receipt-1",
+def _historical_receipt(tenant: str, agent: str, execution: str, cap: str) -> dict:
+    """A tool receipt exactly as the retired producer wrote it (fixed past times)."""
+    scope = {"actions": ["invoke"], "resources": [f"capability:{cap}"]}
+    result = {"content": [{"text": "real"}]}
+    receipt_id = "d2cb913e-04c4-55f5-8115-1b2a3348865c"
+    return {
+        "receipt_id": receipt_id,
+        "id": receipt_id,
         "tenant_id": tenant,
         "agent_id": agent,
         "execution_id": execution,
         "workflow_run_id": "run-a",
-        "tool_name": tool,
+        "workflow_definition_link": {"workflow_id": "wf-a", "revision": 2},
+        "tool_name": "lookup",
         "capability_id": cap,
-        "action": "invoke",
-        "policy_decision": {"allowed": True},
+        "resource": f"capability:{cap}",
+        "policy_resource": f"capability:{cap}",
+        "provider": "provider",
+        "provider_url": "https://tools.example/mcp",
+        "server_key": "srv.example",
+        "initiating_principal_user_id": "owner",
+        "policy_decision": {
+            "allowed": True,
+            "delegation_id": "grant-a",
+            "reason": "",
+            "matched_scope": scope,
+            "evaluated_at": "2026-11-01T10:00:02+00:00",
+        },
+        "grant_scope": scope,
         "grant_id": "grant-a",
+        "grant_starts_at": "2026-11-01T10:00:00+00:00",
+        "grant_ends_at": None,
+        "invoked_at": "2026-11-01T10:00:02+00:00",
+        "completed_at": "2026-11-01T10:00:03+00:00",
         "result_status": "succeeded",
-        "invoked_at": "2026-10-30T12:00:10Z",
-        "completed_at": "2026-10-30T12:00:20Z",
+        "tool_call_attempted": True,
+        "provider_result": result,
+        "provider_result_digest": hashlib.sha256(
+            json.dumps(result, sort_keys=True, separators=(",", ":"), default=str).encode()
+        ).hexdigest(),
+        "provider_result_complete": True,
+        "provider_error": None,
+        "arguments_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
         "evidence_version": 1,
+        "agent_policy_version": 3,
+        "action": "invoke",
     }
-    await repo.record_once(base)
-    run["ended_at"] = "2026-10-30T12:00:30Z"
-    assert (
-        await invocation_receipt(tenant_id=tenant, workflow_run_id="other-run", execution=run)
-        is None
-    )
-    assert (
-        await invocation_receipt(tenant_id="other-tenant", workflow_run_id="run-a", execution=run)
-        is None
-    )
-    with pytest.raises(ConflictError):
-        await repo.record_once(base)
-    run["workflow_run_id"] = "run-a"
-    run["started_at"] = "2026-10-30T12:00:15Z"
-    assert (
-        await invocation_receipt(tenant_id=tenant, workflow_run_id="run-a", execution=run) is None
-    )
-    for receipt_index in range(100):
-        await repo.record_once(dict(base, receipt_id=f"extra-receipt-{receipt_index}"))
-    assert await repo.for_execution(tenant, agent, execution) == []
 
 
 async def _completed_invocation(monkeypatch):
-    (
-        tenant,
-        agent,
-        execution,
-        tool,
-        cap,
-        catalog,
-        grants,
-        engine,
-        config,
-        grant,
-        run,
-    ) = await _fixture()
-    _Client.payload = {"jsonrpc": "2.0", "id": execution, "result": {"content": [{"text": "real"}]}}
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", _Client.post)
-
-    async def safe_url(_url):
-        return False, "safe"
-
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
-    row = await invoke_observed_mcp_tool(
-        tenant_id=tenant,
-        agent_id=agent,
-        execution_id=execution,
-        tool_name=tool,
-        arguments={},
-        config=config,
-        engine=engine,
-        grants=grants,
-        catalog=catalog,
-        initiating_principal_user_id="owner",
-        workflow_run_id="run-a",
-        workflow_definition_link=run["workflow_definition_link"],
-    )
+    """Seed one historical receipt and its execution window; no producer runs."""
+    tenant, agent, execution, _tool, cap, *_rest, run = await _fixture()
+    row = _historical_receipt(tenant, agent, execution, cap)
+    await InvocationReceiptRepository().insert(row["id"], row)
+    run["started_at"] = "2026-11-01T10:00:01+00:00"
     run["ended_at"] = row["completed_at"]
     assert await validated_agent_receipt(tenant_id=tenant, agent_id=agent, execution=run)
     return row, run
 
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("tenant_id", "other-tenant"),
-        ("agent_id", "other-agent"),
-        ("execution_id", "other-execution"),
-        ("workflow_run_id", "other-run"),
-        ("workflow_definition_link", {"workflow_id": "other", "revision": 2}),
-        ("id", "other-receipt"),
-        ("tool_call_attempted", False),
-        ("initiating_principal_user_id", " owner "),
-        ("provider_url", "http://tools.example/mcp"),
-        ("capability_id", "other-capability"),
-        ("policy_resource", "arbitrary-resource"),
-        ("completed_at", "2999-01-01T00:00:00Z"),
-        ("grant_starts_at", "2999-01-01T00:00:00Z"),
-        ("grant_ends_at", "2000-01-01T00:00:00Z"),
-        ("policy_decision", {"allowed": True, "evaluated_at": "bad"}),
-        ("grant_scope", {"actions": ["invoke"], "resources": [["malformed"]]}),
-    ],
-)
-async def test_reader_rejects_mutated_otherwise_valid_receipt(monkeypatch, field, value):
-    row, run = await _completed_invocation(monkeypatch)
-    mutated = deepcopy(row)
-    mutated[field] = value
-
-    async def receipts(*args):
-        return [mutated]
-
-    monkeypatch.setattr(InvocationReceiptRepository, "for_execution", receipts)
-    assert (
-        await invocation_receipt(tenant_id="tenant-a", workflow_run_id="run-a", execution=run)
-        is None
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("revoke", [False, True])
-async def test_handshake_failure_or_revocation_never_becomes_invocation_evidence(
-    monkeypatch, revoke
-):
-    (
-        tenant,
-        agent,
-        execution,
-        tool,
-        cap,
-        catalog,
-        grants,
-        engine,
-        config,
-        grant,
-        run,
-    ) = await _fixture()
-    methods = []
-
-    async def transport(method, url, **kwargs):
-        methods.append(kwargs["json"]["method"])
-        if not revoke:
-            raise RuntimeError("initialization failed")
-        if kwargs["json"]["method"] == "initialize":
-            await grants.revoke("grant-a", "owner")
-        return await _Client.post(method, url, **kwargs)
-
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", transport)
-
-    async def safe_url(_url):
-        return False, "safe"
-
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
-    row = await invoke_observed_mcp_tool(
-        tenant_id=tenant,
-        agent_id=agent,
-        execution_id=execution,
-        tool_name=tool,
-        arguments={},
-        config=config,
-        engine=engine,
-        grants=grants,
-        catalog=catalog,
-        initiating_principal_user_id="owner",
-        workflow_run_id="run-a",
-        workflow_definition_link=run["workflow_definition_link"],
-    )
-    run["ended_at"] = row["completed_at"]
-    assert row["tool_call_attempted"] is False
-    assert "tools/call" not in methods
-    assert await validated_agent_receipt(tenant_id=tenant, agent_id=agent, execution=run) is None
 
 
 @pytest.mark.asyncio
@@ -590,7 +211,7 @@ async def test_provider_receipt_reaches_agent_capabilities(monkeypatch):
             "externalEffect": "unknown",
         }
 
-    monkeypatch.setattr("actions.agent.invocation_runtime.validated_agent_receipt", validated_resource_read)
+    monkeypatch.setattr("actions.agent.invocation_receipts.validated_agent_receipt", validated_resource_read)
     read_result = await Agent360Provider(ReceiptSource()).project(_request(), _context())
     read_profile = next(item for item in _sections(read_result)["state"].content["dimensions"]
                         if item["id"] == "authority_and_delegation")["content"]["capabilityAccessProfile"]
@@ -660,7 +281,7 @@ async def test_workflow_actions_slot_projects_only_bound_resource_read_receipts(
             "providerResultComplete": True, "providerResult": {"contents": [{"uri": "https://data.example/item/a", "text": "value"}]},
             "externalEffect": "unknown",
         }
-    monkeypatch.setattr("actions.agent.invocation_runtime.validated_agent_receipt", validated_resource_read)
+    monkeypatch.setattr("actions.agent.invocation_receipts.validated_agent_receipt", validated_resource_read)
     section, claims = await _workflow_actions_section(
         ProjectionSubject(kind="workflow_run", id="run-a"), tenant_id="tenant-a",
         read=WorkflowActionRead((), True, True), execution_rows=[run],
@@ -683,171 +304,6 @@ async def test_workflow_actions_slot_projects_only_bound_resource_read_receipts(
     )
     assert denied.content["resourceReadAuthority"]["state"] == "unknown"
     assert not any(claim.kind == "workflow_linked_provider_resource_read" for claim in denied_claims)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("permissions", "principal"),
-    [
-        (["write"], "owner"),
-        (["dispatch"], "owner"),
-        (["write", "dispatch"], None),
-    ],
-)
-async def test_invocation_ingress_requires_dispatch_write_and_principal(permissions, principal):
-    from actions.agent.user_agents import invoke_agent_tool, AgentToolInvocation
-    from shared.auth.auth import TenantContext
-
-    request = SimpleNamespace(
-        state=SimpleNamespace(
-            tenant=TenantContext(
-                tenant_id="tenant-a",
-                user_id=principal,
-                permissions=permissions,
-            )
-        )
-    )
-    with pytest.raises(ForbiddenError):
-        await invoke_agent_tool(
-            "agent-a", "exec-a", "lookup", AgentToolInvocation(arguments={}), request, engine=None
-        )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("transport", ["json", "sse", "sse_wrong_id", "sse_duplicate_id", "listing_duplicate", "listing_cursor_cycle"])
-@pytest.mark.parametrize("response_shape", ["valid", "foreign_uri", "empty_contents"])
-async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch, response_shape, transport):
-    from actions.agent.invocation_runtime import read_observed_mcp_resource
-    from actions.agent_access_intelligence.authority import RESOURCE_READ_ACTION, MCP_RESOURCE_PREFIX
-    from actions.agent_access_intelligence.models import CapabilityKind
-
-    tenant, agent, execution = "tenant-a", "agent-a", "exec-resource"
-    uri, server, provider, url = "https://data.example/items/42", "srv.example", "provider", "https://tools.example/mcp"
-    rid = resource_id_for(tenant, provider, server, uri)
-    catalog = CapabilityCatalogRepository()
-    await catalog.insert(rid, {"capability_id": rid, "tenant_id": tenant, "provider": provider,
-        "server_name": server, "server_url": url, "capability_kind": CapabilityKind.RESOURCE.value,
-        "resource_uri": uri})
-    grants = CapabilityAuthorizationRepository()
-    await grants.grant_capability(authorization_id="invoke-only", tenant_id=tenant,
-        granted_by_entity_id="owner", agent_id=agent, capability_id="cap_fake",
-        scope={"actions": ["invoke"], "resources": ["capability:cap_fake"]})
-    engine = DelegationEngine(DelegationRepository())
-    with pytest.raises(ForbiddenError, match="resource-read grant"):
-        await read_observed_mcp_resource(tenant_id=tenant, agent_id=agent, execution_id=execution,
-            resource_uri=uri, config={"resource_uris": [uri]}, engine=engine,
-            initiating_principal_user_id="owner", grants=grants, catalog=catalog)
-    other_id = resource_id_for(tenant, provider, server, "https://data.example/items/other")
-    await grants.grant_capability(authorization_id="wrong-resource", tenant_id=tenant,
-        granted_by_entity_id="owner", agent_id=agent, capability_id=other_id,
-        scope={"actions": [RESOURCE_READ_ACTION], "resources": [f"{MCP_RESOURCE_PREFIX}{other_id}"]})
-    with pytest.raises(ForbiddenError, match="resource-read grant"):
-        await read_observed_mcp_resource(tenant_id=tenant, agent_id=agent, execution_id=execution,
-            resource_uri=uri, config={"resource_uris": [uri]}, engine=engine,
-            initiating_principal_user_id="owner", grants=grants, catalog=catalog)
-
-    grant = await grants.grant_capability(authorization_id="read-only", tenant_id=tenant,
-        granted_by_entity_id="owner", agent_id=agent, capability_id=rid,
-        scope={"actions": [RESOURCE_READ_ACTION], "resources": [f"{MCP_RESOURCE_PREFIX}{rid}"]})
-    # Keep the grant's scope exact and make the runtime DNS safety policy deterministic.
-    async def safe(_url): return False, "public"
-    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe)
-    calls = []
-    class Response:
-        status_code = 200
-        content = b"{}"
-        headers = {}
-        def __init__(self, body):
-            self.body = body
-            if transport != "json":
-                self.headers = {"content-type": "text/event-stream"}
-                if body.get("id") == execution and transport == "sse_wrong_id":
-                    body = {**body, "id": "different-execution"}
-                event = "data: " + __import__("json").dumps(body) + "\n\n"
-                self.content = event.encode()
-                if body.get("id") == execution and transport == "sse_duplicate_id":
-                    self.content += event.encode()
-        def json(self): return self.body
-    async def request(method, request_url, *, json, headers, max_redirects):
-        calls.append(json)
-        assert method == "POST" and request_url == url and max_redirects == 0
-        if json["method"] == "initialize":
-            return Response({"jsonrpc":"2.0", "id":json["id"], "result":{"protocolVersion":"2025-03-26"}})
-        if json["method"] == "notifications/initialized": return Response({})
-        if json["method"] == "resources/list":
-            items = [{"uri":uri,"name":"item"}]
-            result = {"resources": items}
-            if transport == "listing_duplicate":
-                result["resources"] = items * 2
-            if transport == "listing_cursor_cycle":
-                result["nextCursor"] = "same-cursor"
-            return Response({"jsonrpc":"2.0", "id":json["id"], "result":result})
-        assert json["method"] == "resources/read" and json["params"] == {"uri":uri}
-        contents = [{"uri": uri if response_shape == "valid" else "other-resource", "text": "value"}]
-        if response_shape == "empty_contents":
-            contents = []
-        return Response({"jsonrpc":"2.0", "id":execution, "result":{"contents": contents}})
-    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", request)
-    execution_record = {"tenant_id":tenant, "agent_id":agent, "execution_id":execution,
-        "workflow_run_id":"run-resource", "started_at":(datetime.now(timezone.utc) - __import__("datetime").timedelta(seconds=2)).isoformat(),
-        "ended_at":(datetime.now(timezone.utc)).isoformat()}
-    receipt = await read_observed_mcp_resource(tenant_id=tenant, agent_id=agent, execution_id=execution,
-        resource_uri=uri, config={"resource_uris":[uri]}, engine=engine, initiating_principal_user_id="owner",
-        workflow_run_id="run-resource", grants=grants, catalog=catalog)
-    assert receipt["action"] == RESOURCE_READ_ACTION and receipt["resource_operation"] == "read"
-    validated = await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
-        execution={**execution_record, "ended_at":(datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=1)).isoformat()},
-        expected_workflow_run_id="run-resource")
-    if transport in {"listing_duplicate", "listing_cursor_cycle"}:
-        assert receipt["result_status"] == "failed"
-        assert validated is None
-        assert len(calls) == (4 if transport == "listing_cursor_cycle" else 3)
-        return
-    assert validated["resourceOperation"] == "read"
-    assert validated["initiatingPrincipalUserId"] == "owner"
-    assert len(calls) == 4
-    if response_shape == "valid" and transport in {"json", "sse"}:
-        assert validated["state"] == "provider_resource_read_succeeded"
-        assert validated["providerResultDigest"]
-    else:
-        assert validated["state"] == "provider_resource_read_failed"
-        assert validated["providerResult"] is None
-    if transport == "listing_cursor_cycle":
-        assert len(calls) == 5  # initialize, ack, and two bounded list pages; no content read
-    assert grant["scope"]["actions"] == [RESOURCE_READ_ACTION]
-
-    # The provider reader rejects receipts whose actor, tenant, resource, or
-    # invocation-time policy binding no longer matches the immutable operation.
-    async def tampered(changed):
-        async def read(*_args):
-            return [changed]
-        monkeypatch.setattr(InvocationReceiptRepository, "for_execution", read)
-        return await validated_agent_receipt(
-            tenant_id=tenant, agent_id=agent,
-            execution={**execution_record, "ended_at":(datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=1)).isoformat()},
-            expected_workflow_run_id="run-resource",
-        )
-
-    assert await tampered({**receipt, "initiating_principal_user_id": " owner"}) is None
-    assert await tampered({**receipt, "tenant_id": "other-tenant"}) is None
-    assert await tampered({**receipt, "resource_uri": "https://data.example/items/other"}) is None
-    assert await tampered({**receipt, "grant_scope": {"actions": ["invoke"], "resources": [receipt["resource"]]}}) is None
-    assert await tampered({**receipt, "policy_decision": {**receipt["policy_decision"], "matched_scope": {"actions": ["invoke"], "resources": [receipt["resource"]]}}}) is None
-    assert await tampered({**receipt, "policy_decision": {**receipt["policy_decision"], "evaluated_at": (datetime.now(timezone.utc) + __import__("datetime").timedelta(minutes=1)).isoformat()}}) is None
-
-    async def not_attempted(*_args):
-        return [{**receipt, "resource_read_attempted": False}]
-
-    monkeypatch.setattr(InvocationReceiptRepository, "for_execution", not_attempted)
-    assert await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
-        execution={**execution_record, "ended_at": datetime.now(timezone.utc).isoformat()}) is None
-
-    async def ambiguous(*_args):
-        return [receipt, {**receipt, "action": "invoke"}]
-
-    monkeypatch.setattr(InvocationReceiptRepository, "for_execution", ambiguous)
-    assert await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
-        execution={**execution_record, "ended_at": datetime.now(timezone.utc).isoformat()}) is None
 
 
 @pytest.mark.asyncio

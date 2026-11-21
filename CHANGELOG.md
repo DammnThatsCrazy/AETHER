@@ -8,6 +8,8 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Added
 
+- `markets_trading` ("Markets & Trading") customer experience group for tenant-connectable derivatives and prediction-market venue accounts. The integrations catalog and the tenant readiness view now list only tenant-connectable capabilities (`catalog.tenant_connectable`); Olympus reference sources such as venue market data no longer appear there.
+- x402 settlement observer: `POST /v1/x402/capture` now verifies a reported payment on-chain when the report carries a proof, and returns `settlement.state` (`settled` / `failed` / `pending` / `not_observable` / `conflicting`). The observer is the only authoritative x402 producer; a pending verdict records nothing terminal and re-reporting re-checks the chain.
 - Native publishable keys: iOS, Android and React Native now get a site-bound publishable (`pk_`) key instead of a secret key embedded in the app binary. A site can be registered for `ios`, `android` or `react_native` with `app_ids` (bundle ID / package name) in place of origins; the native SDKs take a `siteId` and send it as `X-Aether-Site`. A publishable key also reaches the native SDK heartbeat and the deferred and Apple Ads attribution resolves (POST, for its own site only); consent receipts and identity lookups stay secret-key surfaces.
 - Activation records `first_sdk_event`, the first event an installed SDK sent, kept apart from dashboard test events (which prove the pipeline, not an install). Onboarding shows a native or server SDK as live only on that.
 - `make production-status` places each SDK platform on an L0–L7 readiness ladder; all six are at L3 (release pipeline) until they are published.
@@ -47,8 +49,19 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - Reconciled Control Plane Program C (first slices): the scheduler now derives runtime capabilities from the effective activation decision (`shadow` observes, `detect` reconciles, `plan` may persist a ChangeSet, `r0+` may execute, `disabled`/`emergency_frozen` stop the loop), inherits the global state for tenant scopes without a row, and never lets a tenant exceed global. While the plane is enabled, direct SDK manifest publishing is refused and admins instead request the change through `POST /v1/config/sdk/manifest/requests`, which records a planned ChangeSet plus a stage-zero rollout; a tenant-scoped GET reads the request. The request does not publish a manifest yet. SDK request execution/rollout projection and Provider Runtime convergence remain open Program C work.
 - The `reconciled_control_plane` spine moves `pending` → `in_flight` (authority/non-ownership verified; remaining checks open), and `connection360`'s stale pending-authority declaration is removed.
 
+### Removed
+
+- Aether is observation-only everywhere (ADR-012). Removed every path where Aether acted for a tenant or agent: `POST /v1/agents/{agent_id}/execute` and its `.../status` callback, server-side MCP tool invocation and resource reads, the backend agent lifecycle consumer and mapper, the x402 commerce control plane (402 challenge middleware, protected resources, pricing, budget policies, `/v1/approvals`, `/v1/entitlements`, signer authority, settlement tracker and reconciliation worker, commerce metering and sweepers, `COMMERCE_CONTROL_PLANE_ENABLED`), the Kyber commerce approval queue, and `AETHER_COMMS_SUPPRESSION_WRITE_BACK`. `/v1/agents` keeps declaration and history routes; historical receipts, executions and commerce records stay readable and erasable. Delivery (Aether's own notifications to its customers) is unchanged.
+
 ### Fixed
 
+- x402 settlement observer: a report whose terms differ from an already verified receipt for the same transaction is now `conflicting` and records nothing; settled events carry the verified receipt's terms, never the report's.
+- Propagation no longer uses stored venue fills whose data-rights grant has since been revoked (or replaced by re-linking); they are excluded with `revoked_grant_fills_excluded`, and an unreadable grant authority excludes them with `fill_grant_authority_unavailable`.
+- An unchanged propagation recompute leaves the saved run intact instead of overwriting it with a self-superseding record.
+- dYdX default-subaccount fills attribute to their linked address in propagation.
+- Bybit HTTP-200 application errors (`retCode`) are failed reads (`auth_error`, `rate_limited`, `client_error`) instead of healthy empty pages, so a rejected key is never marked verified.
+- Dated futures with different expiries are separate registry instruments (`dated_future:<venue>:<market>`).
+- The generated TypeScript catalog mirror (`packages/shared/connector-taxonomy.ts`) now includes the derivatives venue group (`DERIVATIVES_VENUE_FAMILIES`) and the `markets_trading` experience bucket; it had skipped the 16 venue capabilities.
 - Every SDK now defaults to the `https://api.aether.network` ingestion API (Web, React Native, iOS and Android pointed at `api.aether.io`; the Server SDK and the Python server client at `ingest.aether.so`).
 - The React Native podspec now compiles its native module when autolinked (its source glob used a monorepo path), and the React Native Android module now declares its dependency on the native Android SDK.
 - The `AetherSDK` pod ships its privacy manifest (`PrivacyInfo.xcprivacy`).

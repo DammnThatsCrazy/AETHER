@@ -18,7 +18,7 @@ reviewed_source_commits:
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:0f5968d9a03c8924c2f35571a670e2e35077cccd2c934a73332214d833f3504d"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:683c8355a25835c0564e9755f2ddfc29384afe77cbacf0cd82927a02393fa534"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c9106286621df7dd08f79c2d4fd945db18b857ab108e129e8d053afd90affb34"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -31,19 +31,31 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:ce75e7b9566aead77908aed4764a361d12d5bd1783516fd3adb29cd3c26d5414"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
-  "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
-  "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
+  "services/api/repositories/repos.py": "sha256:fe2d94f66f7df1d52bc135c9021d1039fc39140378587b7ed2b24f123164a324"
+  "services/api/value/commerce/": "sha256:89948ae5de30f45ce9d375cc2878e8b9f00923aff5a3894863fd8bd97a56f6df"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
+  "services/api/value/x402/": "sha256:ee57b396af08dd128a1fad054736d6c366ef211797538623bf7b5f2acc73be2d"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
+
+> **Superseded in part by [ADR-012](decisions/ADR-012-observation-only-everywhere.md).**
+> Aether is observation-only. The control-plane parts of this spec — 402
+> challenge middleware, protected resources, pricing, budget policies, the
+> mandatory approval workflow, entitlements and access grants, the signer
+> authority, the settlement tracker and reconciliation worker, commerce
+> metering, the Kyber approval queue, server-side MCP tool invocation and the
+> agent execute route — were removed. What remains: x402 capture,
+> on-chain settlement observation (`value/x402/settlement_observer.py`), the
+> lifecycle mapper and the historical commerce store. Read the rest of this
+> document as design history, not current behaviour.
+
 
 **Document:** Production build spec for extending Aether's x402/commerce/graph foundation into a fully productized Aether-native Agentic Commerce control plane.
 **Scope:** Extension of existing monorepo. Not a rewrite. Not a refactor.

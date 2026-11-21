@@ -10,10 +10,12 @@ from value.derivatives.account_links import (
     AccountLinkError,
     LinkMethod,
     LinkStatus,
+    VenueAccountLink,
     VenueAccountLinkService,
     link_id_for,
 )
 from value.derivatives.models import ReadOnlyCredentialError
+from shared.credentials.types import ApiKeyCredential
 
 TENANT = "tenant_links_a"
 OTHER = "tenant_links_b"
@@ -117,15 +119,51 @@ async def test_credential_link_rejects_mutating_scopes(service):
     with pytest.raises(ReadOnlyCredentialError):
         await svc.link_credential(
             tenant_id=TENANT, subject_id="user_2", venue="hyperliquid", account_ref="acct",
-            method=LinkMethod.READ_ONLY_API_KEY, credential_ref="cred_1",
+            method=LinkMethod.READ_ONLY_API_KEY, credential=ApiKeyCredential(api_key="k"),
             scopes=["read", "trade"], consent_receipt_id="cr_2",
         )
+
+
+async def test_wallet_venue_refuses_a_key_link(service):
+    svc, _ = service
+    with pytest.raises(AccountLinkError) as exc:
+        await svc.link_credential(
+            tenant_id=TENANT, subject_id="user_2", venue="hyperliquid", account_ref="acct",
+            method=LinkMethod.READ_ONLY_API_KEY, credential=ApiKeyCredential(api_key="k"),
+            scopes=["read"], consent_receipt_id="cr_2",
+        )
+    assert exc.value.reason == "venue_does_not_accept_read_only_api_key"
+    assert await svc.list_links(TENANT) == []
+
+
+async def test_credential_link_stores_the_secret_behind_its_connection(service, monkeypatch):
+    from connectors.provider_runtime.credential_broker import credential_broker
+    from value.derivatives import venue_sources
+
+    key_venue = venue_sources.VenueSourceProfile(
+        "hyperliquid", "Hyperliquid", "fills_read", (venue_sources.API_KEY_ACCESS,),
+    )
+    monkeypatch.setitem(venue_sources.VENUE_SOURCE_PROFILES, "hyperliquid", key_venue)
+    svc, _ = service
     link = await svc.link_credential(
         tenant_id=TENANT, subject_id="user_2", venue="hyperliquid", account_ref="acct",
-        method=LinkMethod.READ_ONLY_API_KEY, credential_ref="cred_1",
+        method=LinkMethod.READ_ONLY_API_KEY, credential=ApiKeyCredential(api_key="sk_read_only"),
         scopes=["read"], consent_receipt_id="cr_2",
     )
-    assert link.credential_ref == "cred_1" and link.method is LinkMethod.READ_ONLY_API_KEY
+    assert link.credential_ref and link.connection_id and ":connection:" in link.credential_ref
+    assert "sk_read_only" not in str(link.to_record())
+    stored = await credential_broker.reveal(TENANT, link.credential_ref)
+    assert stored.api_key.get_secret_value() == "sk_read_only"
+    assert link.source_relationship == "personal_account"
+
+    rotated = await svc.link_credential(
+        tenant_id=TENANT, subject_id="user_2", venue="hyperliquid", account_ref="acct",
+        method=LinkMethod.READ_ONLY_API_KEY, credential=ApiKeyCredential(api_key="sk_rotated"),
+        scopes=["read"], consent_receipt_id="cr_3",
+    )
+    assert (rotated.credential_ref, rotated.grant_id) == (link.credential_ref, link.grant_id)
+    stored = await credential_broker.reveal(TENANT, link.credential_ref)
+    assert stored.api_key.get_secret_value() == "sk_rotated"
 
 
 async def test_tenant_push_and_erasure(service):
@@ -222,3 +260,183 @@ async def test_legacy_ambiguous_accounts_are_excluded_from_the_map(service):
     mapping, _ = await svc.subjects_by_account_bounded(TENANT)
     assert ("hyperliquid", "Account-X") not in mapping
     assert svc.last_ambiguous_accounts == [("hyperliquid", "Account-X")]
+
+
+# ── Source authority: connection + grant behind every link ───────────────────
+
+async def _grant(grant_id, tenant=TENANT):
+    from connectors.integrations.data_rights.service import data_rights_service
+
+    return await data_rights_service.get_grant(grant_id, tenant_id=tenant)
+
+
+async def _connection(connection_id):
+    from connectors.provider_runtime.connection import ProviderConnectionRepository
+
+    return await ProviderConnectionRepository().find(connection_id)
+
+
+async def test_wallet_link_is_a_personal_account_source(service):
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"), actor="admin_1")
+    grant = await _grant(link.grant_id)
+    assert link.source_id == f"provider-account:{link.connection_id}:{WALLET.lower()}"
+    assert grant.source_id == link.source_id
+    assert grant.connector_id == "polymarket.account.activity_read"
+    assert grant.connector_class == "tenant_byod_data"
+    assert grant.source_relationship == "personal_account"
+    assert grant.raw_data_owner == "subject" and grant.subject_ref == "user_1"
+    assert grant.consent_basis == "cr_1" and grant.granted_by_user_id == "admin_1"
+    assert not grant.olympus_baseline_allowed and not grant.model_training_allowed
+    connection = await _connection(link.connection_id)
+    assert connection.state.value == "connected"
+    assert connection.selected_accounts == [WALLET.lower()] and connection.credential_ref == ""
+
+
+async def test_tenant_push_is_an_organization_system_source(service):
+    svc, _ = service
+    link = await svc.link_tenant_push(
+        tenant_id=TENANT, subject_id="user_1", venue="hyperliquid", account_ref="0xabc",
+        consent_receipt_id="cr_3",
+    )
+    grant = await _grant(link.grant_id)
+    assert grant.source_relationship == "organization_system"
+    assert grant.raw_data_owner == "tenant" and grant.subject_ref is None
+    assert (await _connection(link.connection_id)).state.value == "available"
+
+
+async def test_olympus_scope_cannot_hold_a_venue_link(service):
+    svc, _ = service
+    with pytest.raises(AccountLinkError) as exc:
+        await svc.link_tenant_push(
+            tenant_id="olympus", subject_id="u", venue="hyperliquid", account_ref="0xabc",
+            consent_receipt_id="cr",
+        )
+    assert exc.value.reason == "olympus_scope_not_linkable"
+
+
+def _raw(link, record_id="fill_1"):
+    from shared.integration_contracts.events import make_raw_record
+
+    return make_raw_record(
+        provider_identity="polymarket.account.activity_read", tenant_id=link.tenant_id,
+        connection_id=link.connection_id, account_id=link.account_ref,
+        provider_record_type="trade", provider_record_id=record_id, payload={"id": record_id},
+    )
+
+
+async def test_linked_account_raw_records_are_admitted_until_revoked(service):
+    from connectors.provider_runtime.rights_admission import (
+        ProviderRawRightsAdmission,
+        ProviderRawRightsDenied,
+    )
+
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    admission = ProviderRawRightsAdmission()
+    evidence_row = await admission.admit(_raw(link))
+    assert evidence_row.source_grant_ref == link.grant_id
+    assert evidence_row.source_relationship == "personal_account"
+    assert evidence_row.requested_use == "tenant_lake"
+
+    await svc.revoke(tenant_id=TENANT, link_id=link.link_id, reason="user asked")
+    assert (await _grant(link.grant_id)).revoked_at
+    assert (await _connection(link.connection_id)).state.value in ("revoked", "disabled")
+    with pytest.raises(ProviderRawRightsDenied):
+        await admission.admit(_raw(link, "fill_2"))
+
+
+async def test_unlinked_account_on_the_same_connection_is_not_admitted(service):
+    from connectors.provider_runtime.rights_admission import (
+        ProviderRawRightsAdmission,
+        ProviderRawRightsDenied,
+    )
+
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    other = _raw(link).model_copy(update={"account_id": "0x0000000000000000000000000000000000000009"})
+    with pytest.raises(ProviderRawRightsDenied):
+        await ProviderRawRightsAdmission().admit(other)
+
+
+async def test_relink_keeps_the_governing_source(service):
+    svc, evidence = service
+    first = await _link(svc, evidence.add("ev_1"))
+    second = await _link(svc, evidence.add("ev_2"), proof_evidence_id="ev_2", consent_receipt_id="cr_9")
+    assert second.link_id == first.link_id
+    assert (second.grant_id, second.connection_id) == (first.grant_id, first.connection_id)
+    assert second.consent_receipt_id == "cr_9"
+    assert (await _grant(first.grant_id)).revoked_at is None
+
+
+async def test_relink_after_revocation_provisions_a_new_source(service):
+    svc, evidence = service
+    first = await _link(svc, evidence.add("ev_1"))
+    await svc.revoke(tenant_id=TENANT, link_id=first.link_id)
+    second = await _link(svc, evidence.add("ev_2"), proof_evidence_id="ev_2")
+    assert second.grant_id != first.grant_id and second.status is LinkStatus.ACTIVE
+    assert (await _grant(first.grant_id)).revoked_at
+
+
+async def test_erasure_revokes_every_grant_and_credential(service):
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    assert await svc.erase_subject(TENANT, "user_1") == 1
+    assert (await _grant(link.grant_id)).revoked_at
+
+
+async def test_backfill_governs_links_created_before_sources(service):
+    svc, _ = service
+    legacy = VenueAccountLink(
+        link_id=link_id_for(TENANT, "user_7", "hyperliquid", "0xfeed"), tenant_id=TENANT,
+        subject_id="user_7", venue="hyperliquid", account_ref="0xfeed",
+        method=LinkMethod.TENANT_PUSH, consent_receipt_id="cr_old",
+    )
+    keyless = VenueAccountLink(
+        link_id=link_id_for(TENANT, "user_8", "hyperliquid", "acct8"), tenant_id=TENANT,
+        subject_id="user_8", venue="hyperliquid", account_ref="acct8",
+        method=LinkMethod.READ_ONLY_API_KEY, consent_receipt_id="cr_old",
+    )
+    for row in (legacy, keyless):
+        await svc._repo.insert(row.link_id, row.to_record())
+    counts = await svc.backfill_sources(TENANT, actor="op")
+    assert counts == {"provisioned": 1, "already_governed": 0, "refused": 1}
+    (governed,) = [link for link in await svc.list_links(TENANT) if link.subject_id == "user_7"]
+    assert (await _grant(governed.grant_id)).consent_basis == "cr_old"
+    assert (await svc.backfill_sources(TENANT))["already_governed"] == 1
+
+
+async def test_disconnect_stops_reading_but_keeps_the_grant(service):
+    from connectors.provider_runtime.rights_admission import ProviderRawRightsAdmission
+
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    disconnected = await svc.disconnect(tenant_id=TENANT, link_id=link.link_id)
+    assert disconnected.status is LinkStatus.DISCONNECTED and disconnected.disconnected_at
+    assert (await _grant(link.grant_id)).revoked_at is None
+    assert (await _connection(link.connection_id)).state.value in ("revoked", "disabled")
+    # Admitted history stays attributed to its subject.
+    assert await svc.subjects_by_account(TENANT) == {("polymarket", WALLET.lower()): "user_1"}
+    # The grant still governs; the sync simply no longer reads (status gate).
+    assert (await ProviderRawRightsAdmission().admit(_raw(link))).source_grant_ref == link.grant_id
+
+
+async def test_reconnect_reuses_the_grant_and_reopens_the_connection(service):
+    svc, evidence = service
+    link = await _link(svc, evidence.add("ev_1"))
+    await svc.disconnect(tenant_id=TENANT, link_id=link.link_id)
+    again = await _link(svc, evidence.add("ev_2"), proof_evidence_id="ev_2")
+    assert again.status is LinkStatus.ACTIVE
+    assert (again.grant_id, again.connection_id) == (link.grant_id, link.connection_id)
+    assert (await _connection(link.connection_id)).state.value == "connected"
+
+
+async def test_disconnected_account_still_blocks_another_owner(service):
+    svc, _ = service
+    link = await svc.link_tenant_push(tenant_id=TENANT, subject_id="alice", venue="hyperliquid",
+                                      account_ref="Account-Y", consent_receipt_id="cr")
+    await svc.disconnect(tenant_id=TENANT, link_id=link.link_id)
+    with pytest.raises(AccountLinkError) as exc:
+        await svc.link_tenant_push(tenant_id=TENANT, subject_id="bob", venue="hyperliquid",
+                                   account_ref="Account-Y", consent_receipt_id="cr")
+    assert exc.value.reason == "account_already_linked_to_another_subject"

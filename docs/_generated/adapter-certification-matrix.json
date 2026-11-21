@@ -282,6 +282,76 @@
         "template_edit"
       ]
     },
+    "derivatives:bybit": {
+      "adapter": "bybit",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "position"
+      ],
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "permissions": [],
+      "provider": "bybit",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed"
+      ],
+      "unsupported": []
+    },
+    "derivatives:coinbase_futures": {
+      "adapter": "coinbase_futures",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "position"
+      ],
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "permissions": [],
+      "provider": "coinbase_futures",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed"
+      ],
+      "unsupported": []
+    },
     "derivatives:drift": {
       "adapter": "drift",
       "adapter_version": "0.1.0",
@@ -300,9 +370,7 @@
       "pagination_model": "none",
       "permissions": [],
       "provider": "drift",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -338,9 +406,7 @@
       "pagination_model": "none",
       "permissions": [],
       "provider": "dydx",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -385,9 +451,7 @@
       "pagination_model": "none",
       "permissions": [],
       "provider": "gmx",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -424,9 +488,7 @@
       "pagination_model": "cursor",
       "permissions": [],
       "provider": "hyperliquid",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_data_rights": [
         "tenant_lake"
       ],
@@ -449,6 +511,41 @@
         "derivatives_position_reduced_observed",
         "derivatives_position_settled_observed",
         "derivatives_price_observation_recorded"
+      ],
+      "unsupported": []
+    },
+    "derivatives:kalshi": {
+      "adapter": "kalshi",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "position"
+      ],
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "permissions": [],
+      "provider": "kalshi",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed"
       ],
       "unsupported": []
     },
@@ -1068,18 +1165,18 @@
   "summary": {
     "by_domain": {
       "communications": 8,
-      "derivatives": 5,
+      "derivatives": 8,
       "interop": 7,
       "payments": 5,
       "prediction_market": 2,
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 29
+      "credential_waiting": 32
     },
-    "first_release": 29,
+    "first_release": 32,
     "import_errors": {},
-    "total": 29
+    "total": 32
   },
   "version": "0.1.0-alpha.0"
 }

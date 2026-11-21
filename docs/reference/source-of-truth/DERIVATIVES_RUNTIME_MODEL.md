@@ -75,6 +75,20 @@ response; the observation is stored either way. The kyber
 the durable tables, and `GET /v1/admin/kyber/derivatives/runtime/topic-contract`
 reports the validation state of the declared stream-topic contract.
 
+Orders, fills and positions reference the global market registry
+(`derivatives_markets`, with its venue, deployment and instrument rows). That
+registry is Olympus reference data, filled by `value/derivatives/market_reference.py`
+from each venue's public market endpoint (Hyperliquid `meta`, dYdX
+`perpetualMarkets`, Polymarket Gamma markets by outcome token, Kalshi markets by ticker, Bybit linear instruments, Coinbase futures products) under the
+reserved `olympus` scope: a Kyber operator provisions one source per venue
+(`POST /v1/admin/kyber/derivatives/runtime/market-sources/{venue}`), each raw
+market record is admitted under that source's `public_reference` grant, and
+only then is the registry row written. Intake of an order, fill or position
+whose market has no reference row returns `409 market_reference_missing`
+instead of a foreign-key failure; linked-account sync keeps such fills waiting
+and does not advance its checkpoint. GMX and Drift have no market fetcher yet.
+Typed repositories bind ISO-8601 strings for `*_at` columns as aware datetimes.
+
 Still unwired: the entitlement guard (`guards.py`), the usage-meter sink
 (`meter.py`) and the graph projections (`graph_mutations.py`); the first two wait
 on a plan-entitlement resolver and a durable metering authority.

@@ -19,8 +19,8 @@ relevant rows to FAIL/WARN with an explicit detail rather than crashing):
 * worker supervision — ``services/api/workers/runtime/supervisor.py`` (WorkerSupervisor /
   WorkerSpec) and the per-domain worker builder modules
 * secret hygiene — the canonical ``scripts/security/secret_scan.py``
-* metering / entitlement — ``services/api/value/commerce/metering.py``,
-  ``services/api/billing/metering_evidence/``, ``services/api/value/x402/entitlements.py``
+* metering / entitlement — ``services/api/billing/metering_evidence/``,
+  ``services/api/value/rewards/``
 * migrations — the ``alembic/versions`` chain
 * deployment — ``config/deployment_profiles.yaml`` + ``infra/terraform``
 * test evidence — the unit / chaos / fixture trees
@@ -950,7 +950,7 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
     )
     evidence["empty_vs_failure_preserved"] = _co_occurs(
         ROOT, ["tests/**/*.py"], ["empty", "failure"]
-    ) or _contains(backend, ["services/api/value/commerce/reconciliation.py"], "empty snapshot")
+    )
     evidence["unknown_vs_zero_preserved"] = bool(
         _files(ROOT, ["tests/unit/test_value_semantics.py"])
     ) or _contains(ROOT, ["tests/**/*.py"], "unknown != 0")
@@ -964,10 +964,10 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
                          "services/api/graph/operational_intelligence/**/*.py"])
     )
     evidence["usage_meter_defined"] = bool(
-        _files(backend, ["services/api/value/commerce/metering.py", "services/api/billing/metering_evidence/**/*.py"])
+        _files(backend, ["services/api/billing/metering_evidence/**/*.py"])
     )
     evidence["entitlement_key_defined"] = bool(
-        _files(backend, ["services/api/value/x402/entitlements.py", "services/api/value/rewards/**/*.py"])
+        _files(backend, ["services/api/value/rewards/**/*.py"])
     )
     evidence["offline_fixtures"] = bool(
         _files(ROOT, ["tests/fixtures/**/*.json", "tests/fixtures/**/*.yaml",

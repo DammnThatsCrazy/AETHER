@@ -157,9 +157,7 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "semantic-worker": frozenset(
         {"semantic_reconciler", "semantic_retention", "semantic_graph_projector"}
     ),
-    # x402_settlement_reconciliation projects verified on-chain finality into
-    # settlement state — a materialization, like the payment-rail sync/repair
-    # loops that already ride this role. payment_alert_eval is the payment-rails
+    # payment_alert_eval is the payment-rails
     # derived-condition alert evaluator; it rides materializer with the rest of
     # the payment-rails family (same payment_rails.enabled gate) so the whole
     # subsystem's background loops stay co-located on one role/process.
@@ -168,18 +166,14 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # that re-reads its flag every pass, not a dedicated runtime role.
     "materializer": frozenset(
         {"export_expiry_sweep", "agent_lineage_reconcile_sweep", "pattern_discovery_sweep", "payment_rail_sync", "payment_canonical_repair",
-         "bronze_object_compaction", "x402_settlement_reconciliation",
+         "bronze_object_compaction",
          "payment_alert_eval", "provider_sync_scheduler",
          # Derivatives venue reconciliation sweep + the shared dead-letter
          # requeue sweeper: both reconcile durable state the same way as the
          # payment-rail sync/repair loops that ride this role.
          "derivatives_venue_sweep", "dead_letter_sweeper",
          # Fill replay into epochs / P&L snapshots / venue variances.
-         "derivatives_position_materializer",
-         # Commerce control-plane convergence: stale approvals / entitlements and
-         # the read-only drift reconciliation, one periodic loop each.
-         "commerce_approval_sweeper", "commerce_entitlement_sweeper",
-         "commerce_reconciliation"}
+         "derivatives_position_materializer"}
     ),
     "maintenance": frozenset(
         {

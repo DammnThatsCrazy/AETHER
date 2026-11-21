@@ -46,9 +46,9 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
   - {'commit': '101c57aa', 'reason': 'Default API and CDN hosts moved from the unowned aether.network to api.olympuslabsml.com and cdn.olympuslabsml.com, and the Access Kit package to @olympuslabs/aether-access-kit; any old host in this doc was updated in the same change, behavior otherwise unchanged.'}
 source_hashes:
-  "apps/aether-web/src/": "sha256:6b68bedf92c4fe7ceea27f85b87dfebfc2d802c4c5c849bb4845eacf4fc65567"
-  "apps/kyber-web/src/": "sha256:5e9cd64433118dece9555f7876a7b32b5369a61619accee30926ac77c7aa11c9"
-  "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
+  "apps/aether-web/src/": "sha256:19f94c2be110e224ce1f40ddd5713d1b8f9dd5c3a1d5b926465bff3dc9ba80c3"
+  "apps/kyber-web/src/": "sha256:e0eab881c2c329038057a6d0e49e6ece35379467272012bae36cfff05185c6fd"
+  "packages/ui/core/src/": "sha256:4146ce910b5dfc015e11e3f0a886b1bf501e1d3c9314d94533b475269dda8ff5"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -83,12 +83,22 @@ the root.
   off; signup skips the API-key reveal step when a session is issued. A `429` from
   login, register or verify-email (the backend throttles those public endpoints)
   is shown as a wait message built from `retry_after_seconds`
-  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. When the
-  build carries Auth0 settings, login offers **Continue with Olympus sign-in**
-  (Auth0 Universal Login) plus one button per social connection listed in
-  `VITE_AUTH0_SOCIAL_CONNECTIONS` (`google=aether-staging-google,…`), which
-  opens that Auth0 connection directly; Terraform lists none when social
-  connections are off (the pilot lane). Signing out also ends the Auth0
+  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. Login
+  mirrors the public website's portal (shared `AuthPortal*` primitives in
+  `@aether/ui`, also used by Kyber's operator login) and is email-first; the
+  website's "Sign in" link `/app/signin` redirects to `/login`. Google and Apple
+  (full-width) and Microsoft and Slack (compact) appear for each social
+  connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`
+  (`google=aether-staging-google,…`) and open that Auth0 connection directly;
+  Terraform lists none when social connections are off (the pilot lane). After
+  the work email: a domain listed in `VITE_AUTH0_ENTERPRISE_CONNECTIONS`
+  (`acme.com=acme-okta,…`) goes straight to that company SSO connection;
+  every other address gets the same next step, so the screen never reveals
+  whether an account exists: a password field (`/v1/auth/login`), **Email me a
+  sign-in code** when `VITE_AUTH0_PASSWORDLESS_CONNECTION` names an Auth0
+  passwordless email connection, and **Use another sign-in method** (Auth0
+  Universal Login with `login_hint`), which is how invited teammates and the
+  staging operator, who have no password here, sign in. Signing out also ends the Auth0
   session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
   the next sign-in asks again instead of silently reusing it; if Auth0 cannot
   be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
@@ -1057,11 +1067,11 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 
 ## Agentic Commerce Components (Kyber, v8.9.0)
 
-Commerce control plane code in `apps/kyber-web/src/`:
-
-**Mounted:** the Review page renders `components/commerce/approval-queue.tsx`
-(`ApprovalQueue`) from `features/approvals`, using the consolidated API adapter
-`lib/api/commerce.ts` and schemas in `lib/schemas/commerce.ts`.
+The commerce control plane was retired by ADR-012, so Kyber no longer has a
+commerce approval queue: the Review page's Commerce Approvals tab,
+`components/commerce/` (`ApprovalQueue`, `LifecycleTraceView`),
+`features/approvals`, `lib/api/commerce.ts` and `lib/schemas/commerce.ts` were
+deleted with their tests.
 
 **Removed as unmounted:** the modular feature hooks (`settlement`, `policies`,
 `facilitators`, `resources`, `entitlements`), their API adapters and schemas, and
@@ -1074,11 +1084,7 @@ history, and the design intent for these surfaces stays in
 primitives and mount it in a route when it is productized. Tracked as ledger row
 `product-kyber-unmounted-code`.
 
-`components/commerce/lifecycle-trace-view.tsx` is kept only because a component
-test covers it; nothing mounts it.
-
-The commerce modules that remain call their API adapters in normal runtime.
-Reusable synthetic records, when needed by unit/component tests, live only in
+No Kyber commerce modules remain. Reusable synthetic records, when needed by unit/component tests, live only in
 test-only paths and cannot be imported by a production entrypoint.
 
 ## Reward Enablement Components (A6, v8.10.0)
@@ -1402,11 +1408,14 @@ error. Every page states its no-execution boundary in the header copy.
 
 ### Aether (tenant) — `apps/aether-web/src/pages/{stablecoins,derivatives,interop}/`
 
+The Integrations & Connectors page groups sources by relationship (your applications, your members' accounts, your organization, imports); the group describes a source and never decides its use. `@aether/ui` `Input` and `Select` associate their visible label with the control (`htmlFor` + `useId`), so labels name their fields for assistive technology and tests.
+
 | Route | Page |
 |-------|------|
 | `/stablecoins` | Assets, peg valuations with depeg badges, flow aggregates |
 | `/stablecoins/:assetId` | Deployments + recent observations with finality status |
-| `/derivatives` | Linked accounts, positions, P&L snapshots, reconciliation variances |
+| `/derivatives` | Linked accounts, linked venue accounts (each backed by a connection and a data-rights grant), positions, P&L snapshots, reconciliation variances |
+| `/derivatives/propagation` | Propagation runs over the tenant's linked members (saved runs, staleness, recompute) |
 | `/derivatives/accounts/:accountId` | Orders, fills, positions for one read-only account |
 | `/interoperability` | Cross-chain messages, paths, providers with honest `ImplementationStatus` |
 | `/interoperability/messages/:messageId` | Lifecycle timeline, delivery attempts, asset legs |

@@ -173,7 +173,7 @@
     },
     {
       "path": "docs/architecture/APPROVAL-MODEL.md",
-      "title": "Agentic Commerce — Approval Model",
+      "title": "Agentic Commerce — Approval Model (Retired)",
       "slug": "ai/approval-model",
       "section": "architecture",
       "visibility": "I",
@@ -181,9 +181,9 @@
         "architect",
         "dev-senior"
       ],
-      "status": "stable",
+      "status": "deprecated",
       "since_version": "0.1.0",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
     },
@@ -306,7 +306,7 @@
     },
     {
       "path": "docs/architecture/COMMERCE-CONTROL-PLANE.md",
-      "title": "Agentic Commerce — Control Plane",
+      "title": "Agentic Commerce — Control Plane (Retired)",
       "slug": "api/commerce-control-plane",
       "section": "reference",
       "visibility": "I",
@@ -314,9 +314,9 @@
         "architect",
         "dev-senior"
       ],
-      "status": "stable",
+      "status": "deprecated",
       "since_version": "0.1.0",
-      "estimated_read_minutes": 8,
+      "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
     },
@@ -818,9 +818,9 @@
         "architect",
         "ops"
       ],
-      "status": "stable",
+      "status": "deprecated",
       "since_version": "0.1.0",
-      "estimated_read_minutes": 8,
+      "estimated_read_minutes": 1,
       "canonical_owner": "backend@aether"
     },
     {
@@ -2178,6 +2178,20 @@
       "path": "docs/architecture/decisions/ADR-011-spine-composition-kernel.md",
       "title": "ADR-011: Spine Composition Kernel",
       "slug": "decisions/adr-011-spine-composition-kernel",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-012-observation-only-everywhere.md",
+      "title": "ADR-012: Observation-Only Everywhere",
+      "slug": "decisions/adr-012-observation-only-everywhere",
       "section": "reference",
       "visibility": "I",
       "audience": [

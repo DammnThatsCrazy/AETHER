@@ -43,6 +43,9 @@ class HyperliquidAdapter(VenueDerivativesAdapter):
         "Live provider validation pending — CREDENTIAL_WAITING."
     )
 
+    # Account activity is public data keyed by address; a linked account is
+    # proved by wallet signature, not a venue credential.
+    authentication_model = "public_wallet_address"
     venue_id = "hyperliquid"
     default_deployment = "mainnet"
     rest_base_url = "https://api.hyperliquid.xyz"

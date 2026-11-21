@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { cn } from '../utils/cn';
 import type { SelectHTMLAttributes } from 'react';
 
@@ -12,11 +13,15 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onC
   readonly label?: string;
 }
 
-export function Select({ options, onChange, label, className, value, ...props }: SelectProps) {
+export function Select({ options, onChange, label, className, value, id, ...props }: SelectProps) {
+  // Associate the visible label with the control so it names the field.
+  const generatedId = useId();
+  const selectId = id ?? generatedId;
   return (
     <div className="inline-flex flex-col gap-1">
-      {label && <label className="text-xs text-text-secondary">{label}</label>}
+      {label && <label htmlFor={selectId} className="text-xs text-text-secondary">{label}</label>}
       <select
+        id={selectId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn(

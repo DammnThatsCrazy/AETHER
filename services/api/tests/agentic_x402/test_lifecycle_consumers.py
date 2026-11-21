@@ -1,10 +1,11 @@
 """Wiring and authority tests for the lifecycle consumers.
 
-The x402 and agent lifecycle mappers are only useful if a registered consumer
-calls them, and only safe if each consumer honours its source-authority rules.
-These tests pin both: the consumer specs subscribe the handlers to the right
-topics, public-SDK terminal claims are not projected, untrusted sources are
-deferred, and trusted events reach the mapper.
+The x402 lifecycle mapper is only useful if a registered consumer calls it, and
+only safe if the consumer honours its source-authority rules. These tests pin
+both: the consumer specs subscribe the handlers to the right topics and
+public-SDK terminal claims are not projected. They also pin that the retired
+backend agent lifecycle consumer stays unwired (ADR-012): observed agent run
+state is owned by the Silver AgentExecutionProjector alone.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from actions.agent import lifecycle_consumer
 from ingestion.ingestion import lifecycle_worker
 from repositories.repos import (
     PaymentIntentRepository,
@@ -69,18 +69,13 @@ def test_sdk_observation_projection_is_subscribed_to_validated_sdk_events():
     ) in subs
 
 
-def test_agent_execution_consumer_is_wired_through_the_graph_spec(monkeypatch):
+def test_graph_spec_no_longer_wires_a_backend_agent_lifecycle_projection(monkeypatch):
     monkeypatch.setattr(
         "workers.profile360_workers.attach_profile360_workers", lambda *a, **k: None
     )
     spec = _spec("graph-profile-projection")
-    subs = dict(_subscriptions(spec.handler_factory))
-    for topic in (
-        Topic.AGENT_EXECUTION_STARTED,
-        Topic.AGENT_EXECUTION_COMPLETED,
-        Topic.AGENT_EXECUTION_FAILED,
-    ):
-        assert subs[topic] is lifecycle_consumer.project_agent_execution_lifecycle
+    subs = _subscriptions(spec.handler_factory)
+    assert subs == []
 
 
 @pytest.mark.asyncio
@@ -141,47 +136,3 @@ async def test_authoritative_x402_event_from_the_wrong_service_is_deferred(monke
     )
     await lifecycle_worker.project_authoritative_x402_lifecycle(event)
     assert called == []
-
-
-@pytest.mark.asyncio
-async def test_agent_execution_event_from_untrusted_source_is_deferred(monkeypatch):
-    called = []
-
-    class Boom:
-        async def handle_event(self, *a, **k):
-            called.append(a)
-            return {}
-
-    monkeypatch.setattr("actions.agent.lifecycle_mapper.AgentLifecycleMapper", Boom)
-    event = Event(
-        topic=Topic.AGENT_EXECUTION_STARTED,
-        tenant_id=TENANT,
-        source_service="public-sdk",
-        payload={"agent_id": "a-1", "execution_id": "x-1"},
-    )
-    await lifecycle_consumer.project_agent_execution_lifecycle(event)
-    assert called == []
-
-
-@pytest.mark.asyncio
-async def test_agent_execution_event_from_the_agent_service_reaches_the_mapper(monkeypatch):
-    captured = []
-
-    class Capture:
-        async def handle_event(self, event_type, mapped, tenant_id):
-            captured.append((event_type, mapped, tenant_id))
-            return {"status": "ok"}
-
-    monkeypatch.setattr("actions.agent.lifecycle_mapper.AgentLifecycleMapper", Capture)
-    event = Event(
-        topic=Topic.AGENT_EXECUTION_COMPLETED,
-        tenant_id=TENANT,
-        source_service="agents",
-        payload={"agent_id": "a-1", "execution_id": "x-1"},
-    )
-    await lifecycle_consumer.project_agent_execution_lifecycle(event)
-    assert len(captured) == 1
-    event_type, mapped, tenant = captured[0]
-    assert event_type == "agent_task_completed" and tenant == TENANT
-    assert mapped["agent_id"] == "a-1" and mapped["execution_id"] == "x-1"
-    assert mapped["evidence_status"] == "server_observed"

@@ -49,9 +49,6 @@ apps:
       - path: src/lib/schemas/index.ts
         ledger: product-kyber-unmounted-code-pending
         reason: kept only for its unit test; delete both unless a consumer appears
-      - path: src/components/commerce/lifecycle-trace-view.tsx
-        ledger: product-kyber-unmounted-code-pending
-        reason: kept only for its component test; mount it or delete both
   aether:
     root: apps/aether-web
     alias: "@aether-app"

@@ -26,7 +26,7 @@ source_files:
   - services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py
   - services/api/alembic/versions/20261030_merge_authority_heads.py
   - services/api/alembic/versions/20261104_merge_value_behavior_heads.py
-  - services/api/actions/agent/invocation_runtime.py
+  - services/api/actions/agent/invocation_receipts.py
   - services/api/intelligence/model_governance/evaluations.py
   - services/api/value/economic/attribution_model_validation.py
   - config/storage_policies.yaml
@@ -40,9 +40,9 @@ reviewed_source_commits:
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:79b44accf707f668710c02c75a09580c977822c0e9daa2e539cdf5ec6f897b8a"
-  "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
-  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
+  "config/storage_policies.yaml": "sha256:58e2ed6c49220a7e31bec5fd6dcf39a86899b17a268eb66d3b0293ab3d7d1b81"
+  "services/api/actions/agent/invocation_receipts.py": "sha256:03396ce4fa7f262f12cc8acaa36805c8bd644e961e6e3423a45383327e991de2"
+  "services/api/actions/agent/user_agents.py": "sha256:6e8c6935786206280889003297253f1401cd67573ff490a78349840555b1af20"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -58,11 +58,11 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
+  "services/api/repositories/repos.py": "sha256:fe2d94f66f7df1d52bc135c9021d1039fc39140378587b7ed2b24f123164a324"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/attribution_model_validation.py": "sha256:d2ea75981effed3f2aaba070ddcf29c9156acbab9a285a6601cb045a48774719"
-  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
+  "services/api/value/x402/commerce_store.py": "sha256:c55caae3f9e9f81830f493b729c8bc5ef8ba1f4f6244628c7059580e429f216e"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -175,7 +175,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
 | `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning, policy and workflow references; optional validated caller associations to journey intents or risk decisions record a request without proving dispatch |
-| `commerce_approval_decisions` | `ApprovalDecisionsRepository` | Insert-once tenant-scoped x402 decision history with exact execution references and optional recorded human permission checks |
+| `commerce_approval_decisions` | `ApprovalDecisionsRepository` | Historical (pre-ADR-012) insert-once tenant-scoped x402 decision history with exact execution references and optional recorded human permission checks |
 | `risk_poisoning_evidence` | `RiskPoisoningEvidenceRepository` | Typed tenant-scoped risk evidence and append-only lifecycle/restatement history |
 | `risk_intervention_records` | `RiskInterventionRepository` | Exact tenant/subject intervention decision and reported outcome records; the row alone does not prove action execution |
 | `workflow_definition_revisions` | workflow definition authority | Immutable tenant-scoped revisions and idempotent content replay; persisted creation time is returned on replay. A bounded exact-tenant history read selects the highest revision created and effective by an `asOf` instant, with malformed or truncated history unknown. |
@@ -186,7 +186,8 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
 | `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
 | `agent_deployment_identity_bindings` | `AgentDeploymentIdentityBindingRepository` | Explicit tenant-admin binding from source namespace/reference to a same-tenant canonical Agent; uniquely scoped by tenant + namespace + source reference |
-| `venue_account_links` | `VenueAccountLinkRepository` | Tenant subject to read-only venue account links (wallet proof, read-only key reference, OAuth reference, tenant push) with consent receipt and revocation state; no secret is stored; erased by the `venue_account_links` DSR plane |
+| `venue_account_links` | `VenueAccountLinkRepository` | Tenant subject to read-only venue account links (wallet proof, read-only key reference, OAuth reference, tenant push) with consent receipt and revocation state; no secret is stored; each link also carries its provider connection, source id, grant id and sync checkpoint; erased by the `venue_account_links` DSR plane |
+| `propagation_runs` | `PropagationRunRepository` | Saved propagation runs: query, computed run, the grants of the fills used and a digest of the linked population (for staleness), and the subjects the run names; erased whole by the `propagation_runs` DSR plane when it names the subject |
 
 The risk evidence and intervention migrations index immutable tenant and subject
 expressions. Chronological repository reads cast the recorded JSON timestamp at
@@ -218,8 +219,9 @@ does not claim that either has been applied.
 bounded exact lookup used to resolve Agent360 delegation parties. It filters
 by the requested tenant and exact canonical entity IDs; duplicate or
 truncated results are not selected as canonical. `AgentExecutionRepository`
-also retains the initiating principal ID supplied by the authenticated
-server-side execution path so it remains distinct from the agent and source
+holds execution rows written before ADR-012 retired Aether-side admission; no
+route writes new rows. Those rows retain the initiating principal ID supplied by
+the authenticated server-side execution path so it remains distinct from the agent and source
 actor claims. It persists `workflow_run_id` and `workflow_run_invocation_ids`
 when canonical tenant-scoped invocation facts with the same agent and an exact
 `action_id` equal to the stable execution ID resolve to one unambiguous run.
@@ -509,7 +511,9 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   after the first is a compare-and-set on it (the first is insert-if-absent), so
   concurrent reviews and rebuilds cannot overwrite one another.
 
-The invocation claim and completion-receipt tables use PostgreSQL as their
+The invocation claim and completion-receipt tables are historical: nothing has
+written them since ADR-012 retired Aether-side tool invocation, and
+`invocation_receipts.py` only reads them. They use PostgreSQL as their
 authoritative and metadata store, with legal retention and `preserve` deletion
 behavior; adaptive materialization and object externalization are disabled.
 Model-governance evaluation reads decode both JSONB `metrics` and `sample_refs`

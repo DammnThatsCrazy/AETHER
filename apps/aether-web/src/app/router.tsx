@@ -71,6 +71,8 @@ const StablecoinsPage = lazy(() => import('@aether-app/pages/stablecoins').then(
 const StablecoinAssetPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinAssetPage })));
 const DerivativesPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesPage })));
 const DerivativesAccountPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesAccountPage })));
+const PropagationPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.PropagationPage })));
+const VenueOAuthReturnPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.VenueOAuthReturnPage })));
 const AgentAccessPage = lazy(() => import('@aether-app/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
 const Agent360Page = lazy(() => import('@aether-app/pages/agent360').then(m => ({ default: m.Agent360Page })));
 const InteropPage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropPage })));
@@ -113,6 +115,8 @@ export function AppRouter() {
 
       {/* Public auth routes */}
       <Route path="/login" element={<LoginPage />} />
+      {/* The public website's "Sign in" links to /app/signin. */}
+      <Route path="/signin" element={<RedirectPreservingQuery to="/login" />} />
       <Route
         path="/signup"
         element={
@@ -226,6 +230,8 @@ export function AppRouter() {
                 <Route path="/stablecoins/:assetId" element={<PageSuspense><StablecoinAssetPage /></PageSuspense>} />
                 <Route path="/derivatives" element={<PageSuspense><DerivativesPage /></PageSuspense>} />
                 <Route path="/derivatives/accounts/:accountId" element={<PageSuspense><DerivativesAccountPage /></PageSuspense>} />
+                <Route path="/derivatives/propagation" element={<PageSuspense><PropagationPage /></PageSuspense>} />
+                <Route path="/derivatives/oauth/return" element={<PageSuspense><VenueOAuthReturnPage /></PageSuspense>} />
                 <Route path="/agent-access" element={<PageSuspense><AgentAccessPage /></PageSuspense>} />
                 <Route path="/agents/:agentId" element={<PageSuspense><Agent360Page /></PageSuspense>} />
                 <Route path="/interoperability" element={<PageSuspense><InteropPage /></PageSuspense>} />

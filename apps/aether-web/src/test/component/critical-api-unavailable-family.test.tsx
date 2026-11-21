@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { CapabilityProvider, ThemeProvider, ToastProvider, type Capabilities } from '@aether/ui';
+import { CapabilityProvider, ThemeProvider, ToastProvider, queryCache, type Capabilities } from '@aether/ui';
 import { BillingPage } from '@aether-app/pages/billing/billing-page';
 import { AuditExportsPage } from '@aether-app/pages/audit-exports';
 import { CampaignsPage } from '@aether-app/pages/campaigns';
@@ -16,7 +16,7 @@ import { ConnectorsPage } from '@aether-app/pages/connectors';
 import { DeliveryHistoryPage } from '@aether-app/pages/connectors';
 import { DataQualityPage } from '@aether-app/pages/data-quality';
 import { DeploymentDetailPage } from '@aether-app/pages/deployments';
-import { DerivativesAccountPage, DerivativesPage } from '@aether-app/pages/derivatives';
+import { DerivativesAccountPage, DerivativesPage, PropagationPage } from '@aether-app/pages/derivatives';
 import { GraphPage } from '@aether-app/pages/graph';
 import { ImportDetailPage } from '@aether-app/pages/imports';
 import { InteropMessagePage, InteropPage } from '@aether-app/pages/interop';
@@ -76,6 +76,8 @@ const mocks = vi.hoisted(() => ({
   securityPolicies: vi.fn(),
   notificationChannelsGetConfig: vi.fn(),
   notificationChannelsUpdateConfig: vi.fn(),
+  propagationListRuns: vi.fn(),
+  venueLinksList: vi.fn(),
 }));
 
 vi.mock('@aether-app/features/agent360', async (original) => ({
@@ -122,6 +124,8 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
       getConfig: mocks.notificationChannelsGetConfig,
       updateConfig: mocks.notificationChannelsUpdateConfig,
     },
+    propagation: { listRuns: mocks.propagationListRuns },
+    venueLinks: { list: mocks.venueLinksList },
   },
 }));
 
@@ -828,6 +832,15 @@ const cases: RouteStateCase[] = [
     fail: () => { providerState.domain = 'error'; },
     emptyText: 'No orders observed',
     errorText: 'domain backend offline',
+  },
+  {
+    route: '/derivatives/propagation',
+    Page: PropagationPage,
+    // This page reads through the shared query cache; start each case cold.
+    empty: () => { queryCache.clear(); mocks.propagationListRuns.mockResolvedValue({ items: [] }); },
+    fail: () => { queryCache.clear(); mocks.propagationListRuns.mockRejectedValue(new Error('propagation offline')); },
+    emptyText: 'No saved runs',
+    errorText: 'Propagation is unavailable',
   },
   {
     route: '/interoperability',

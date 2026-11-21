@@ -65,10 +65,12 @@ function renderLogin() {
 }
 
 async function submitCredentials() {
-  fireEvent.change(screen.getByLabelText('Email address'), {
+  fireEvent.change(screen.getByLabelText('Work email'), {
     target: { value: 'founder@tenant.dev' },
   });
-  fireEvent.change(screen.getByLabelText('Password'), {
+  // Email first, then the password step.
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
+  fireEvent.change(await screen.findByLabelText('Password'), {
     target: { value: 'correct horse battery' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));

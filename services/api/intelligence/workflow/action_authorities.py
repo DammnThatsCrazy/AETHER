@@ -17,7 +17,7 @@ from shared.temporal.instant import parse_instant_strict
 async def invocation_receipt(*, tenant_id: str, workflow_run_id: str,
                              execution: dict[str, Any]) -> dict[str, Any] | None:
     """Return a provider completion only from one exact server-owned receipt."""
-    from actions.agent.invocation_runtime import validated_agent_receipt
+    from actions.agent.invocation_receipts import validated_agent_receipt
     execution_id = execution.get("execution_id")
     agent_id = execution.get("agent_id")
     if not isinstance(execution_id, str) or not isinstance(agent_id, str):

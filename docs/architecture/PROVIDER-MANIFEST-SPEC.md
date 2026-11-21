@@ -17,7 +17,7 @@ estimated_read_minutes: 13
 toc_depth: 3
 source_hashes:
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
-  "services/api/shared/integration_contracts/catalog.py": "sha256:76a954865823c7b8d0b9aac98787ed4ea1b0dbcbde1e99f6c58a07025971b63c"
+  "services/api/shared/integration_contracts/catalog.py": "sha256:f07531dd715a96608d7d6f71949e8625f2554bb9e8e31417ab8e1a4787d7c904"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
   "services/api/shared/integration_contracts/manifest.py": "sha256:88f1a5c8f3a8fa5d6b0e53d9277c26dab7e6ef1681caa4ef1a52085e9e038658"
   "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
@@ -220,7 +220,31 @@ per existing connector from its `ConnectorDescriptor`:
   connector → `api_key`; otherwise `none`. The `_OAUTH_SCOPES` map is the only
   way to turn a connector into real `oauth2` — nothing emits empty-scope OAuth.
 
-### 13.2 Shopify native manifest
+### 13.2 Derivatives venue capabilities
+
+The same catalog derives two manifests per linkable derivatives venue from
+`value/derivatives/venue_sources.py` (`build_derivatives_venue_manifests`),
+because the two data relationships differ:
+
+- `<venue>.account.<capability>` (for example `polymarket.account.activity_read`,
+  `hyperliquid.account.fills_read`) is a subject's or tenant's own account
+  activity. `tenant_self_service` and `kyber_managed` are true,
+  `olympus_system` false. Wallet venues use `authentication.type = "none"`:
+  the account is proved by a wallet signature, not a credential.
+- `<venue>.markets.market_data` is public market and instrument data that
+  Olympus Labs reads under the reserved `olympus` scope as reference context.
+  `kyber_managed` is true; `tenant_self_service` and `olympus_system` stay
+  false until the capability is certified for Olympus system use.
+
+Both are `replay_validated` (level 3), visible only in `local` and
+`integration`. Availability never decides ownership: the account link's grant
+does. Only the account capability is tenant-connectable
+(`catalog.tenant_connectable`: enabled somewhere and `tenant_self_service`), so
+only it appears in the customer integrations catalog and tenant readiness view,
+grouped under the `markets_trading` experience (category `derivatives`). Market
+data stays an Olympus reference source and never appears there.
+
+### 13.3 Shopify native manifest
 
 The reference plugin (`services/api/connectors/providers/shopify/plugin.py`) declares:
 

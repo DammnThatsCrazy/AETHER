@@ -332,28 +332,6 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_reward_delivery_outbox_worker()
 
-    def _x402_settlement_reconciliation() -> Coroutine[Any, Any, None]:
-        from value.rewards.workers import (
-            build_x402_settlement_reconciliation_worker,
-        )
-
-        return build_x402_settlement_reconciliation_worker()
-
-    def _commerce_approval_sweeper() -> Coroutine[Any, Any, None]:
-        from value.commerce.workers import build_approval_sweeper
-
-        return build_approval_sweeper()()
-
-    def _commerce_entitlement_sweeper() -> Coroutine[Any, Any, None]:
-        from value.commerce.workers import build_stale_entitlement_sweeper
-
-        return build_stale_entitlement_sweeper()()
-
-    def _commerce_reconciliation() -> Coroutine[Any, Any, None]:
-        from value.commerce.workers import build_reconciliation_loop
-
-        return build_reconciliation_loop()()
-
     def _reward_reservation_release() -> Coroutine[Any, Any, None]:
         from value.rewards.workers import (
             build_reward_reservation_release_worker,
@@ -736,44 +714,6 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="reward_delivery_outbox",
             factory=_reward_delivery_outbox,
-        ),
-        # x402 settlement reconciliation: re-checks PENDING settlements against
-        # on-chain finality per tenant and advances the final ones to SETTLED
-        # (kill-switch aware, durable cursor, idempotent). Gated on the commerce
-        # control plane so it never runs while x402 is off. Materializer role — it
-        # projects verified finality into settlement state.
-        WorkerSpec(
-            name="x402_settlement_reconciliation",
-            factory=_x402_settlement_reconciliation,
-            enabled=lambda: bool(
-                settings.intelligence_graph.enable_commerce_control_plane
-            ),
-        ),
-        # Commerce control-plane sweeps. Approval expiry and stale-entitlement
-        # revocation were only run when someone called the stuck-approvals
-        # diagnostics route; these keep them convergent. The reconciliation loop is
-        # read-only (it logs drift). Gated on the commerce control plane, like the
-        # x402 settlement reconciliation above.
-        WorkerSpec(
-            name="commerce_approval_sweeper",
-            factory=_commerce_approval_sweeper,
-            enabled=lambda: bool(
-                settings.intelligence_graph.enable_commerce_control_plane
-            ),
-        ),
-        WorkerSpec(
-            name="commerce_entitlement_sweeper",
-            factory=_commerce_entitlement_sweeper,
-            enabled=lambda: bool(
-                settings.intelligence_graph.enable_commerce_control_plane
-            ),
-        ),
-        WorkerSpec(
-            name="commerce_reconciliation",
-            factory=_commerce_reconciliation,
-            enabled=lambda: bool(
-                settings.intelligence_graph.enable_commerce_control_plane
-            ),
         ),
         # Reward budget reservation release: returns stale, never-committed budget
         # reservations to the tenant's available balance so a crashed delivery

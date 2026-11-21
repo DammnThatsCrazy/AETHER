@@ -196,6 +196,14 @@ class VenueDerivativesAdapter(DerivativesAdapter):
             self._rest = None
         self._stream_factory = stream_factory
 
+    def trading_account_id_for(self, account_ref: str) -> str:
+        """The ``trading_account_id`` this venue stores for one linked account.
+
+        Readers of persisted fills ask the adapter instead of rebuilding the key,
+        because some venues scope it further (dYdX subaccounts).
+        """
+        return f"acct_{account_ref}"
+
     # ── DerivativesAdapter surface ─────────────────────────────────────────
     def validate_config(self, config: dict[str, Any]) -> None:
         """Refuse anything beyond read-only authority AND reject mutating scopes."""

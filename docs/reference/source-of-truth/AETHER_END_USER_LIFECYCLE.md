@@ -136,8 +136,10 @@ Provider/credential readiness is the 11-member `CredentialReadiness` ladder in
 - webhook supported ⇒ scheme declared;
 - incremental sync ⇒ cursor declared.
 
-As of this writing all 36 catalog families sit honestly at
-`credential_waiting`/`scaffolded` — the truthful dormant posture. Surfaces must
+As of this writing the 36 non-venue catalog capabilities sit honestly at
+`credential_waiting`/`scaffolded` and the 16 derivatives venue capabilities at
+`replay_validated` (read-only adapters proven against recorded fixtures) — the
+truthful dormant posture. Surfaces must
 not advertise live capability they cannot demonstrate (§31 data truth).
 
 ## 5. Unified integration catalog (one id-space)
@@ -145,10 +147,11 @@ not advertise live capability they cannot demonstrate (§31 data truth).
 There is **one** customer catalog: a derived projection over the authoritative
 backend manifest union in
 `services/api/shared/integration_contracts/catalog.py`
-(`ALL_MANIFESTS` = four-group union of 36 `family.product.capability`
+(`ALL_MANIFESTS` = five-group union of 52 `family.product.capability`
 identities), **never** a second storage model. It is exposed through
-`/v1/integration-catalog` (33 visible entries; the 3 deferred credit bureaus are
-scaffolded and hidden), `/v1/tenant-integrations[/{id}]`, and
+`/v1/integration-catalog` (41 visible entries: only tenant-connectable capabilities, so the 3
+scaffolded deferred credit bureaus and the 8 platform-operated venue market-data
+feeds are hidden), `/v1/tenant-integrations[/{id}]`, and
 `/v1/integration-readiness`.
 
 | Catalog group | Families | Visible surface | Experience category |
@@ -156,24 +159,30 @@ scaffolded and hidden), `/v1/tenant-integrations[/{id}]`, and
 | Connectors (`ingestion.connector`) | 21 (`slack`, `webhook`, `shopify`, `stripe`, `hubspot`, `salesforce`, `klaviyo`, `segment`, `posthog`, `ga4`, `jira`, `linear`, `zendesk`, `intercom`, `dune`, `sendgrid`, `customerio`, `mailchimp`, `postmark`, `iterable`, `braze`) | Settings/Integrations + activation connect steps | by product/category/comms cohort |
 | Ad platforms (`ads.metrics`) | 7 (`google_ads`, `meta_ads`, `tiktok_ads`, `linkedin_ads`, `x_ads`, `reddit_ads`, `microsoft_ads`) | Advertising group | `advertising_campaigns` |
 | Payment rails (`payment_rails.observe`) | 5 (`privy`, `stripe`, `coinbase`, `moonpay`, `bridge`) | observe-only | — |
+| Derivatives venues (`account.*`, `markets.market_data`) | 16 (`hyperliquid`, `polymarket`, `dydx`, `gmx`, `drift`, `kalshi`, `bybit`, `coinbase_futures`; one account and one market-data capability each) | account reads visible; market data platform-operated | `markets_trading` |
 | Deferred credit bureaus (`credit.report`) | 3 (`experian`, `equifax`, `transunion`) | hidden (scaffolded) | none (`null`) |
 
 The TypeScript twin (`packages/shared/connector-taxonomy.ts`) is **generated**
 from this union by `scripts/generate_connector_taxonomy.py` — never hand-edited.
 It carries the descriptor taxonomy (a verbatim mirror of the six-layer corpus
-enums) plus `CATALOG_GROUP_ORDER`, the four family arrays + counts, `CATALOG_GROUPS`,
+enums) plus `CATALOG_GROUP_ORDER`, the five family arrays + counts, `CATALOG_GROUPS`,
 `CATALOG_CATEGORIES`, `CATALOG_READINESS_STATES_PRESENT`, `CATALOG_ENTRIES`
-(36 rows), and `EXPERIENCE_CATEGORY_*`. Tenant FE and marketing consume
+(52 rows), and `EXPERIENCE_CATEGORY_*`. Tenant FE and marketing consume
 identical ids from that one generated module.
 
 ## 6. Experience categories (ADR-0010)
 
-`experience_category` is the additive grouping enum (8 members) defined in
+`experience_category` is the additive grouping enum (9 members) defined in
 `shared/integration_contracts/experience.py`:
 
 `advertising_campaigns`, `commerce_revenue`, `crm_customer`,
 `communications_lifecycle`, `analytics_behavior`, `social_community`,
-`customer_support`, `work_operations`.
+`customer_support`, `work_operations`, `markets_trading`.
+
+`markets_trading` groups the tenant-connectable derivatives and prediction-market
+venue accounts. Only tenant-connectable capabilities (enabled somewhere and
+offered for tenant self-service, `catalog.tenant_connectable`) appear in the
+customer catalog; Olympus reference sources such as venue market data do not.
 
 Resolution precedence (implemented once in `experience_category_for`, mirrored
 by the generated TS, never hand-synced in UI):

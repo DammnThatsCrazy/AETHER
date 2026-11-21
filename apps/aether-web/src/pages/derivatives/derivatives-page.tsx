@@ -11,6 +11,7 @@ import {
   DomainQueryState, EvidenceBoundary, NotEnabledOrError, Stat, asRecord, asList,
   fmt, queryCount,
 } from '@aether-app/components/domain-intelligence';
+import { VenueLinksPanel } from './venue-links-panel';
 
 export function DerivativesPage() {
   const navigate = useNavigate();
@@ -45,6 +46,9 @@ export function DerivativesPage() {
           Observed state of read-only linked trading accounts: positions, P&amp;L snapshots,
           and reconciliation health. Aether never places, modifies, or recommends orders.
         </p>
+        <button type="button" className="text-sm text-accent underline mt-2" onClick={() => navigate('/derivatives/propagation')}>
+          See how behavior spreads across your members
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -64,6 +68,7 @@ export function DerivativesPage() {
       <Tabs defaultValue="accounts">
         <TabsList>
           <TabsTrigger value="accounts">Accounts</TabsTrigger>
+          <TabsTrigger value="venue-links">Linked venues</TabsTrigger>
           <TabsTrigger value="positions">Positions</TabsTrigger>
           <TabsTrigger value="pnl">P&amp;L snapshots</TabsTrigger>
           <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
@@ -90,6 +95,10 @@ export function DerivativesPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="venue-links">
+          <VenueLinksPanel />
         </TabsContent>
 
         <TabsContent value="positions">

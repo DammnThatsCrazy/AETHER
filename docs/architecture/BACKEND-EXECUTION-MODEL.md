@@ -19,12 +19,12 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:2e5596ca08687e43bf2437ef2c7e5535e7f58cff081c11d8f99395c7a7e90407"
-  "services/api/main.py": "sha256:a3edbd884402102af7220bc6a825a0ba7486b7143f3518c1ded6f228bb37456c"
-  "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:976796e657b941759e2aceeb1658cb89866c615fc95023bf334de29ae1369181"
+  "services/api/config/settings.py": "sha256:241a51b5e7bdf223a1163635664a4a4829f8d83013bce958dc6c877ea64e5131"
+  "services/api/main.py": "sha256:cc760a0811be4241715b06c09d9a7f2e160169bd7b48afc70cfe2a46c3c807e3"
+  "services/api/workers/runtime/consumer_specs.py": "sha256:03cfaa1cf4341a5ac31b6222d09b29e2823162e5c6c0aac10e7c8215089cf516"
+  "services/api/workers/runtime/roles.py": "sha256:f3dcb2ef61fa3a0b2d3a3d77f76e08c5343c1d2388b6894d1ea578c2ee57998b"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:bed3da6f0117ac5a47f856c6405b6e2553bf0ad568c740e5716d14f3c0b9b884"
+  "services/api/workers/runtime/specs.py": "sha256:4ff2c134a396e6e253f56a0c3b6d46768c2f648eee0dc04230e6d3bc5fa797b1"
 ---
 
 # Backend Execution Model
@@ -46,7 +46,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `graph-writer` | Profile/graph projection and delegation mutation consumers, including retryable card-linked and external-agent graph projection outboxes. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
-| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane, and the flag-gated pattern discovery sweep). |
+| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and the flag-gated pattern discovery sweep). |
 | `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, the daily Access Kit audit-versus-usage reconciliation (`access_reconciliation`, read-only, logs gaps), SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). Also the Rights Authority retention deletion executor (`rights_deletion_executor` — one periodic sweep that executes the pending `delete_at_expiry` impact rows the retention seam only schedules; default OFF). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
@@ -246,11 +246,6 @@ depending on an operator manually draining a queue:
   through the rail-sender registry each tick. It is the reward plane's
   at-least-once delivery path; before it was supervised a reward left the durable
   outbox only when an operator hit the drain route.
-- **`x402_settlement_reconciliation`** (`materializer`, gated by
-  `COMMERCE_CONTROL_PLANE_ENABLED`) — re-checks PENDING settlements against the
-  tenant's RPC and advances the on-chain-final ones to SETTLED. Tenant-isolated,
-  idempotent, kill-switch aware (skips SUSPENDED x402 capabilities), durable
-  per-tenant cursor in `x402_reconciliation_cursor`.
 - **`pattern_discovery_sweep`** (`materializer`, gated by
   `AETHER_PATTERN_DISCOVERY_ENABLED` + `PATTERN_DISCOVERY_SCHEDULER_ENABLED`
   (default on, so the master flag decides), re-read every pass) — enqueues one durable `pattern_discovery.run` job per

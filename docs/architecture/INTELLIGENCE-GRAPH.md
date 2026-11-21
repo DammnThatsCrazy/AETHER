@@ -55,13 +55,13 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
   "services/api/graph/web3/routes.py": "sha256:6d3077772a8453f0000b066927ef3bed015bf65b165cf2eacd3f31b512efdb01"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:ce75e7b9566aead77908aed4764a361d12d5bd1783516fd3adb29cd3c26d5414"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:73e568f142ad0407405cd3fff0328011d6e2a58260e48075cb5eedc5f5cd952c"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
-  "services/api/repositories/repos.py": "sha256:31e740f7846c97803331d438bab2b261d2ca44dbc3be3ab3e670cbf539533f96"
+  "services/api/repositories/repos.py": "sha256:fe2d94f66f7df1d52bc135c9021d1039fc39140378587b7ed2b24f123164a324"
   "services/api/shared/graph/": "sha256:7530a6520aae3941822c805a8edbf1fdecbd3f28f3873c8a1018c3cc43cd4b17"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
-  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
+  "services/api/value/x402/provenance.py": "sha256:fe227df986d4c03f770d97d6236bc4c5c5ee4410db66415dd38b7a697779d556"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
@@ -287,7 +287,7 @@ the geographic360 projection read land with the ingestion/DSR plane (G4.5).
 | **L2** | Agent Behavioral | Autonomous agent lifecycle tracking | `registerAgent()`, task states, decision logs, ground truth |
 | **L3a** | Commerce | Payment tracking, agent hiring, fee analysis | Payment records, hire events, fee elimination reports |
 | **L3b** | x402 Interceptor | HTTP 402-based micropayment capture | Payment headers, economic graph edges, per-call cost tracking |
-| **L3b+** | x402 Control Plane | Full commerce lifecycle — challenge → approval → settlement → entitlement | `ProtectedResourceRegistry`, `ApprovalService`, `SettlementTracker`, `EntitlementService` |
+| **L3b+** | x402 Settlement Observation | On-chain verification of reported x402 payments (the former challenge → approval → settlement → entitlement control plane was retired by ADR-012) | `settlement_observer.py`, `VerificationEngine`; historical records in `CommerceStore` |
 | **L4** | ML Intelligence | Scoring and anomaly detection | 9 existing models + Trust Score composite + Bytecode Risk scorer |
 | **L5** | Unified Graph | Cross-layer relationship store | 18+ vertex types, 48+ edge types, Neptune (gremlinpython), Postgres (`graph_vertices`/`graph_edges`), or in-memory for local dev |
 

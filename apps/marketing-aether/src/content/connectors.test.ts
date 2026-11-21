@@ -166,6 +166,7 @@ describe("experience categories (canonical vocabulary convergence)", () => {
       "social_community",
       "customer_support",
       "work_operations",
+      "markets_trading",
     ]);
   });
 
