@@ -115,6 +115,8 @@ export function AppRouter() {
 
       {/* Public auth routes */}
       <Route path="/login" element={<LoginPage />} />
+      {/* The public website's "Sign in" links to /app/signin. */}
+      <Route path="/signin" element={<RedirectPreservingQuery to="/login" />} />
       <Route
         path="/signup"
         element={

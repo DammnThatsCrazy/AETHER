@@ -45,9 +45,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:fecb8668ce286008ce2a0168c45e18a727ecf4795d7ed5534f471417daae0884"
-  "apps/kyber-web/src/": "sha256:0b63786d40dfe1ba6a95c2082fe643c38ec498472131b541f27283db6c3893e4"
-  "packages/ui/core/src/": "sha256:31e11ce9c219f5646bac8c46b9bbb6503d063231a53414d6d432c17c90a972c4"
+  "apps/aether-web/src/": "sha256:6707a59e51031985ffb9c5c2901ab0f6c6873fca079b04234919941b0abab256"
+  "apps/kyber-web/src/": "sha256:87457fce9066ec624193df95a8c67e06da0e41966231ff315dc6a20433d17e81"
+  "packages/ui/core/src/": "sha256:4146ce910b5dfc015e11e3f0a886b1bf501e1d3c9314d94533b475269dda8ff5"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -82,12 +82,22 @@ the root.
   off; signup skips the API-key reveal step when a session is issued. A `429` from
   login, register or verify-email (the backend throttles those public endpoints)
   is shown as a wait message built from `retry_after_seconds`
-  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. When the
-  build carries Auth0 settings, login offers **Continue with Olympus sign-in**
-  (Auth0 Universal Login) plus one button per social connection listed in
-  `VITE_AUTH0_SOCIAL_CONNECTIONS` (`google=aether-staging-google,…`), which
-  opens that Auth0 connection directly; Terraform lists none when social
-  connections are off (the pilot lane). Signing out also ends the Auth0
+  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. Login
+  mirrors the public website's portal (shared `AuthPortal*` primitives in
+  `@aether/ui`, also used by Kyber's operator login) and is email-first; the
+  website's "Sign in" link `/app/signin` redirects to `/login`. Google and Apple
+  (full-width) and Microsoft and Slack (compact) appear for each social
+  connection listed in `VITE_AUTH0_SOCIAL_CONNECTIONS`
+  (`google=aether-staging-google,…`) and open that Auth0 connection directly;
+  Terraform lists none when social connections are off (the pilot lane). After
+  the work email: a domain listed in `VITE_AUTH0_ENTERPRISE_CONNECTIONS`
+  (`acme.com=acme-okta,…`) goes straight to that company SSO connection;
+  every other address gets the same next step, so the screen never reveals
+  whether an account exists: a password field (`/v1/auth/login`), **Email me a
+  sign-in code** when `VITE_AUTH0_PASSWORDLESS_CONNECTION` names an Auth0
+  passwordless email connection, and **Use another sign-in method** (Auth0
+  Universal Login with `login_hint`), which is how invited teammates and the
+  staging operator, who have no password here, sign in. Signing out also ends the Auth0
   session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
   the next sign-in asks again instead of silently reusing it; if Auth0 cannot
   be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through

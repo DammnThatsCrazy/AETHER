@@ -23,6 +23,8 @@ const envState = vi.hoisted(() => ({
   VITE_AUTH0_DOMAIN: undefined as string | undefined,
   VITE_AUTH0_CLIENT_ID: undefined as string | undefined,
   VITE_AUTH0_SOCIAL_CONNECTIONS: undefined as string | undefined,
+  VITE_AUTH0_ENTERPRISE_CONNECTIONS: undefined as string | undefined,
+  VITE_AUTH0_PASSWORDLESS_CONNECTION: undefined as string | undefined,
 }));
 vi.mock("@aether-app/lib/env", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@aether-app/lib/env")>();
@@ -62,22 +64,71 @@ describe("LoginPage Auth0 sign-in", () => {
     envState.VITE_AUTH0_DOMAIN = undefined;
     envState.VITE_AUTH0_CLIENT_ID = undefined;
     envState.VITE_AUTH0_SOCIAL_CONNECTIONS = undefined;
+    envState.VITE_AUTH0_ENTERPRISE_CONNECTIONS = undefined;
+    envState.VITE_AUTH0_PASSWORDLESS_CONNECTION = undefined;
   });
+
+  async function toPasswordStep(address = "teammate@example.com") {
+    await userEvent.type(screen.getByLabelText("Work email"), address);
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with email" }));
+  }
 
   it("starts Auth0 Universal Login when the build carries Auth0 settings", async () => {
     envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
     envState.VITE_AUTH0_CLIENT_ID = "client";
     renderLogin();
+    await toPasswordStep();
 
-    await userEvent.click(screen.getByRole("button", { name: "Continue with Olympus sign-in" }));
+    await userEvent.click(screen.getByRole("button", { name: "Use another sign-in method" }));
 
-    expect(loginWithRedirect).toHaveBeenCalledTimes(1);
+    expect(loginWithRedirect).toHaveBeenCalledWith({
+      authorizationParams: { login_hint: "teammate@example.com" },
+    });
   });
 
-  it("is not offered without Auth0 settings (no Auth0Provider is mounted)", () => {
+  it("is not offered without Auth0 settings (no Auth0Provider is mounted)", async () => {
     renderLogin();
+    await toPasswordStep();
 
-    expect(screen.queryByRole("button", { name: "Continue with Olympus sign-in" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use another sign-in method" })).toBeNull();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  });
+
+  it("sends a company domain straight to its enterprise connection", async () => {
+    envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
+    envState.VITE_AUTH0_CLIENT_ID = "client";
+    envState.VITE_AUTH0_ENTERPRISE_CONNECTIONS = "acme.com=acme-okta";
+    renderLogin();
+    await toPasswordStep("dana@ACME.com");
+
+    expect(loginWithRedirect).toHaveBeenCalledWith({
+      authorizationParams: { connection: "acme-okta", login_hint: "dana@ACME.com" },
+    });
+    expect(screen.queryByLabelText("Password")).toBeNull();
+  });
+
+  it("offers an emailed sign-in code when a passwordless connection is set", async () => {
+    envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
+    envState.VITE_AUTH0_CLIENT_ID = "client";
+    envState.VITE_AUTH0_PASSWORDLESS_CONNECTION = "email";
+    renderLogin();
+    await toPasswordStep();
+
+    await userEvent.click(screen.getByRole("button", { name: "Email me a sign-in code" }));
+
+    expect(loginWithRedirect).toHaveBeenCalledWith({
+      authorizationParams: { connection: "email", login_hint: "teammate@example.com" },
+    });
+  });
+
+  it("shows the same next step for every non-SSO email (no account lookup)", async () => {
+    envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
+    envState.VITE_AUTH0_CLIENT_ID = "client";
+    renderLogin();
+    await toPasswordStep("nobody@unknown.example");
+
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use another sign-in method" })).toBeTruthy();
   });
 
   it("sends a social sign-in straight to its Auth0 connection", async () => {
