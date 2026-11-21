@@ -29,7 +29,6 @@ repository_ceiling:
   type: VERIFIED
   achieved: false
   remaining_after_ceiling:
-  - Run the hosted ci / verdict on the design-partner branch and record it.
   - Certify a real tenant end to end (W3) in staging over API, CLI, local MCP and hosted MCP.
   - Publish the npm prerelease and prove the four MCP host families.
   remaining_is_repository_controlled: false
@@ -81,11 +80,10 @@ productionization:
     weight: 25
     satisfied: true
   - id: ci-and-release-gates
-    description: hosted verdict on this slice, npm publication and hosted MCP image promotion
+    description: hosted ci / verdict on this slice (passed), npm publication and hosted MCP image promotion
     weight: 25
     satisfied: false
   remaining_work:
-  - hosted ci / verdict on the design-partner branch
   - npm prerelease publication and staging aether-access-mcp image publication
 activation:
   state: ENVIRONMENT_VALIDATION_PENDING
@@ -126,8 +124,13 @@ environment_evidence:
     state: VERIFIED
     credentialed: false
   ci:
-    state: NOT_ATTEMPTED
+    state: VERIFIED
     credentialed: false
+    verification_method: hosted ci / verdict on the merged design-partner slice
+    evidence:
+    - DammnThatsCrazy/AETHER#885 ci / verdict passed (26 checks)
+    - DammnThatsCrazy/AETHER#890 ci / verdict passed (26 checks)
+    verified_at: '2026-11-20'
   staging:
     state: NOT_ATTEMPTED
     credentialed: true
@@ -152,8 +155,8 @@ confidence:
   level: LOW
   reasons:
   - local unit, contract and fixture tests across the API, Node client, CLI and MCP
+  - hosted ci / verdict passed on the merged slice (#885, #890)
   evidence_gaps:
-  - no hosted verdict on this branch yet
   - no staging, real-tenant or real-host execution
 release_profiles:
   local:

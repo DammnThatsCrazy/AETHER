@@ -126,7 +126,8 @@ Enabling it is ordered, because the staging account owns its own
 `aether-access-mcp` repository. Every step is a reviewed change to
 `profiles.staging.customer_services.access-mcp`. Every staging planner reads
 that entry: the lifecycle wake and sleep plans and the `pilot-staging.yml` plan
-pass it as workflow inputs (`staging_customer_services.py --promote-inputs`),
+pass it as workflow inputs (`staging_customer_services.py --promote-inputs`, reading
+the file at the release commit Terraform plans, via `--runtime-file`),
 and the `infrastructure.yml` remote CI plan passes it as Terraform variables
 (`--terraform-vars`). The applied MCP state therefore survives every wake, sleep
 and pilot plan. A direct `terraform-promote.yml` staging dispatch must pass the

@@ -55,11 +55,53 @@ recorded by hand.
    `enabled: true` and `oauth: true` (and `dcr: true` for host
    self-registration). Every staging planner (lifecycle wake and sleep,
    pilot plan, remote CI plan) carries that entry.
-3. Two synthetic tenants exist in staging (created by the staging admin
-   bootstrap), each with a read API key. Tenant A also has an admin API key,
-   used only for the audit/usage reconciliation route, which requires `admin`. Tenant A also has a site and a
-   site-bound publishable key. Keys live in the staging GitHub environment or a
-   local shell; never commit them.
+3. Two synthetic tenants exist in staging, seeded as below. The first-admin
+   bootstrap creates only the platform's own administrative tenant; it does
+   not create these. Keys live in the staging GitHub environment or a local
+   shell; never commit them or paste them into chat.
+
+### Seed the two tenants (once per staging)
+
+Use the platform admin key from the first-admin bootstrap
+([FIRST-ADMIN-BOOTSTRAP.md](../FIRST-ADMIN-BOOTSTRAP.md)); the admin routes
+require `admin` plus platform-operator status. Every raw key below is returned
+exactly once, so capture it directly into your secret store.
+
+```bash
+API=https://api.staging.olympuslabsml.com
+ADMIN="X-API-Key: $AETHER_PLATFORM_ADMIN_KEY"
+```
+
+```bash
+# 1. Tenants A and B
+A=$(curl -sf -X POST "$API/v1/admin/tenants" -H "$ADMIN" -H 'Content-Type: application/json' \
+  -d '{"name":"w3-tenant-a","contact_email":"platform+w3a@olympuslabsml.com"}' | jq -r .data.id)
+B=$(curl -sf -X POST "$API/v1/admin/tenants" -H "$ADMIN" -H 'Content-Type: application/json' \
+  -d '{"name":"w3-tenant-b","contact_email":"platform+w3b@olympuslabsml.com"}' | jq -r .data.id)
+```
+
+```bash
+# 2. Keys: A read, A admin (write + admin, for the site and reconciliation), B read
+key() { curl -sf -X POST "$API/v1/admin/tenants/$1/api-keys" -H "$ADMIN" \
+  -H 'Content-Type: application/json' -d "{\"name\":\"$2\",\"permissions\":$3}" | jq -r .data.api_key; }
+AETHER_W3_TENANT_A_KEY=$(key "$A" w3-a-read '["read"]')
+AETHER_W3_TENANT_A_ADMIN_KEY=$(key "$A" w3-a-admin '["read","write","admin"]')
+AETHER_W3_TENANT_B_KEY=$(key "$B" w3-b-read '["read"]')
+```
+
+```bash
+# 3. Tenant A site and its site-bound publishable key (needs write)
+AETHER_W3_SITE_ID=$(curl -sf -X POST "$API/v1/sdk/sites" -H "X-API-Key: $AETHER_W3_TENANT_A_ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"w3-site","origins":["https://w3.staging.olympuslabsml.com"],"environment":"staging"}' \
+  | jq -r .data.site.id)
+AETHER_W3_PUBLISHABLE_KEY=$(curl -sf -X POST "$API/v1/sdk/sites/$AETHER_W3_SITE_ID/keys" \
+  -H "X-API-Key: $AETHER_W3_TENANT_A_ADMIN_KEY" -H 'Content-Type: application/json' -d '{}' \
+  | jq -r .data.api_key)
+```
+
+Store the five `AETHER_W3_*` values as staging environment secrets. Re-running
+step 1 creates new tenants; reuse the stored values instead.
 
 ## Run
 
