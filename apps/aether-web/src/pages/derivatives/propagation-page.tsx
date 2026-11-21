@@ -22,15 +22,23 @@ const STALE_REASONS: Record<string, string> = {
   linked_population_unverifiable: 'linked accounts could not be checked',
 };
 
-function isoDaysAgo(days: number): string {
-  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 16);
+/**
+ * A `datetime-local` value (`YYYY-MM-DDTHH:mm`) in the browser's own time
+ * zone. `compute` parses these inputs as local time, so the defaults must be
+ * local too; `toISOString()` would put UTC clock values here and shift the
+ * submitted window by the browser's UTC offset.
+ */
+export function localDateTimeDaysAgo(days: number, now: number = Date.now()): string {
+  const d = new Date(now - days * 86_400_000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function PropagationPage() {
   const { toast } = useToast();
   const runs = useQuery({ key: RUNS_KEY, fetcher: () => api.propagation.listRuns(), staleTime: 30_000 });
-  const [windowStart, setWindowStart] = useState(isoDaysAgo(7));
-  const [windowEnd, setWindowEnd] = useState(isoDaysAgo(0));
+  const [windowStart, setWindowStart] = useState(localDateTimeDaysAgo(7));
+  const [windowEnd, setWindowEnd] = useState(localDateTimeDaysAgo(0));
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
 

@@ -157,7 +157,9 @@ Two verifications mint a grant:
 
 * **Google re-authentication** (the default for identity-approved sessions).
   `GET /v1/kyber/auth/step-up` sends the operator back to Google with
-  `prompt=login&max_age=0`. The callback requires an `auth_time` no older than
+  `max_age=0` and a `claims` parameter that requests `auth_time` as essential
+  (Google returns `auth_time` only when asked, and documents no
+  `prompt=login`). The callback requires an `auth_time` no older than
   the transaction (120 s skew) and the same Google subject as the session, then
   `StepUpService.grant_reauthenticated` mints the grant and rotates the handle.
   Anything else is refused and recorded as `step_up_not_fresh` or a failed

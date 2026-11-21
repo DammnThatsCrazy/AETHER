@@ -813,3 +813,23 @@ async def test_step_up_callback_requires_a_fresh_google_sign_in(identity_approve
     assert response.status_code == 303
     ok, _ = await step_up_service.require_fresh(session.session_id)
     assert ok
+
+
+def test_google_reauthentication_url_requests_fresh_auth_time_evidence():
+    """Google returns auth_time only when the claims parameter asks for it and
+    documents no prompt=login (Codex P1 on #897)."""
+    import json
+    from urllib.parse import parse_qs, urlsplit
+
+    from governance.kyber.identity.oidc import GoogleOidcClient, OidcConfig
+
+    client = GoogleOidcClient(OidcConfig(client_id="cid", client_secret="s"))
+    common = dict(state="st", nonce="n", code_challenge="c", redirect_uri="https://k.test/cb")
+
+    step_up = parse_qs(urlsplit(client.build_authorization_url(**common, reauthenticate=True)).query)
+    assert step_up["max_age"] == ["0"]
+    assert json.loads(step_up["claims"][0]) == {"id_token": {"auth_time": {"essential": True}}}
+    assert step_up["prompt"] == ["select_account"]
+
+    sign_in = parse_qs(urlsplit(client.build_authorization_url(**common)).query)
+    assert "claims" not in sign_in and "max_age" not in sign_in

@@ -62,6 +62,9 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - Bybit HTTP-200 application errors (`retCode`) are failed reads (`auth_error`, `rate_limited`, `client_error`) instead of healthy empty pages, so a rejected key is never marked verified.
 - Dated futures with different expiries are separate registry instruments (`dated_future:<venue>:<market>`).
 - The generated TypeScript catalog mirror (`packages/shared/connector-taxonomy.ts`) now includes the derivatives venue group (`DERIVATIVES_VENUE_FAMILIES`) and the `markets_trading` experience bucket; it had skipped the 16 venue capabilities.
+- An unchanged propagation recompute now refreshes the saved run's provenance (`grant_refs`, `population_digest`) in place when it moved, so `linked_population_changed` clears without a self-superseding record.
+- Kyber Google step-up requests the `auth_time` claim explicitly (`claims` parameter, `max_age=0`) and no longer sends the undocumented `prompt=login`.
+- The propagation page's default window is formatted in the browser's local time, so the submitted window is no longer shifted by the UTC offset.
 - Every SDK now defaults to the `https://api.aether.network` ingestion API (Web, React Native, iOS and Android pointed at `api.aether.io`; the Server SDK and the Python server client at `ingest.aether.so`).
 - The React Native podspec now compiles its native module when autolinked (its source glob used a monorepo path), and the React Native Android module now declares its dependency on the native Android SDK.
 - The `AetherSDK` pod ships its privacy manifest (`PrivacyInfo.xcprivacy`).
