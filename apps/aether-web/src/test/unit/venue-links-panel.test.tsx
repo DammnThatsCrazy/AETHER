@@ -70,6 +70,24 @@ describe('VenueLinksPanel', () => {
       subject_id: 'm1', venue: 'bybit', consent_receipt_id: 'cr1', account_ref: 'uid-1', api_key: 'k', scopes: ['read'],
     }));
   });
+
+  it('keeps a pasted PEM private key multiline for Kalshi', async () => {
+    mocks.list.mockResolvedValue({ items: [] });
+    mocks.linkKey.mockResolvedValue({});
+    renderPanel(<VenueLinksPanel />);
+    await screen.findByText('No linked venue accounts');
+    fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'kalshi' } });
+    const pem = '-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----';
+    const field = await screen.findByLabelText('Private key (PEM)');
+    expect(field.tagName).toBe('TEXTAREA');
+    fireEvent.change(await screen.findByLabelText('Member (subject id)'), { target: { value: 'm1' } });
+    fireEvent.change(screen.getByLabelText('Consent receipt id'), { target: { value: 'cr1' } });
+    fireEvent.change(screen.getByLabelText('Venue account reference'), { target: { value: 'acct' } });
+    fireEvent.change(screen.getByLabelText('Read-only API key (or key id)'), { target: { value: 'kid' } });
+    fireEvent.change(field, { target: { value: pem } });
+    fireEvent.click(screen.getByRole('button', { name: 'Link account' }));
+    await waitFor(() => expect(mocks.linkKey).toHaveBeenCalledWith(expect.objectContaining({ api_secret: pem })));
+  });
 });
 
 describe('VenueOAuthReturnPage', () => {

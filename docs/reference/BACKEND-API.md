@@ -36,11 +36,11 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
   "services/api/connectors/": "sha256:4fd7758e6766a029ae72e7d2b2ae19368c417b1e2f51b8ddd12536a4afe39264"
-  "services/api/governance/": "sha256:58f8dceaedaf44f62c49f51f24b7a6588ebc4714665e204c78f0347afaf89278"
+  "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
   "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
   "services/api/identity/": "sha256:d398573dcaab45a89191d5970eed4f81b3b000567adae9fa386c785c012708b0"
-  "services/api/ingestion/": "sha256:be54ec166f57d24fb928ccb5022759eb9f428c133d0d357a2cbd289a08ce3b59"
-  "services/api/intelligence/": "sha256:d7775c31e3fe675f277a26bccd56de3217ccf2f09bf78be6387084e7957fa6f1"
+  "services/api/ingestion/": "sha256:b6213f37eb693cbd8217b682b05b14d62c6a31a034d06bf026b5f093d420a14e"
+  "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:28cdda6ac3d856069bf3fffe785df1d8318dd1646e435d99f2efb224e04b37ad"
@@ -4957,7 +4957,8 @@ a matching pair. Response body includes the session fields (`session_id`,
 Google re-authentication step-up, the path for identity-approved sessions (no
 bound device). Requires `require_kyber_access(SELF_CAPABILITY)`. Query:
 optional `capability`, optional same-origin `next`. Responds with a redirect to
-Google carrying `prompt=login&max_age=0`. The shared
+Google carrying `max_age=0` and a `claims` parameter that requests `auth_time`
+as essential (Google returns it only when asked). The shared
 `GET /v1/kyber/auth/callback` completes it: Google must report an `auth_time`
 no older than the transaction (120 s skew) and the same subject as the
 session; then a grant is minted (reason `google_reauthentication`), the session
@@ -5629,7 +5630,7 @@ own linked subjects and never writes graph truth. Responses follow
 | POST | `/v1/social360/propagation/subjects/{subject_id}/summary` | Profile360 view of one subject inside the same run: episodes seeded or joined, and inbound and outbound paths |
 | GET | `/v1/social360/propagation/runs` | Saved runs of the tenant (runs created with `save=true`), newest first |
 | GET | `/v1/social360/propagation/runs/{run_id}` | One saved run with `stale` and `stale_reasons`: `source_grant_revoked` when a grant behind one of its fills is no longer active, `linked_population_changed` when links were added, revoked or reassigned. `404` for another tenant's run |
-| POST | `/v1/social360/propagation/runs/{run_id}/recompute` | Run the saved query again over current inputs and save the new run with `supersedes` set |
+| POST | `/v1/social360/propagation/runs/{run_id}/recompute` | Run the saved query again over current inputs and save the new run with `supersedes` set. When the result is unchanged (same `run_id`) nothing is superseded; the saved run's provenance (`grant_refs`, `population_digest`) is refreshed in place if it moved, so its staleness clears |
 
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate

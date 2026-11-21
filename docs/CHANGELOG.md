@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:adcb43670fd82d02e8792ae816e7e862c54bbd92f37b96e3746c02311729f2f2"
+  "CHANGELOG.md": "sha256:ef2e7d1f302be78e09473c74c6c01d5515324ee6f3e8f659d88e3f52615e305e"
 ---
 # Changelog
 
@@ -66,6 +66,11 @@ source_hashes:
 - Bybit HTTP-200 application errors (`retCode`) are failed reads (`auth_error`, `rate_limited`, `client_error`) instead of healthy empty pages, so a rejected key is never marked verified.
 - Dated futures with different expiries are separate registry instruments (`dated_future:<venue>:<market>`).
 - The generated TypeScript catalog mirror (`packages/shared/connector-taxonomy.ts`) now includes the derivatives venue group (`DERIVATIVES_VENUE_FAMILIES`) and the `markets_trading` experience bucket; it had skipped the 16 venue capabilities.
+- An unchanged propagation recompute now refreshes the saved run's provenance (`grant_refs`, `population_digest`) in place when it moved, so `linked_population_changed` clears without a self-superseding record.
+- Kyber Google step-up requests the `auth_time` claim explicitly (`claims` parameter, `max_age=0`) and no longer sends the undocumented `prompt=login`.
+- The propagation page's default window is formatted in the browser's local time, so the submitted window is no longer shifted by the UTC offset.
+- The propagation page keeps the server's `stale` / `stale_reasons` after a recompute instead of always showing the run as current.
+- Kalshi and Coinbase Financial Markets key links take the PEM private key in a multiline field, so pasted keys keep their line breaks.
 - SDK manifest signatures now work end to end. The backend signs each delivered manifest with ES256 (ECDSA P-256) over a canonical JSON form, derived from `SDK_CONFIG_SECRET` so clients only need a public key; web, iOS and Android verify it with `manifestPublicKey` (print it with `scripts/sdk_manifest_public_key.py`). Previously the backend signed one payload with a server secret while the web and native clients verified two different, incompatible payloads with a client-held HMAC key, so no client could verify a real manifest. Specification and shared test vectors: `docs/reference/sdks/manifest-signing.md`, `tests/fixtures/sdk/manifest-signing-vectors.json`.
 - The iOS and Android SDKs read the remote manifest from the top level of the response instead of the `data` envelope the backend returns, so they never applied one. They now unwrap the envelope.
 - The web SDK no longer skips manifest verification when WebCrypto is unavailable; with a public key configured it now fails closed.

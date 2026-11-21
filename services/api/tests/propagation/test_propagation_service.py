@@ -395,6 +395,27 @@ async def test_unchanged_recompute_keeps_the_saved_run_intact():
     assert again["stale"] is False
 
 
+async def test_unchanged_recompute_refreshes_moved_provenance():
+    """Another account for an existing subject leaves the result unchanged but
+    moves the population; recompute must clear the staleness (Codex P2 on #897)."""
+    links, grants = BoundedLinks(), FakeGrants()
+    store, factory = _store(links, grants)
+    service = factory()
+    run = await service.run(query())
+    saved = await store.save(run, service.last_inputs, include_live=False)
+    saved_at, old_digest = saved["saved_at"], saved["population_digest"]
+
+    links.extra[("hyperliquid", "0x77")] = "u1"
+    assert (await store.get(T, run.run_id))["stale_reasons"] == ["linked_population_changed"]
+
+    again = await store.recompute(T, run.run_id)
+    assert again["run_id"] == run.run_id
+    assert again.get("supersedes") is None
+    assert again["saved_at"] == saved_at
+    assert again["stale"] is False
+    assert again["population_digest"] != old_digest
+
+
 async def test_dydx_default_subaccount_fills_attribute_to_the_linked_address():
     """dYdX keys fills ``acct_<addr>_0``; attribution must still find the link (Codex P2 on #896)."""
     from intelligence.propagation.adoption import adoptions_from_fill_events
