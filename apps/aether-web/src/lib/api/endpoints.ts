@@ -2233,6 +2233,41 @@ export const api = {
       restClient.get(`/v1/derivatives/runtime/reconciliation/variances${buildQS({ ...params })}`, listSchema),
   },
 
+  // ─── Venue account links (each link = a connection + a data-rights grant) ────
+  venueLinks: {
+    list: (params?: { venue?: string; subject_id?: string; include_revoked?: boolean }) =>
+      restClient.get(`/v1/derivatives/account-links${buildQS({ ...params })}`, wrap(z.object({ items: z.array(z.unknown()) }))).then(r => r.data),
+    linkWallet: (body: { subject_id: string; venue: string; wallet_address: string; chain_namespace: string; proof_evidence_id: string; consent_receipt_id: string }) =>
+      restClient.post('/v1/derivatives/account-links/wallet', wrap(unknownSchema), body).then(r => r.data),
+    linkKey: (body: { subject_id: string; venue: string; account_ref: string; api_key: string; api_secret?: string; passphrase?: string; scopes: string[]; consent_receipt_id: string }) =>
+      restClient.post('/v1/derivatives/account-links/credential', wrap(unknownSchema), body).then(r => r.data),
+    linkTenantPush: (body: { subject_id: string; venue: string; account_ref: string; consent_receipt_id: string }) =>
+      restClient.post('/v1/derivatives/account-links/tenant-push', wrap(unknownSchema), body).then(r => r.data),
+    oauthStart: (venue: string, body: { subject_id: string; account_ref: string; consent_receipt_id: string; redirect_uri: string }) =>
+      restClient.post(`/v1/derivatives/account-links/oauth/${encodeURIComponent(venue)}/start`, wrap(z.object({ authorize_url: z.string(), state: z.string(), expires_in: z.number() })), body).then(r => r.data),
+    oauthComplete: (body: { state: string; code: string }) =>
+      restClient.post('/v1/derivatives/account-links/oauth/complete', wrap(unknownSchema), body).then(r => r.data),
+    syncAll: () => restClient.post('/v1/derivatives/account-links/sync', wrap(unknownSchema), {}).then(r => r.data),
+    sync: (linkId: string) =>
+      restClient.post(`/v1/derivatives/account-links/${encodeURIComponent(linkId)}/sync`, wrap(unknownSchema), {}).then(r => r.data),
+    disconnect: (linkId: string) =>
+      restClient.post(`/v1/derivatives/account-links/${encodeURIComponent(linkId)}/disconnect`, wrap(unknownSchema), {}).then(r => r.data),
+    revoke: (linkId: string, reason = '') =>
+      restClient.post(`/v1/derivatives/account-links/${encodeURIComponent(linkId)}/revoke`, wrap(unknownSchema), { reason }).then(r => r.data),
+  },
+
+  // ─── Propagation & Diffusion lens (read-only computation over linked users) ──
+  propagation: {
+    run: (body: { window_start: string; window_end: string; include_live?: boolean; save?: boolean; instrument_keys?: string[] }) =>
+      restClient.post('/v1/social360/propagation/runs', wrap(unknownSchema), body).then(r => r.data),
+    listRuns: () =>
+      restClient.get('/v1/social360/propagation/runs', wrap(z.object({ items: z.array(z.unknown()) }))).then(r => r.data),
+    getRun: (runId: string) =>
+      restClient.get(`/v1/social360/propagation/runs/${encodeURIComponent(runId)}`, wrap(unknownSchema)).then(r => r.data),
+    recompute: (runId: string) =>
+      restClient.post(`/v1/social360/propagation/runs/${encodeURIComponent(runId)}/recompute`, wrap(unknownSchema), {}).then(r => r.data),
+  },
+
   // ─── Interoperability Intelligence (observation-only; raw {items,count}) ─────
   interop: {
     providers: () =>

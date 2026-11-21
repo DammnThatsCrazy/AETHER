@@ -45,9 +45,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:c04e4256426c0d0781e433dd5759dbed91a310844e18872729fef4b12916b2be"
+  "apps/aether-web/src/": "sha256:a19dd3f4073be41ba192254b1924a12448684bf144b5e266fbac8a356f8698ba"
   "apps/kyber-web/src/": "sha256:0b63786d40dfe1ba6a95c2082fe643c38ec498472131b541f27283db6c3893e4"
-  "packages/ui/core/src/": "sha256:254fddfdf87237fb16068e35adfb7c6c8b66a339e2e37cda259ae3b5ef936493"
+  "packages/ui/core/src/": "sha256:31e11ce9c219f5646bac8c46b9bbb6503d063231a53414d6d432c17c90a972c4"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -1397,11 +1397,14 @@ error. Every page states its no-execution boundary in the header copy.
 
 ### Aether (tenant) — `apps/aether-web/src/pages/{stablecoins,derivatives,interop}/`
 
+The Integrations & Connectors page groups sources by relationship (your applications, your members' accounts, your organization, imports); the group describes a source and never decides its use. `@aether/ui` `Input` and `Select` associate their visible label with the control (`htmlFor` + `useId`), so labels name their fields for assistive technology and tests.
+
 | Route | Page |
 |-------|------|
 | `/stablecoins` | Assets, peg valuations with depeg badges, flow aggregates |
 | `/stablecoins/:assetId` | Deployments + recent observations with finality status |
-| `/derivatives` | Linked accounts, positions, P&L snapshots, reconciliation variances |
+| `/derivatives` | Linked accounts, linked venue accounts (each backed by a connection and a data-rights grant), positions, P&L snapshots, reconciliation variances |
+| `/derivatives/propagation` | Propagation runs over the tenant's linked members (saved runs, staleness, recompute) |
 | `/derivatives/accounts/:accountId` | Orders, fills, positions for one read-only account |
 | `/interoperability` | Cross-chain messages, paths, providers with honest `ImplementationStatus` |
 | `/interoperability/messages/:messageId` | Lifecycle timeline, delivery attempts, asset legs |

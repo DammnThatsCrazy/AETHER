@@ -94,6 +94,8 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/stablecoins/:assetId` | asset deployment and observations | no | I | A | A | — | I | parameterized route-state family |
 | `/derivatives` | accounts, positions, reconciliation | no | I | A | A | — | I | parameterized route-state family |
 | `/derivatives/accounts/:accountId` | account orders, fills, positions | no | I | A | A | — | I | parameterized route-state family |
+| `/derivatives/propagation` | saved propagation runs, run, recompute | no | I | A | A | — | I | parameterized route-state family |
+| `/derivatives/oauth/return` | venue OAuth completion (single-use state) | no | I | n/a | I | I | I | redirect landing; not data-listing |
 | `/agent-access` | agent access grants and audit | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/interoperability` | messages, paths, providers | no | I | A | A | — | I | parameterized route-state family |
 | `/interoperability/messages/:messageId` | lifecycle and delivery attempts | no | I | A | A | — | I | parameterized route-state family |

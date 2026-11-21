@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, ProviderMark, formatDateTime, resolveCapabilityState, useTimeContext, type CapabilityState } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 import { ConnectorConfigModal } from './connector-config-modal';
@@ -40,6 +41,16 @@ function healthLabel(c: AnyRecord): string {
   return labels[s] ?? s;
 }
 
+// Source relationship groups (descriptive, never authorizing). Organization
+// systems are the connectors listed on this page; the others live where they
+// are managed.
+const SOURCE_GROUPS: ReadonlyArray<{ title: string; description: string; to?: string; linkLabel?: string }> = [
+  { title: 'Your applications', description: 'Web, server and mobile SDKs installed in software you run.', to: '/settings/sdk-fleet', linkLabel: 'SDK fleet' },
+  { title: 'Your members’ accounts', description: 'Venue and trading accounts your members link with their own consent.', to: '/derivatives', linkLabel: 'Linked venues' },
+  { title: 'Your organization', description: 'Systems your company runs: CRM, commerce, messaging, analytics (below).' },
+  { title: 'Imports', description: 'Files you upload, each with its own data rights.', to: '/imports', linkLabel: 'Imports' },
+];
+
 export function ConnectorsPage() {
   const [items, setItems] = useState<AnyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,12 +82,25 @@ export function ConnectorsPage() {
         <div>
           <h1 className="text-xl font-mono font-bold">Integrations &amp; Connectors</h1>
           <p className="text-sm text-text-secondary">
-            Enrich your intelligence graph without the SDK. Connect platforms via
-            signed webhooks or provider sync. SDK ingestion remains available and is
-            not required. Connectors are disabled by default; enabling one configures
+            Every source belongs to one of the groups below. The group describes the
+            source; its consent and data rights decide what Aether may do with it. Connectors are disabled by default; enabling one configures
             credentials securely (secrets are never shown here).
           </p>
         </div>
+
+        <div className="grid gap-3 md:grid-cols-4" aria-label="Source groups">
+          {SOURCE_GROUPS.map(group => (
+            <Card key={group.title}>
+              <CardContent className="pt-4 space-y-1">
+                <div className="text-sm font-medium">{group.title}</div>
+                <div className="text-xs text-text-secondary">{group.description}</div>
+                {group.to && <Link className="text-xs text-accent underline" to={group.to}>{group.linkLabel}</Link>}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <h2 className="text-sm font-semibold text-text-primary pt-2">Your organization</h2>
 
         {items.length === 0 ? <EmptyState title="No connectors available" /> : Object.entries(byCategory).map(([category, conns]) => (
           <Card key={category}>

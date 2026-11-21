@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectorsPage } from '@aether-app/pages/connectors';
@@ -26,7 +27,7 @@ describe('Aether Connectors page', () => {
   });
 
   it('renders connectors grouped by category with status', async () => {
-    render(<ConnectorsPage />);
+    render(<MemoryRouter><ConnectorsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Integrations & Connectors')).toBeInTheDocument());
     expect(screen.getByText('Slack')).toBeInTheDocument();
     expect(screen.getByText('Generic Signed Webhook')).toBeInTheDocument();
@@ -40,14 +41,14 @@ describe('Aether Connectors page', () => {
 
   it('renders the successful-empty state when no connectors are available', async () => {
     connectorsList.mockResolvedValue({ items: [] });
-    render(<ConnectorsPage />);
+    render(<MemoryRouter><ConnectorsPage /></MemoryRouter>);
     expect(await screen.findByText('No connectors available')).toBeInTheDocument();
     expect(screen.queryByText('Unable to load connectors')).not.toBeInTheDocument();
   });
 
   it('renders the unavailable state and never a successful empty when the read fails', async () => {
     connectorsList.mockRejectedValue(new Error('connectors offline'));
-    render(<ConnectorsPage />);
+    render(<MemoryRouter><ConnectorsPage /></MemoryRouter>);
     expect(await screen.findByText('Unable to load connectors')).toBeInTheDocument();
     expect(screen.queryByText('No connectors available')).not.toBeInTheDocument();
   });
