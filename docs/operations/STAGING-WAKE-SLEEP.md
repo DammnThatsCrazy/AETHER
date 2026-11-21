@@ -50,7 +50,7 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:79de8fa1460c67f7cfff1ebc9a1d23e1f1afc341f7a71af64bd83cb606610bf4"
   ".github/workflows/pilot-staging.yml": "sha256:4636a6b03a56bb25e5584571e6055f427dcfd74d29d112abe5b5318e6634e1d3"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-business-hours.yml": "sha256:b48c4f2b4edfc25be0b4de2aba35213dca689af9684e13d34856ee76c77e08b1"
+  ".github/workflows/staging-business-hours.yml": "sha256:40357f1171be423d58ec1d088c31f8b6068d0bb04e42542bf5bcbe56de10df40"
   ".github/workflows/staging-lifecycle.yml": "sha256:3a07c77a56df785623f3909c27b79e5755e89df1d8e3f1009e13214f62050a88"
   ".github/workflows/staging-smoke.yml": "sha256:d85fe1de874af09533e6bfbc9c823c5ffad4c2bc9887e86becff8dee3616f981"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
