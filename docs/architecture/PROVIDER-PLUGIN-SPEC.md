@@ -19,7 +19,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:1591e575f996946a70bbc5abafb1d7a689f8cf634516064502637f365adf18a7"
+  "services/api/connectors/provider_runtime/": "sha256:f3f6063e945f011d8c68b42dd1835ed6e41aeebe8ecb18d029ef794244d6a41e"
   "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"

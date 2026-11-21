@@ -426,6 +426,14 @@ class DataRightsService:
             return None
         return effective[0]
 
+    async def has_any_grant(self, tenant_id: str, source_id: str) -> bool:
+        """True when any grant, in any status, has existed for a tenant/source.
+
+        Once a source has entered grant governance, compatibility fallbacks that
+        admit ungoverned history no longer apply to it.
+        """
+        return bool(await self._repository.list(tenant_id=tenant_id, source_id=source_id))
+
     async def get_grant_structured(
         self, grant_id: str, *, tenant_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:

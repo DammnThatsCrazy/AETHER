@@ -1018,6 +1018,52 @@ def test_olympus_scope_connections_get_no_tenant_grant():
     assert asyncio.run(ensure_organization_system_grant(connection, "acct", actor="op")) is None
 
 
+def test_overlapping_account_selections_create_one_grant():
+    """Two concurrent selections must not create two grants (Codex P2 on #899)."""
+    import asyncio
+    from connectors.integrations.data_rights.service import DataRightsService
+    from connectors.provider_runtime.organization_grants import ensure_organization_system_grant
+
+    class SharedCache:
+        def __init__(self):
+            self.store = {}
+
+        async def set_nx(self, key, value, ttl=0):
+            if key in self.store:
+                return False
+            self.store[key] = value
+            return True
+
+        async def delete(self, key):
+            self.store.pop(key, None)
+
+    service = DataRightsService()
+    original_list = service._repository.list
+
+    async def slow_list(**kwargs):
+        rows = await original_list(**kwargs)
+        await asyncio.sleep(0.01)  # both requests read before either creates
+        return rows
+
+    service._repository.list = slow_list
+    connection = ProviderConnection(
+        connection_id="conn_race", tenant_id="t_race", provider_identity="shopify.admin.orders_read",
+    )
+    cache = SharedCache()
+
+    async def race():
+        return await asyncio.gather(*[
+            ensure_organization_system_grant(connection, "acct", actor="op", grant_service=service, cache=cache)
+            for _ in range(2)
+        ])
+
+    first, second = asyncio.run(race())
+    assert first and first == second
+    grants = asyncio.run(original_list(tenant_id="t_race"))
+    assert len(grants) == 1
+    assert not cache.store
+
+
 def test_system_sources_fail_closed_without_operator():
     client = TestClient(_make_app())
     response = client.get("/v1/admin/kyber/provider-connections/system-sources")

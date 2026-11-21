@@ -36,11 +36,11 @@ source_hashes:
   "services/api/actions/": "sha256:d1cf7b1487cb20463f07f8d2b7c029eb2e2d250da256b5a3391e0a22f768c28b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:110ca7fa524eea22179ab640e4b9fc48550315fda8cb51bfc7a03f0a997095a2"
-  "services/api/connectors/": "sha256:a118c9bd771134a73062f7f271795836d7f952d5c57799070905bc6a9578d2a6"
+  "services/api/connectors/": "sha256:b83212032d068eef35ad56769baf27cecb74e5437d5c68c23addd40785ff2ee7"
   "services/api/governance/": "sha256:1408c51df7207d823d3904affb8b81ef42eaf67666c1891e29a3e2376098f16c"
   "services/api/graph/": "sha256:6b542a62bf8e4c5b32a72785ace35ba4a0be6ca3fe854971c57b65db8ec25bb8"
   "services/api/identity/": "sha256:c54fe130e4198fd6b3fb99b0a288d3c5e2b61f6dadfd11737c4a4fdf8c266036"
-  "services/api/ingestion/": "sha256:222a17aecf26f82f603f5a351ee036171dc59f946e331dfad5d48d186f20dcee"
+  "services/api/ingestion/": "sha256:9cc7271d7d7dbc5acab34395065c3a83408b891b06de8cc473aa97d2b6f3685e"
   "services/api/intelligence/": "sha256:476823cf9b1586155a8879756d71713a62e9b2ab676d407cc7cad2f0d4d0c839"
   "services/api/journeys/": "sha256:6756ca00222eb9966e475e2a0ca43e50f0f0f3055cb129917616329ff756d19f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -4709,6 +4709,9 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   `organization_system` data-rights grant (`provider-account:<connection>:<account>`,
   tenant lake, graph and insights only) unless one is already active, and
   returns its id as `source_grant_id`; the reserved `olympus` scope never gets one.
+  The lookup and creation run under a short per-source claim in the shared cache,
+  so overlapping selections create one grant; a selection that cannot take the
+  claim within 5 seconds answers `503`.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
   (optional `since` for backfill and optional `stream_ids` to select at most 32
   unique, nonblank stream identifiers). An omitted or empty list runs all

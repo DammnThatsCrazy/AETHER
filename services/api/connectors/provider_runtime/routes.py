@@ -34,6 +34,7 @@ from shared.common.common import (
     ErrorCode,
     ForbiddenError,
     NotFoundError,
+    ServiceUnavailableError,
     UnauthorizedError,
     utc_now,
 )
@@ -702,14 +703,22 @@ async def select_account(connection_id: str, body: AccountSelectBody, request: R
     if body.account_id in (connection.selected_accounts or []):
         # A selected tenant account is a source the tenant owns: provision its
         # organization_system grant so the first sync is admitted.
-        from connectors.provider_runtime.organization_grants import ensure_organization_system_grant
+        from connectors.provider_runtime.organization_grants import (
+            GrantProvisioningBusy,
+            ensure_organization_system_grant,
+        )
 
         tenant = getattr(request.state, "tenant", None)
-        data["source_grant_id"] = await ensure_organization_system_grant(
-            connection,
-            body.account_id,
-            actor=str(getattr(tenant, "user_id", None) or tenant_id),
-        )
+        try:
+            data["source_grant_id"] = await ensure_organization_system_grant(
+                connection,
+                body.account_id,
+                actor=str(getattr(tenant, "user_id", None) or tenant_id),
+            )
+        except GrantProvisioningBusy as exc:
+            raise ServiceUnavailableError(
+                "This account's source grant is being set up by another request. Select it again shortly."
+            ) from exc
     return APIResponse(data=data).to_dict()
 
 

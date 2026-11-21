@@ -8,7 +8,7 @@ status: experimental
 source_files: [services/api/shared/integration_contracts/source_relationship.py, services/api/connectors/provider_runtime/rights_admission.py, services/api/connectors/integrations/data_rights/service.py, services/api/tenancy/rights_authority/source_lineage.py]
 since_version: "0.1.0"
 source_hashes:
-  "services/api/connectors/integrations/data_rights/service.py": "sha256:fdd684f3f0360e1cef2a92f0894ed9214f31862f7b57c2eeb3e20dbd0aa6e4fd"
+  "services/api/connectors/integrations/data_rights/service.py": "sha256:329e509fb684a110fbfe212df329c2b6f06acc644849d70b2373bc06eaacf2e9"
   "services/api/connectors/provider_runtime/rights_admission.py": "sha256:2f73758b8ac901b65c5d63b311ab4f3017be6070fcd509bc127386023ca64cb5"
   "services/api/shared/integration_contracts/source_relationship.py": "sha256:9dce3c9e3424b976f4edea041ae39eedd82c9e8a7a25b57da20aa340c0d241f1"
   "services/api/tenancy/rights_authority/source_lineage.py": "sha256:4224f6a22e5d7b58925329370fcbfff1d4537e88fd71f6c1a9264fc0eba1a252"
