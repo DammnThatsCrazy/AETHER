@@ -157,9 +157,9 @@ def failover_dns(ctx: RecoveryContext) -> bool:
     dr_log("Initiating DNS failover...")
 
     domains = {
-        "api.aether.network":       "DR ALB endpoint",
-        "ws.aether.network":        "DR WebSocket endpoint",
-        "dashboard.aether.network": "DR CloudFront",
+        "api.olympuslabsml.com":       "DR ALB endpoint",
+        "ws.olympuslabsml.com":        "DR WebSocket endpoint",
+        "dashboard.olympuslabsml.com": "DR CloudFront",
     }
 
     for domain, target in domains.items():
@@ -323,13 +323,13 @@ def validate_recovery(ctx: RecoveryContext) -> bool:
     dr_log("Validating recovery...")
 
     checks = {
-        "health_endpoint": "curl -sf https://api.aether.network/v1/health",
-        "identity_query":  "curl -sf https://api.aether.network/v1/identity/profiles/test",
-        "analytics_query": "curl -sf -X POST https://api.aether.network/v1/analytics/events/query -d '{}'",
-        "ml_models":       "curl -sf https://api.aether.network/v1/ml/models",
-        "websocket":       "curl -sf https://ws.aether.network",
-        "dashboard":       "curl -sf https://dashboard.aether.network",
-        "cdn_sdk":         "curl -sf https://cdn.aether.network/sdk/latest/aether-sdk.esm.min.js",
+        "health_endpoint": "curl -sf https://api.olympuslabsml.com/v1/health",
+        "identity_query":  "curl -sf https://api.olympuslabsml.com/v1/identity/profiles/test",
+        "analytics_query": "curl -sf -X POST https://api.olympuslabsml.com/v1/analytics/events/query -d '{}'",
+        "ml_models":       "curl -sf https://api.olympuslabsml.com/v1/ml/models",
+        "websocket":       "curl -sf https://ws.olympuslabsml.com",
+        "dashboard":       "curl -sf https://dashboard.olympuslabsml.com",
+        "cdn_sdk":         "curl -sf https://cdn.olympuslabsml.com/sdk/latest/aether-sdk.esm.min.js",
     }
 
     passed = 0

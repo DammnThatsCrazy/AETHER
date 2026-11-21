@@ -53,7 +53,7 @@ class MyApplication : Application() {
 }
 ```
 
-`AetherConfig(apiKey = ...)` takes the key Aether issued for this app; the tenant is derived from the key on the server, so there is no tenant ID to pass. The ingestion endpoint defaults to `https://api.aether.network` (override with `endpoint = ...`). `initialize` needs the `Application` instance because the SDK observes the process lifecycle. Events are sent once you call the tracking methods below.
+`AetherConfig(apiKey = ...)` takes the key Aether issued for this app; the tenant is derived from the key on the server, so there is no tenant ID to pass. The ingestion endpoint defaults to `https://api.olympuslabsml.com` (override with `endpoint = ...`). `initialize` needs the `Application` instance because the SDK observes the process lifecycle. Events are sent once you call the tracking methods below.
 
 If initialization fails, the SDK surfaces a clear error. A failure to initialize is a reportable failure in the proof spine, with reason `INITIALIZATION_FAILED` and likely owning subsystem Android SDK.
 

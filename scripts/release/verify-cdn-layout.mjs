@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = join(ROOT, '.artifacts', 'sdk', 'cdn');
-const CDN_BASE = 'https://cdn.aether.network';
+const CDN_BASE = 'https://cdn.olympuslabsml.com';
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "packages", "sdk", "web", 'package.json'), 'utf-8'));
 const VERSION = pkg.version;

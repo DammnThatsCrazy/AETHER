@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.network/schemas/docs-frontmatter.schema.json",
+  "$id": "https://olympuslabsml.com/schemas/docs-frontmatter.schema.json",
   "title": "Aether Documentation Frontmatter",
   "description": "Canonical schema for YAML frontmatter on Aether documentation pages. Validated by scripts/validate_frontmatter.py and (later) by apps/docs/lib/schema.ts.",
   "type": "object",
@@ -51,7 +51,7 @@
     "visibility": {
       "type": "string",
       "enum": ["P", "C", "I"],
-      "description": "P = public (docs.aether.network), C = customer portal (auth-gated), I = internal (repo-only, never deployed)."
+      "description": "P = public (docs.olympuslabsml.com), C = customer portal (auth-gated), I = internal (repo-only, never deployed)."
     },
     "audience": {
       "type": "array",

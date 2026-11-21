@@ -44,8 +44,8 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.11"
-  CDN_BUCKET: cdn.aether.network
-  CDN_BASE: https://cdn.aether.network
+  CDN_BUCKET: cdn.olympuslabsml.com
+  CDN_BASE: https://cdn.olympuslabsml.com
   DATA_MODULES_DIR: /tmp/aether-data-modules
 
 # ---------------------------------------------------------------------------

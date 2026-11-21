@@ -370,7 +370,7 @@ class BreachNotificationConfig:
     channels: list = field(default_factory=lambda: [
         "PagerDuty (immediate)",
         "Slack #security-incidents",
-        "Email: security@aether.network",
+        "Email: security@olympuslabsml.com",
         "DPA notification (within 72 hours)",
         "Affected data subjects (if high risk)",
     ])

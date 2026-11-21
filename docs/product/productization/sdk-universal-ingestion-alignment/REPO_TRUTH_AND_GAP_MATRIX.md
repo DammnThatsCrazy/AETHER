@@ -28,7 +28,7 @@ executive-directive preamble, not a requirement row) against the repository.
    any of them.
 2. **Live ingress beats README claims.** Canonical SDK ingress is `POST /v1/batch`
    in `services/api/ingestion/ingestion/batch.py`; SDKs
-   target `api.aether.network`, never port `3001`.
+   target `api.olympuslabsml.com`, never port `3001`.
 3. **Generated/registry artifacts beat hand-maintained mirrors.** The Contract
    Spine source is `packages/shared/contracts/event-registry.json`; generated TS/
    Python twins and gated docs that declare it as source are preferred over
@@ -75,7 +75,7 @@ into these frozen rows — they are tracked live in
 | 17 — Point 16: Ingestion Observable in Kyber | **MISSING** | No Observation Inspector (RAW→…→METRICS); no ingestion funnel metrics; SDK-fleet stack built but unmounted; the one pipeline hook calls a phantom `GET /v1/health/pipeline` | WS-E |
 | 18 — Point 17: Conformance/Compatibility/Migration Testing | **PARTIAL** | Drift/parity gates strong; no golden cross-path fixture; exhaustive native parity forces iOS/Android to mirror all 403 event types incl. server-only/derived; shadow/staged enforcement absent | Phase 0 (first gates) → WS-E |
 | 19 — Point 18: Controlled Release Program | **PARTIAL** | Governance now encodes canonical-tree ownership, SDK import boundaries, and the physical root-tree migration; remaining gaps are the runtime invariants listed below and the historical ADR baseline record | Phase 0 + remediation |
-| 20 — Web SDK runtime example | **EXISTS** | Web is the aligned reference surface — thin/observe-only, registry-driven consent, endpoint `https://api.aether.network` (`packages/sdk/web/src/index.ts`); nuances: DNT advisory-only, consent defaults all-false | Phase 0 (preserve as bedrock) |
+| 20 — Web SDK runtime example | **EXISTS** | Web is the aligned reference surface — thin/observe-only, registry-driven consent, endpoint `https://api.olympuslabsml.com` (`packages/sdk/web/src/index.ts`); nuances: DNT advisory-only, consent defaults all-false | Phase 0 (preserve as bedrock) |
 | 21 — Ingestion runtime | **MISALIGNED** | Three heterogeneous envelopes share `SDK_EVENTS_VALIDATED`; Silver workers branch on `source_service`/payload keys — `…/services/ingestion/workers.py`; deprecated alias publishes un-validated into the same topic | WS-B |
 | 22 — Backend processing example | **PARTIAL** | Silver normalizers/projectors real on the canonical path; branching on source required; projectors re-read the raw client timestamp (temporal envelope dropped) | WS-D |
 | 23 — Webhook runtime example | **MISALIGNED** | Public provider-webhook + API-feed bypass the canonical gateway; consent/scrub/minimization default-OFF; signature verification is strong but the governance gate is not | WS-B |

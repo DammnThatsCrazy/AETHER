@@ -4,6 +4,28 @@ import { AetherLoader } from '../src/loader/aether-loader';
 
 const storage = new Map<string, string>();
 
+function manifestResponse() {
+  return {
+    ok: true,
+    text: async () => JSON.stringify({
+      latestVersion: '8.3.1',
+      minimumVersion: '8.3.0',
+      updateUrgency: 'none',
+      downloads: {
+        sdkBundleUrl: 'https://cdn.olympuslabsml.com/sdk/8.3.1/aether.umd.js',
+        sdkBundleHash: '',
+        sdkBundleSize: 128,
+      },
+      checkIntervalMs: 60_000,
+      generatedAt: '2026-03-22T00:00:00Z',
+    }),
+  };
+}
+
+const OLD_ORIGIN_CODE = 'globalThis.Aether = { default: { init: () => "old-origin" } };';
+const NEW_CODE = 'globalThis.Aether = { default: { init: () => "network" } };';
+
+
 describe('AetherLoader', () => {
   const originalFetch = globalThis.fetch;
   const originalLocalStorage = globalThis.localStorage;
@@ -38,11 +60,12 @@ describe('AetherLoader', () => {
   });
 
   it('falls back to a cached bundle when manifest fetch fails', async () => {
-    storage.set('_aether_loader_bundle', JSON.stringify({
+    storage.set('_aether_loader_bundle_v2', JSON.stringify({
       version: '8.3.1',
       code: 'globalThis.Aether = { default: { init: () => "cached" } };',
       timestamp: Date.now() - 7_200_000,
       hash: '',
+      origin: 'https://cdn.olympuslabsml.com/sdk',
     }));
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('network unavailable')) as typeof fetch;
 
@@ -62,7 +85,7 @@ describe('AetherLoader', () => {
           minimumVersion: '8.3.0',
           updateUrgency: 'none',
           downloads: {
-            sdkBundleUrl: 'https://cdn.aether.network/sdk/8.3.1/aether.umd.js',
+            sdkBundleUrl: 'https://cdn.olympuslabsml.com/sdk/8.3.1/aether.umd.js',
             sdkBundleHash: '',
             sdkBundleSize: 128,
           },
@@ -82,5 +105,47 @@ describe('AetherLoader', () => {
     expect((sdkA as { init: () => string }).init()).toBe('network');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(AetherLoader.getLoadedVersion()).toBe('8.3.1');
+  });
+
+  it('never evaluates a bundle cached under the pre-origin legacy key, and deletes it', async () => {
+    storage.set('_aether_loader_bundle', JSON.stringify({
+      version: '8.3.1', code: OLD_ORIGIN_CODE, timestamp: Date.now(), hash: '',
+    }));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(manifestResponse())
+      .mockResolvedValueOnce({ ok: true, text: async () => NEW_CODE });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const sdk = await AetherLoader.load();
+
+    expect((sdk as { init: () => string }).init()).toBe('network');
+    expect(storage.has('_aether_loader_bundle')).toBe(false);
+    expect(JSON.parse(storage.get('_aether_loader_bundle_v2')!).origin).toBe('https://cdn.olympuslabsml.com/sdk');
+  });
+
+  it('does not reuse a same-version bundle cached from a different CDN base', async () => {
+    storage.set('_aether_loader_bundle_v2', JSON.stringify({
+      version: '8.3.1', code: OLD_ORIGIN_CODE, timestamp: Date.now() - 7_200_000, hash: '',
+      origin: 'https://cdn.example.invalid/sdk',
+    }));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(manifestResponse())
+      .mockResolvedValueOnce({ ok: true, text: async () => NEW_CODE });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const sdk = await AetherLoader.load();
+
+    expect((sdk as { init: () => string }).init()).toBe('network');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not fall back to a bundle cached from a different CDN base when the CDN is down', async () => {
+    storage.set('_aether_loader_bundle_v2', JSON.stringify({
+      version: '8.3.1', code: OLD_ORIGIN_CODE, timestamp: Date.now() - 7_200_000, hash: '',
+      origin: 'https://cdn.example.invalid/sdk',
+    }));
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network unavailable')) as typeof fetch;
+
+    await expect(AetherLoader.load()).rejects.toThrow('network unavailable');
   });
 });

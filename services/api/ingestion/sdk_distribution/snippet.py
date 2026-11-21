@@ -21,7 +21,7 @@ from html import escape
 #: version: the whole point of `v1.js` is that it does not move when the SDK
 #: does, so customer HTML never needs re-editing. `scripts/
 #: validate_sdk_distribution_artifacts.py` holds the bundle banner to this value.
-LOADER_URL = "https://cdn.aether.network/v1.js"
+LOADER_URL = "https://cdn.olympuslabsml.com/v1.js"
 
 #: Attribute names, mirrored from the loader's ATTRIBUTE_MAP. Only the ones the
 #: server emits are listed; the loader accepts more (debug, channel).

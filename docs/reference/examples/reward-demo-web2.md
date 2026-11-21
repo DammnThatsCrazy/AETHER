@@ -25,7 +25,7 @@ distributes rewards directly.
 
 ```bash
 export API_KEY="ak_live_your_key_here"
-export BASE="https://api.aether.network/v1"
+export BASE="https://api.olympuslabsml.com/v1"
 ```
 
 ---

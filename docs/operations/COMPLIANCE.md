@@ -11,11 +11,11 @@ canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/compliance/README.md": "sha256:513928c715bfee43b5077bd260db7a170a46fa95b313ac50ea365303cdcfd2e7"
-  "services/compliance/gdpr/": "sha256:2298051ab00184ea73d4a7ee7136c6944c1beaccaec007a9b2079087544fbda3"
+  "services/compliance/README.md": "sha256:f8d2825c8bebfca6174d7876e2dd43962dbed8dfd55ae3885783e80d1fbaed02"
+  "services/compliance/gdpr/": "sha256:defe055e3f41644c22b4730345f1d4b37125a25ed16a25a9858a7da34f7d629e"
   "services/compliance/main.py": "sha256:2b8ddf37aca8aa4b645e40abb4a80be50828046b41afa9e97ddb1d29bf8ee2b8"
   "services/compliance/policies/": "sha256:68c0713cd6d1b4ab6f25cab6d2874d9fb25c00804335367ce9dc897c150aed8a"
-  "services/compliance/soc2/": "sha256:01f35cf74d6b93f14ade0b69b3269848972a20e7f3ace46413745918a7c7096a"
+  "services/compliance/soc2/": "sha256:51589309e9b249d5feef95879586b196f95c8e8e318314729721f19b0b507d33"
 ---
 
 # Compliance Framework — GDPR & SOC 2

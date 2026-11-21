@@ -264,7 +264,7 @@ class SDKReleaseTarget:
 SDK_RELEASE_TARGETS = [
     SDKReleaseTarget(
         "web", "@aether/sdk",
-        "npm + CDN (cdn.aether.network)", "esbuild",
+        "npm + CDN (cdn.olympuslabsml.com)", "esbuild",
         "Semantic versioning, automatic changelog",
     ),
     SDKReleaseTarget(
