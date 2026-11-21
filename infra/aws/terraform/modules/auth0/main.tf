@@ -306,7 +306,7 @@ resource "auth0_connection" "google" {
 resource "auth0_connection_clients" "google_aether" {
   count           = contains(local.social_providers, "google") ? 1 : 0
   connection_id   = auth0_connection.google[0].id
-  enabled_clients = [auth0_client.aether.id, auth0_client.kyber.id, auth0_client.aether_cli.id]
+  enabled_clients = compact([auth0_client.aether.id, var.social_kyber_enabled ? auth0_client.kyber.id : "", auth0_client.aether_cli.id])
 }
 
 resource "auth0_connection" "apple" {

@@ -800,6 +800,9 @@ module "auth0" {
   apple_client_secret       = var.auth0_apple_client_secret
   apple_team_id             = var.auth0_apple_team_id
   apple_key_id              = var.auth0_apple_key_id
+  # Kyber identity is deferred in the pilot: its Google association holds only
+  # the Aether clients there.
+  social_kyber_enabled = var.deployment_lane != "pilot"
 }
 
 locals {
