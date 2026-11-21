@@ -1859,10 +1859,14 @@ export const api = {
       restClient.post('/v1/auth/verify-email', wrap(unknownSchema), { email, code })
         .then(r => r.data as AuthGrantResponse & { tenant_id: string; name?: string }),
 
-    /** Email + password login for returning users. */
+    /**
+     * Email + password login for returning users. An account with two-step
+     * verification gets only `mfa_required` + `mfa_challenge` (no tenant yet);
+     * finish with auth.mfaVerify.
+     */
     login: (email: string, password: string) =>
       restClient.post('/v1/auth/login', wrap(unknownSchema), { email, password })
-        .then(r => r.data as AuthGrantResponse & { tenant_id: string }),
+        .then(r => r.data as AuthGrantResponse),
 
     /** Exchange Auth0 JWT for an Aether session (or legacy API key) — SSO callback. */
     // Body field must match SSOCallbackRequest (services/api/tenancy/auth/routes.py).
