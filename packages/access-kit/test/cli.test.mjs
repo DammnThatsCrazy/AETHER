@@ -198,3 +198,16 @@ test('CLI observe returns server decisions, reference fields, and the shared int
   assert.equal(output.interaction.references.batchId, 'batch-cli');
   assert.match(result.stderr, /MOCK_FETCH POST \/v1\/batch redirect=error/);
 });
+
+test('aether --version, -V and version print the package version', async () => {
+  const { readFileSync } = await import('node:fs');
+  const expected = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+  for (const args of [['--version'], ['-V'], ['version']]) {
+    const result = runCli(args);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), expected);
+  }
+  const json = runCli(['version', '--json']);
+  assert.equal(json.status, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout), { version: expected });
+});

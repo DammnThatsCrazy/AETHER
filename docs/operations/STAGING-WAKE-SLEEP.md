@@ -48,10 +48,10 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:79de8fa1460c67f7cfff1ebc9a1d23e1f1afc341f7a71af64bd83cb606610bf4"
-  ".github/workflows/pilot-staging.yml": "sha256:6db71f1a5bd78bb73aafa7f6785d5848f9bea49183ff6483b0c9442d23eb703b"
+  ".github/workflows/pilot-staging.yml": "sha256:4636a6b03a56bb25e5584571e6055f427dcfd74d29d112abe5b5318e6634e1d3"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-business-hours.yml": "sha256:b48c4f2b4edfc25be0b4de2aba35213dca689af9684e13d34856ee76c77e08b1"
-  ".github/workflows/staging-lifecycle.yml": "sha256:7863ef2257e0675bb0841d3efa4b037a6fa44914ed180a7746fc480970e715d5"
+  ".github/workflows/staging-business-hours.yml": "sha256:40357f1171be423d58ec1d088c31f8b6068d0bb04e42542bf5bcbe56de10df40"
+  ".github/workflows/staging-lifecycle.yml": "sha256:3a07c77a56df785623f3909c27b79e5755e89df1d8e3f1009e13214f62050a88"
   ".github/workflows/staging-smoke.yml": "sha256:d85fe1de874af09533e6bfbc9c823c5ffad4c2bc9887e86becff8dee3616f981"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:eed14e52df12f98aded0087d09c9d84e3ac0a795b3869d1255f4a6f787541618"
@@ -126,7 +126,8 @@ Enabling it is ordered, because the staging account owns its own
 `aether-access-mcp` repository. Every step is a reviewed change to
 `profiles.staging.customer_services.access-mcp`. Every staging planner reads
 that entry: the lifecycle wake and sleep plans and the `pilot-staging.yml` plan
-pass it as workflow inputs (`staging_customer_services.py --promote-inputs`),
+pass it as workflow inputs (`staging_customer_services.py --promote-inputs`, reading
+the file at the release commit Terraform plans, via `--runtime-file`),
 and the `infrastructure.yml` remote CI plan passes it as Terraform variables
 (`--terraform-vars`). The applied MCP state therefore survives every wake, sleep
 and pilot plan. A direct `terraform-promote.yml` staging dispatch must pass the
@@ -478,6 +479,12 @@ otherwise, in New York time:
 |---|---|
 | 08:15 | `plan-wake` for the newest release built from `staging`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum` and `max_awake_hours=8`. Staging is ready at about 08:45. |
 | 17:00 | `apply-sleep` with the same newest release's backend digest and commit (`backend_image_digest`, `intended_release_sha`), so the reconcile can bind Terraform to an image tagged with the reviewed commit. If no release can be found or read (listing, download, checksum or release JSON errors), the sleep still runs and stops staging; only the Terraform state reconcile fails, loudly. |
+
+"Newest release" is the newest successful push-to-`staging` delivery run that
+still carries its `release-<sha>` artifact. The workflow lists runs unfiltered
+and selects successful ones itself, because GitHub's `?status=success` run
+index can lag a finished run by over half an hour and would otherwise pick an
+older release whose commit no longer matches the staging Amplify build.
 
 It holds no AWS credentials and runs no Terraform. It dispatches the same
 lifecycle actions an operator would, so every check above still applies:

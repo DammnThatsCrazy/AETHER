@@ -135,8 +135,12 @@ jobs:
           }
           # The newest successful push-to-staging delivery run that still carries
           # its release artifact is the release a manual wake would deploy.
-          runs="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=staging&event=push&status=success&per_page=20" \
-            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')" \
+          # Filter on conclusion here rather than with ?status=success: GitHub's
+          # filtered run index can lag the run itself by over half an hour, which
+          # silently picked an older release whose commit no longer matched the
+          # staging Amplify build or the sleep plan (runs 44937324597, 44938713616).
+          runs="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=staging&event=push&per_page=20" \
+            --jq '.workflow_runs[] | select(.status == "completed" and .conclusion == "success") | "\(.id) \(.head_sha)"')" \
             || no_release 'could not list staging delivery runs'
           release_run_id=""
           release_sha=""

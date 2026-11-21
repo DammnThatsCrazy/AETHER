@@ -804,7 +804,7 @@ AREAS: list[Area] = [
         "self-registration (DCR/CIMD) is limited to a read-only third-party grant. Per-"
         "credential rate limits, audit/usage correlation, daily reconciliation and signed "
         "webhooks are in place, and staging can run the hosted MCP under wake/sleep. "
-        "Pre-production: no hosted verdict on this slice, no staging or real-tenant (W3) run, "
+        "Pre-production: hosted ci / verdict passes, but there is no staging or real-tenant (W3) run, "
         "no published npm package or deployed hosted MCP, and no governed external action.",
         [
             "packages/access-kit/src/access-operations.mjs",

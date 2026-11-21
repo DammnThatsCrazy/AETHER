@@ -31,7 +31,6 @@
         "type": "VERIFIED",
         "achieved": false,
         "remaining_after_ceiling": [
-          "Run the hosted ci / verdict on the design-partner branch and record it.",
           "Certify a real tenant end to end (W3) in staging over API, CLI, local MCP and hosted MCP.",
           "Publish the npm prerelease and prove the four MCP host families."
         ],
@@ -47,7 +46,6 @@
         "completion_percent": 75.0,
         "denominator": "in-scope productionization controls",
         "remaining_work": [
-          "hosted ci / verdict on the design-partner branch",
           "npm prerelease publication and staging aether-access-mcp image publication"
         ]
       },
@@ -105,9 +103,9 @@
           "failure_summary": null
         },
         "ci": {
-          "state": "NOT_ATTEMPTED",
+          "state": "VERIFIED",
           "credentialed": false,
-          "verified_at": null,
+          "verified_at": "2026-11-20",
           "failure_summary": null
         },
         "staging": {
@@ -142,10 +140,10 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "local unit, contract and fixture tests across the API, Node client, CLI and MCP"
+          "local unit, contract and fixture tests across the API, Node client, CLI and MCP",
+          "hosted ci / verdict passed on the merged slice (#885,"
         ],
         "evidence_gaps": [
-          "no hosted verdict on this branch yet",
           "no staging, real-tenant or real-host execution"
         ]
       },
@@ -171,7 +169,7 @@
           "environment_gate": "staging",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "productionization 75% (< 100% of in-scope productionization controls); remaining: hosted ci / verdict on the design-partner branch; npm prerelease publication and staging aether-access-mcp image publication"
+            "productionization 75% (< 100% of in-scope productionization controls); remaining: npm prerelease publication and staging aether-access-mcp image publication"
           ],
           "external_blockers": [
             "ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)",

@@ -166,3 +166,41 @@ def test_remote_ci_plan_passes_the_mcp_vars_for_staging():
     staging_branch = text.split('if [ "$PROFILE" = staging ]; then', 1)[1].split("          fi", 1)[0]
     assert "staging_customer_services.py\" --terraform-vars" in staging_branch
     assert '"${mcp_vars[@]}"' in staging_branch
+
+
+def test_runtime_file_overrides_the_checkout(tmp_path, capsys):
+    runtime = tmp_path / "runtime_deployment.yaml"
+    runtime.write_text(yaml.safe_dump(_full(repository=True)))
+    assert MODULE.main(["--promote-inputs", "--runtime-file", str(runtime)]) == 0
+    tokens = capsys.readouterr().out.split()
+    assert "enable_access_mcp_repository=true" in tokens
+
+
+def test_unreadable_runtime_file_fails_closed(tmp_path, capsys):
+    assert MODULE.main(["--promote-inputs", "--runtime-file", str(tmp_path / "missing.yaml")]) == 1
+    assert "::error::" in capsys.readouterr().err
+
+
+def test_every_planner_reads_mcp_inputs_from_the_release_commit():
+    """Terraform plans the release commit and its agreement precondition reads
+    that commit's runtime_deployment.yaml; the dispatched inputs must come from
+    the same file, or a release that lags its branch fails the plan."""
+    for workflow, sha_vars in (
+        (".github/workflows/staging-lifecycle.yml", ("INTENDED_RELEASE_SHA", "EXPECTED_COMMIT_SHA")),
+        (".github/workflows/pilot-staging.yml", ("INTENDED_RELEASE_SHA",)),
+    ):
+        text = (ROOT / workflow).read_text()
+        calls = text.count("staging_customer_services.py --promote-inputs")
+        assert calls == text.count("--promote-inputs --runtime-file \"$runtime_file\""), workflow
+        assert "contents/config/runtime_deployment.yaml?ref=${sha}" in text, workflow
+        for var in sha_vars:
+            assert f'release_runtime_file "${var}"' in text, (workflow, var)
+
+
+def test_business_hours_release_lookup_does_not_trust_the_filtered_run_index():
+    """GitHub's ?status=success run index lagged a finished staging release by
+    over half an hour, so the sleep picked an older release whose commit no
+    longer matched the Amplify build or the plan. Filter on conclusion instead."""
+    text = (ROOT / ".github/workflows/staging-business-hours.yml").read_text()
+    assert "&status=success" not in text
+    assert 'select(.status == "completed" and .conclusion == "success")' in text

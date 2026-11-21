@@ -943,7 +943,19 @@ jobs:
           # The dispatch helper prints any gh failure, then exits 1 (never retries).
           # Carry the declared staging Access Kit MCP state into the plan
           # (config/runtime_deployment.yaml customer_services.access-mcp).
-          access_mcp_raw="$(python scripts/release/staging_customer_services.py --promote-inputs)"
+          release_runtime_file() {
+            # Terraform plans the release commit, and its agreement precondition
+            # reads that commit's config/runtime_deployment.yaml. Read the MCP
+            # inputs from the same commit, not from this workflow's checkout.
+            local sha="$1" out="$RUNNER_TEMP/runtime_deployment.release.yaml"
+            gh api -H 'Accept: application/vnd.github.raw' \
+              "repos/${GITHUB_REPOSITORY}/contents/config/runtime_deployment.yaml?ref=${sha}" > "$out" || {
+              echo "::error::cannot read config/runtime_deployment.yaml at release commit ${sha}"; exit 1; }
+            test -s "$out" || { echo "::error::config/runtime_deployment.yaml at ${sha} is empty"; exit 1; }
+            printf '%s\n' "$out"
+          }
+          runtime_file="$(release_runtime_file "$INTENDED_RELEASE_SHA")"
+          access_mcp_raw="$(python scripts/release/staging_customer_services.py --promote-inputs --runtime-file "$runtime_file")"
           mapfile -t access_mcp_inputs <<< "$access_mcp_raw"
           dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
@@ -3211,7 +3223,19 @@ jobs:
           # The dispatch helper prints any gh failure, then exits 1 (never retries).
           # Carry the declared staging Access Kit MCP state into the plan
           # (config/runtime_deployment.yaml customer_services.access-mcp).
-          access_mcp_raw="$(python scripts/release/staging_customer_services.py --promote-inputs)"
+          release_runtime_file() {
+            # Terraform plans the release commit, and its agreement precondition
+            # reads that commit's config/runtime_deployment.yaml. Read the MCP
+            # inputs from the same commit, not from this workflow's checkout.
+            local sha="$1" out="$RUNNER_TEMP/runtime_deployment.release.yaml"
+            gh api -H 'Accept: application/vnd.github.raw' \
+              "repos/${GITHUB_REPOSITORY}/contents/config/runtime_deployment.yaml?ref=${sha}" > "$out" || {
+              echo "::error::cannot read config/runtime_deployment.yaml at release commit ${sha}"; exit 1; }
+            test -s "$out" || { echo "::error::config/runtime_deployment.yaml at ${sha} is empty"; exit 1; }
+            printf '%s\n' "$out"
+          }
+          runtime_file="$(release_runtime_file "$EXPECTED_COMMIT_SHA")"
+          access_mcp_raw="$(python scripts/release/staging_customer_services.py --promote-inputs --runtime-file "$runtime_file")"
           mapfile -t access_mcp_inputs <<< "$access_mcp_raw"
           dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \

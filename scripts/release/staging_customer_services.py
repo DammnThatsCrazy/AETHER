@@ -124,24 +124,31 @@ def main(argv: list[str] | None = None) -> int:
         help="print `-f name=value` workflow inputs, one token per line, for the staging MCP state",
     )
     parser.add_argument(
+        "--runtime-file", type=Path,
+        help="read this runtime_deployment.yaml instead of the checkout's; the lifecycle "
+        "passes the copy at the release commit Terraform plans, so the MCP inputs and the "
+        "agreement precondition read the same file",
+    )
+    parser.add_argument(
         "--terraform-vars", action="store_true",
         help="print `-var=name=value` Terraform arguments, one per line, for the staging MCP state",
     )
     args = parser.parse_args(argv)
     try:
+        runtime = _load(args.runtime_file) if args.runtime_file else None
         if args.promote_inputs:
-            for name, value in access_mcp_promote_inputs(args.profile):
+            for name, value in access_mcp_promote_inputs(args.profile, runtime):
                 print("-f")
                 print(f"{name}={value}")
             return 0
         if args.terraform_vars:
-            for name, value in access_mcp_promote_inputs(args.profile):
+            for name, value in access_mcp_promote_inputs(args.profile, runtime):
                 print(f"-var={name}={value}")
             return 0
         if not args.cluster:
             parser.error("--cluster is required unless --promote-inputs or --terraform-vars is given")
-        services = enabled_customer_services(args.profile)
-    except ValueError as exc:
+        services = enabled_customer_services(args.profile, runtime)
+    except (ValueError, OSError, yaml.YAMLError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
     for key in sorted(services):

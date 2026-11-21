@@ -51,8 +51,8 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Repository ceiling:** VERIFIED (achieved: no)
 - **Activation:** ENVIRONMENT_VALIDATION_PENDING
 - **Remaining repository work:** None
-- **Confidence:** LOW — gap: no hosted verdict on this branch yet
-- **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
+- **Confidence:** LOW — gap: no staging, real-tenant or real-host execution
+- **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
 - **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_PRODUCTIONIZATION, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Agentic x402 (`agentic-x402`)

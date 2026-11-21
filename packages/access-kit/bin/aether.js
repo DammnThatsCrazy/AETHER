@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
+
 import {
   ingestTrackObservation,
   listSessions,
@@ -18,6 +20,7 @@ import { createContinuation, getContinuation } from '../src/continuation.mjs';
 const HELP = `Aether Access Kit — agent access inventory and canonical intake
 
 Usage:
+  aether --version | aether version [--json]
   aether agents capabilities overview [--json]
   aether agents capabilities list [--provider NAME] [--server-name NAME] [--tool-name NAME]
                                   [--limit N] [--offset N] [--json]
@@ -83,6 +86,10 @@ function parseArgs(args) {
       continue;
     }
     if (arg === '--help' || arg === '-h') continue;
+    if (arg === '--version' || arg === '-V') {
+      parsed.version = true;
+      continue;
+    }
     if (arg.startsWith('--')) {
       const value = args[index + 1];
       if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value.`);
@@ -185,9 +192,20 @@ function formatSessions(sessions, requestId, apiRequestId, interaction) {
   if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
 }
 
+function packageVersion() {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  return manifest.version;
+}
+
 async function main() {
-  const { positionals, options, json } = parseArgs(process.argv.slice(2));
+  const { positionals, options, json, version } = parseArgs(process.argv.slice(2));
   const [area, command, subcommand, arg] = positionals;
+
+  if (version || (area === 'version' && !command)) {
+    if (json) writeJson({ version: packageVersion() });
+    else process.stdout.write(`${packageVersion()}\n`);
+    return;
+  }
 
   if (!area || area === 'help' || area === '--help' || area === '-h'
       || process.argv.includes('--help') || process.argv.includes('-h')) {
